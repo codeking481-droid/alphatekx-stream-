@@ -663,12 +663,14 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Monitor Scrolling to Auto-Dock Mini Player
+  // Monitor Scrolling to Auto-Dock Mini Player + hide search popups while scrolling (best-in-world mobile UX)
   useEffect(() => {
     const scrollContainer = mainScrollRef.current;
     if (!scrollContainer) return;
 
     const handleScroll = () => {
+      // hide popups immediately while scrolling — keeps search clean
+      if (searchSuggestionsOpen) setSearchSuggestionsOpen(false);
       if (activeTab !== "watch") {
         setMiniPlayerActive(false);
         return;
@@ -684,9 +686,16 @@ function App() {
       }
     };
 
-    scrollContainer.addEventListener("scroll", handleScroll);
-    return () => scrollContainer.removeEventListener("scroll", handleScroll);
-  }, [activeTab]);
+    scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
+    // also hide on any window scroll/touch (covers mobile)
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("touchmove", handleScroll, { passive: true });
+    return () => {
+      scrollContainer.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("touchmove", handleScroll);
+    };
+  }, [activeTab, searchSuggestionsOpen]);
 
   // Handle Hamburger Toggle Action (Desktop collapse / Mobile drawer)
   const handleHamburgerClick = () => {
@@ -1229,11 +1238,11 @@ function App() {
           </div>
         </div>
 
-        {/* Center Search Bar & Voice Search — min-w-0 prevents overflow on mobile */}
-        <div className="flex-1 min-w-0 max-w-2xl mx-1 sm:mx-auto flex items-center gap-1.5 sm:gap-3 relative">
+        {/* Center Search Bar & Voice Search — DESKTOP: clean, MOBILE: hidden (replaced by big mobile bar below) */}
+        <div className="hidden sm:flex flex-1 min-w-0 max-w-2xl mx-1 sm:mx-auto items-center gap-1.5 sm:gap-3 relative">
           <form 
             onSubmit={(e) => { e.preventDefault(); setActiveTab("home"); setSearchSuggestionsOpen(false); }}
-            className="flex-1 min-w-0 flex items-center bg-[#121212] border border-[#303030] rounded-full focus-within:border-[#00D9FF] focus-within:ring-1 focus-within:ring-[#00D9FF] overflow-hidden"
+            className="flex-1 min-w-0 flex items-center bg-[#121212] border border-[#303030] rounded-full focus-within:border-[#FFD700] focus-within:ring-2 focus-within:ring-[#FFD700]/20 overflow-hidden shadow-sm"
           >
             <input
               id="youtube-search-input"
@@ -1241,40 +1250,40 @@ function App() {
               value={searchQuery}
               onFocus={() => setSearchSuggestionsOpen(true)}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search..."
+              placeholder="Search YouTube, TikTok, Instagram, Twitter, Facebook…"
               title="Search in Alphatekx Stream (Press '/' to focus)"
-              className="w-full min-w-0 bg-transparent px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-white placeholder-gray-500 focus:outline-none"
+              className="w-full min-w-0 bg-transparent px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none"
             />
             {searchQuery && (
               <button 
                 type="button" 
                 onClick={() => setSearchQuery("")} 
-                className="text-gray-400 hover:text-white px-1.5 sm:px-2 text-xs flex-shrink-0"
+                className="text-gray-400 hover:text-white px-2 text-sm flex-shrink-0"
               >
                 ✕
               </button>
             )}
             <button 
               type="submit" 
-              className="px-3 sm:px-6 py-1.5 sm:py-2.5 bg-[#222222] hover:bg-[#303030] border-l border-[#303030] text-gray-300 flex-shrink-0"
+              className="px-6 py-2.5 bg-[#222222] hover:bg-[#303030] border-l border-[#303030] text-gray-300 flex-shrink-0"
               title="Search"
             >
               <Icon name="search" className="w-4 h-4" />
             </button>
           </form>
 
-          {/* Voice Mic Button — hidden on mobile to save space, visible sm+ */}
+          {/* Voice Mic Button — desktop */}
           <button 
             onClick={() => { setVoiceModalOpen(true); setVoiceListening(true); }}
-            className="hidden sm:flex p-2 sm:p-2.5 rounded-full bg-[#222222] hover:bg-[#303030] text-gray-200 hover:text-[#00D9FF] transition-colors flex-shrink-0"
+            className="hidden sm:flex p-2.5 rounded-full bg-[#222222] hover:bg-[#303030] text-gray-200 hover:text-[#00D9FF] transition-colors flex-shrink-0"
             title="Search with voice"
           >
-            <Icon name="mic" className="w-4 h-4 sm:w-5 sm:h-5" />
+            <Icon name="mic" className="w-5 h-5" />
           </button>
 
-          {/* Search Suggestions Dropdown — full width on mobile */}
+          {/* Search Suggestions Dropdown — desktop */}
           {searchSuggestionsOpen && (
-            <div className="absolute top-12 left-0 right-0 sm:right-12 bg-[#121212] border border-[#303030] rounded-2xl shadow-2xl overflow-hidden z-50 text-xs">
+            <div className="hidden sm:block absolute top-12 left-0 right-12 bg-[#121212] border border-[#303030] rounded-2xl shadow-2xl overflow-hidden z-50 text-xs">
               <div className="p-2 text-[10px] font-mono font-bold text-gray-500 uppercase px-3">Trending Searches</div>
               {[
                 "Neural Networks PyTorch scratch tutorial",
@@ -1361,6 +1370,66 @@ function App() {
           </button>
         </div>
       </header>
+
+      {/* MOBILE BIG SEARCH BAR — Best in world: huge, thumb-friendly, crystal clear while typing, no popup while scrolling */}
+      <div className="sm:hidden bg-[#0f0f0f] border-b border-[#272727] px-3 py-3 sticky top-14 z-30">
+        <form
+          onSubmit={(e) => { e.preventDefault(); setActiveTab("home"); setSearchSuggestionsOpen(false); document.getElementById("mobile-search-input")?.blur(); }}
+          className="flex items-center bg-[#121212] border-2 border-[#303030] focus-within:border-[#FFD700] focus-within:ring-2 focus-within:ring-[#FFD700]/20 focus-within:shadow-[0_0_20px_rgba(255,215,0,0.15)] rounded-2xl overflow-hidden"
+        >
+          <span className="pl-4 text-gray-400 flex-shrink-0"><Icon name="search" className="w-5 h-5" /></span>
+          <input
+            id="mobile-search-input"
+            type="text"
+            inputMode="search"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck={false}
+            value={searchQuery}
+            onFocus={() => setSearchSuggestionsOpen(true)}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search YouTube, TikTok, Instagram…"
+            className="flex-1 min-w-0 bg-transparent px-3 py-3.5 text-[17px] font-medium text-white placeholder:text-[15px] placeholder:text-gray-500 focus:outline-none"
+            style={{ fontSize: "17px" }}
+          />
+          {searchQuery && (
+            <button type="button" onClick={() => setSearchQuery("")} className="px-3 text-gray-400 hover:text-white flex-shrink-0">
+              <span className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-sm">✕</span>
+            </button>
+          )}
+          <button type="submit" className="mr-1.5 px-5 py-2.5 bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black font-extrabold text-sm rounded-xl flex-shrink-0 active:scale-95">
+            Go
+          </button>
+        </form>
+        {/* Mobile suggestions — also hides instantly on scroll (see useEffect) */}
+        {searchSuggestionsOpen && (
+          <div className="mt-2 bg-[#121212] border border-[#303030] rounded-2xl shadow-2xl overflow-hidden text-sm">
+            <div className="p-2 text-[10px] font-mono font-bold text-gray-500 uppercase px-3 flex items-center justify-between">
+              <span>Trending Searches</span>
+              <button onClick={() => setSearchSuggestionsOpen(false)} className="text-gray-400 hover:text-white">✕ Close</button>
+            </div>
+            {[
+              "Neural Networks PyTorch scratch tutorial",
+              "Cloudflare Workers SQLite Durable Objects",
+              "Naija Pidgin AI Voice Translation",
+              "TikTok Stream Unified Queue"
+            ].map((sug, idx) => (
+              <div
+                key={idx}
+                onClick={() => { setSearchQuery(sug); setSearchSuggestionsOpen(false); setActiveTab("home"); }}
+                className="px-4 py-3.5 hover:bg-[#272727] text-gray-100 cursor-pointer flex items-center gap-3 border-t border-white/5 first:border-t-0 active:bg-[#303030]"
+              >
+                <Icon name="search" className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                <span className="text-[15px]">{sug}</span>
+              </div>
+            ))}
+            <div className="px-3 py-2 bg-black/40 border-t border-white/10 flex items-center justify-between">
+              <span className="text-[11px] text-gray-500 font-mono">Unified: YouTube • TikTok • IG • X • FB</span>
+              <span className="text-[10px] text-[#FFD700] font-bold">BEST SEARCH ✓</span>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* ------------------- APP BODY (FIXED SIDEBAR + INDEPENDENT MAIN SCROLL) ------------------- */}
       <div className="flex-1 flex overflow-hidden relative">
