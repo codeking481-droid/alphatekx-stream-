@@ -4,7 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Alphatekx Stream — Mini YouTube but Better</title>
-  <link rel="manifest" href="manifest.json">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><polygon points=%2250,5 90,27.5 90,72.5 50,95 10,72.5 10,27.5%22 fill=%22none%22 stroke=%22%2300FF88%22 stroke-width=%228%22/><circle cx=%2250%22 cy=%2250%22 r=%2214%22 fill=%22%2300D9FF%22/></svg>">
   <meta name="theme-color" content="#000000">
   <meta name="description" content="Alphatekx Stream - Dark futuristic streaming platform with AI Summaries, Naija Translator, Enhanced Cinema Mode, Live Community Chat, Marketplace & AI Memory Chat.">
   
@@ -108,14 +109,5 @@
   <div id="root"></div>
 
   <script type="text/babel" data-type="module" data-presets="react" src="./app.jsx"></script>
-
-  <script>
-    // Register Service Worker if supported and relative to location
-    if ('serviceWorker' in navigator && window.location.protocol === 'https:') {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('./sw.js').catch(err => console.log('SW reg note:', err));
-      });
-    }
-  </script>
 </body>
 </html>
