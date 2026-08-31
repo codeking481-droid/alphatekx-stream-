@@ -53,11 +53,33 @@
   <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&display=swap" rel="stylesheet">
   
   <style>
+    html {
+      max-width: 100vw;
+      overflow-x: hidden;
+    }
     body {
       background-color: #000000;
       color: #FFFFFF;
       font-family: 'Roboto', sans-serif;
       overflow-x: hidden;
+      max-width: 100vw;
+      overscroll-behavior-x: none;
+    }
+    /* Hide scrollbar for chips/search tabs on mobile but keep scroll */
+    .scrollbar-hide {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    .scrollbar-hide::-webkit-scrollbar {
+      display: none;
+    }
+    /* Ensure glass cards never cause horizontal overflow on mobile */
+    .glass-card {
+      max-width: 100%;
+    }
+    /* Extra safety for mobile: prevent horizontal scroll from absolute elements */
+    @media (max-width: 640px) {
+      #root { overflow-x: hidden; }
     }
     /* Custom scrollbars */
     ::-webkit-scrollbar {

@@ -634,7 +634,7 @@ function App() {
   });
 
   return (
-    <div className="h-screen w-screen overflow-hidden flex flex-col bg-[#000000] text-white font-sans selection:bg-[#00D9FF] selection:text-black">
+    <div className="h-screen w-full max-w-[100vw] overflow-hidden flex flex-col bg-[#000000] text-white font-sans selection:bg-[#00D9FF] selection:text-black">
       
       {/* Toast Notification Banner */}
       {toastMessage && (
@@ -890,11 +890,11 @@ function App() {
         </div>
       )}
 
-      {/* ------------------- FIXED YOUTUBE HEADER ------------------- */}
-      <header className="h-14 flex-shrink-0 bg-[#0f0f0f] border-b border-[#272727] px-4 flex items-center justify-between gap-4 z-40 relative">
+      {/* ------------------- FIXED YOUTUBE HEADER — Mobile Optimized ------------------- */}
+      <header className="h-14 flex-shrink-0 bg-[#0f0f0f] border-b border-[#272727] px-2 sm:px-4 flex items-center justify-between gap-2 sm:gap-4 z-40 relative">
         
         {/* Left Logo & Hamburger */}
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
           <button 
             onClick={handleHamburgerClick}
             className="p-2 rounded-full hover:bg-[#272727] text-gray-200 transition-transform active:scale-90"
@@ -905,24 +905,24 @@ function App() {
 
           <div 
             onClick={() => setActiveTab("watch")} 
-            className="flex items-center gap-2 cursor-pointer group"
+            className="flex items-center gap-1.5 sm:gap-2 cursor-pointer group min-w-0"
           >
-            <Icon name="logo" className="w-7 h-7 transition-transform group-hover:scale-105" />
-            <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-lg tracking-tighter text-white">Alphatekx</span>
-              <span className="font-light text-lg tracking-tighter text-gray-400">Stream</span>
-              <span className="text-[9px] font-bold font-mono bg-[#00FF88]/20 text-[#00FF88] border border-[#00FF88]/40 px-1.5 py-0.2 rounded ml-1">
+            <Icon name="logo" className="w-6 h-6 sm:w-7 sm:h-7 transition-transform group-hover:scale-105 flex-shrink-0" />
+            <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
+              <span className="font-extrabold text-[15px] sm:text-lg tracking-tighter text-white whitespace-nowrap">Alphatekx</span>
+              <span className="hidden sm:inline font-light text-lg tracking-tighter text-gray-400">Stream</span>
+              <span className="hidden sm:inline-flex text-[9px] font-bold font-mono bg-[#00FF88]/20 text-[#00FF88] border border-[#00FF88]/40 px-1.5 py-0.2 rounded ml-1">
                 AI NG
               </span>
             </div>
           </div>
         </div>
 
-        {/* Center Search Bar & Voice Search */}
-        <div className="flex-1 max-w-2xl mx-auto flex items-center gap-3 relative">
+        {/* Center Search Bar & Voice Search — min-w-0 prevents overflow on mobile */}
+        <div className="flex-1 min-w-0 max-w-2xl mx-1 sm:mx-auto flex items-center gap-1.5 sm:gap-3 relative">
           <form 
             onSubmit={(e) => { e.preventDefault(); setActiveTab("home"); setSearchSuggestionsOpen(false); }}
-            className="flex-1 flex items-center bg-[#121212] border border-[#303030] rounded-full focus-within:border-[#00D9FF] focus-within:ring-1 focus-within:ring-[#00D9FF] overflow-hidden"
+            className="flex-1 min-w-0 flex items-center bg-[#121212] border border-[#303030] rounded-full focus-within:border-[#00D9FF] focus-within:ring-1 focus-within:ring-[#00D9FF] overflow-hidden"
           >
             <input
               id="youtube-search-input"
@@ -930,39 +930,40 @@ function App() {
               value={searchQuery}
               onFocus={() => setSearchSuggestionsOpen(true)}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search in Alphatekx Stream... (Press '/' to focus)"
-              className="w-full bg-transparent px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none"
+              placeholder="Search..."
+              title="Search in Alphatekx Stream (Press '/' to focus)"
+              className="w-full min-w-0 bg-transparent px-3 sm:px-4 py-1.5 sm:py-2 text-sm text-white placeholder-gray-500 focus:outline-none"
             />
             {searchQuery && (
               <button 
                 type="button" 
                 onClick={() => setSearchQuery("")} 
-                className="text-gray-400 hover:text-white px-2 text-xs"
+                className="text-gray-400 hover:text-white px-1.5 sm:px-2 text-xs flex-shrink-0"
               >
                 ✕
               </button>
             )}
             <button 
               type="submit" 
-              className="px-6 py-2.5 bg-[#222222] hover:bg-[#303030] border-l border-[#303030] text-gray-300"
+              className="px-3 sm:px-6 py-1.5 sm:py-2.5 bg-[#222222] hover:bg-[#303030] border-l border-[#303030] text-gray-300 flex-shrink-0"
               title="Search"
             >
               <Icon name="search" className="w-4 h-4" />
             </button>
           </form>
 
-          {/* Voice Mic Button */}
+          {/* Voice Mic Button — hidden on mobile to save space, visible sm+ */}
           <button 
             onClick={() => { setVoiceModalOpen(true); setVoiceListening(true); }}
-            className="p-2.5 rounded-full bg-[#222222] hover:bg-[#303030] text-gray-200 hover:text-[#00D9FF] transition-colors flex-shrink-0"
+            className="hidden sm:flex p-2 sm:p-2.5 rounded-full bg-[#222222] hover:bg-[#303030] text-gray-200 hover:text-[#00D9FF] transition-colors flex-shrink-0"
             title="Search with voice"
           >
-            <Icon name="mic" className="w-5 h-5" />
+            <Icon name="mic" className="w-4 h-4 sm:w-5 sm:h-5" />
           </button>
 
-          {/* Search Suggestions Dropdown */}
+          {/* Search Suggestions Dropdown — full width on mobile */}
           {searchSuggestionsOpen && (
-            <div className="absolute top-12 left-0 right-12 bg-[#121212] border border-[#303030] rounded-2xl shadow-2xl overflow-hidden z-50 text-xs">
+            <div className="absolute top-12 left-0 right-0 sm:right-12 bg-[#121212] border border-[#303030] rounded-2xl shadow-2xl overflow-hidden z-50 text-xs">
               <div className="p-2 text-[10px] font-mono font-bold text-gray-500 uppercase px-3">Trending Searches</div>
               {[
                 "Neural Networks PyTorch scratch tutorial",
@@ -987,8 +988,8 @@ function App() {
           )}
         </div>
 
-        {/* Right Actions */}
-        <div className="flex items-center gap-2">
+        {/* Right Actions — compact on mobile */}
+        <div className="flex items-center gap-0.5 sm:gap-2 flex-shrink-0">
           <button 
             onClick={() => setActiveTab("studio")} 
             className="p-2 rounded-full hover:bg-[#272727] text-gray-200 hidden sm:flex items-center gap-1 text-xs font-semibold px-3"
@@ -1008,7 +1009,7 @@ function App() {
 
           <button 
             onClick={() => setActiveTab("community")} 
-            className="p-2 rounded-full hover:bg-[#272727] text-gray-200 relative"
+            className="p-1.5 sm:p-2 rounded-full hover:bg-[#272727] text-gray-200 relative"
             title="Live Community Chat"
           >
             <Icon name="bell" className="w-5 h-5" />
@@ -1018,7 +1019,7 @@ function App() {
 
           <button 
             onClick={() => setActiveTab("marketplace")} 
-            className="p-2 rounded-full hover:bg-[#272727] text-gray-200 relative"
+            className="p-1.5 sm:p-2 rounded-full hover:bg-[#272727] text-gray-200 relative"
             title="Cart"
           >
             <Icon name="shopping-bag" className="w-5 h-5" />
@@ -1039,7 +1040,7 @@ function App() {
 
           <button 
             onClick={() => setActiveTab("profile")}
-            className="w-8 h-8 rounded-full bg-gradient-to-tr from-[#00D9FF] to-[#00FF88] p-0.5 ml-1"
+            className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-[#00D9FF] to-[#00FF88] p-0.5 ml-0.5 sm:ml-1 flex-shrink-0"
           >
             <img 
               src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" 
@@ -1146,8 +1147,8 @@ function App() {
         {/* ------------------- INDEPENDENT MAIN SCROLL CONTENT AREA ------------------- */}
         <main ref={mainScrollRef} className="flex-1 overflow-y-auto scroll-smooth pb-24 md:pb-12 h-full">
 
-          {/* TOP TOPIC CHIPS BAR (Sticky Filter Bar inside Main Scroll) */}
-          <div className="bg-[#0f0f0f]/95 backdrop-blur-md border-b border-[#272727] px-4 py-2.5 flex items-center gap-2 overflow-x-auto sticky top-0 z-30">
+          {/* TOP TOPIC CHIPS BAR (Sticky Filter Bar inside Main Scroll) — scrolls cleanly on mobile */}
+          <div className="bg-[#0f0f0f]/95 backdrop-blur-md border-b border-[#272727] px-2 sm:px-4 py-2 sm:py-2.5 flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide sticky top-0 z-30 overscroll-x-contain">
             {["All", "Neural Networks", "PyTorch", "AI Superpowers", "Cloudflare Workers", "Naija Dialects"].map((chip) => (
               <button
                 key={chip}
@@ -1163,12 +1164,12 @@ function App() {
             ))}
           </div>
 
-          {/* ------------------- 1. WATCH PAGE ------------------- */}
+          {/* ------------------- 1. WATCH PAGE — mobile p-3 prevents horizontal overflow ------------------- */}
           {activeTab === "watch" && (
-            <div className="max-w-[1700px] mx-auto p-4 md:p-6 lg:p-8 space-y-8">
+            <div className="max-w-[1700px] mx-auto p-3 sm:p-4 md:p-6 lg:p-8 space-y-6 sm:space-y-8 overflow-x-hidden">
               
               {/* Desktop Grid Layout (70% Left Video + Takeaways + Chat, 30% Right Queue + Up Next) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
                 
                 {/* LEFT COLUMN (Player + Actions + AI Summary + Chat + Marketplace) */}
                 <div className={theaterMode ? "lg:col-span-12 space-y-6" : "lg:col-span-8 space-y-6"}>
@@ -1184,20 +1185,22 @@ function App() {
                       />
                     )}
 
-                    {/* Top Overlay Controls */}
-                    <div className="absolute top-3 left-3 right-3 z-20 flex items-center justify-between text-xs font-mono pointer-events-none">
-                      <div className="bg-black/80 backdrop-blur-md px-3 py-1 rounded-full border border-white/10 text-gray-300 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-[#00FF88] animate-pulse" />
-                        <span>Enhanced Cinema Mode ON • 1080p60 • AI View ON</span>
+                    {/* Top Overlay Controls — wraps cleanly on mobile, hides long text on xs */}
+                    <div className="absolute top-2 sm:top-3 left-2 sm:left-3 right-2 sm:right-3 z-20 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 text-[10px] sm:text-xs font-mono pointer-events-none">
+                      <div className="bg-black/80 backdrop-blur-md px-2 sm:px-3 py-1 rounded-full border border-white/10 text-gray-300 flex items-center gap-1.5 sm:gap-2 max-w-[60%] sm:max-w-none truncate">
+                        <span className="w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full bg-[#00FF88] animate-pulse flex-shrink-0" />
+                        <span className="hidden sm:inline">Enhanced Cinema Mode ON • 1080p60 • AI View ON</span>
+                        <span className="sm:hidden">Cinema ON</span>
                       </div>
 
-                      <div className="flex items-center gap-2 pointer-events-auto">
+                      <div className="flex items-center gap-1 sm:gap-2 pointer-events-auto">
                         <button
                           onClick={() => setTheaterMode(!theaterMode)}
-                          className="bg-black/90 hover:bg-black backdrop-blur-md px-3 py-1 rounded-full border border-white/20 text-gray-200 hover:text-white transition-colors flex items-center gap-1"
+                          className="bg-black/90 hover:bg-black backdrop-blur-md px-2 sm:px-3 py-1 rounded-full border border-white/20 text-gray-200 hover:text-white transition-colors flex items-center gap-1 text-[10px] sm:text-xs"
                         >
-                          <Icon name="theater" className="w-3.5 h-3.5 text-[#00D9FF]" />
-                          <span>{theaterMode ? "Normal View" : "Theater View"}</span>
+                          <Icon name="theater" className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#00D9FF]" />
+                          <span className="hidden sm:inline">{theaterMode ? "Normal View" : "Theater View"}</span>
+                          <span className="sm:hidden">{theaterMode ? "Normal" : "Theater"}</span>
                         </button>
 
                         <button
@@ -1205,7 +1208,7 @@ function App() {
                             setCinemaMode(!cinemaMode);
                             showToast(cinemaMode ? "Ambient Cinema Glow OFF" : "Ambient Cinema Glow ON");
                           }}
-                          className="bg-black/90 hover:bg-black backdrop-blur-md px-3 py-1 rounded-full border border-[#00D9FF]/50 text-[#00D9FF] hover:border-[#00FF88] transition-colors"
+                          className="bg-black/90 hover:bg-black backdrop-blur-md px-2 sm:px-3 py-1 rounded-full border border-[#00D9FF]/50 text-[#00D9FF] hover:border-[#00FF88] transition-colors text-[10px] sm:text-xs"
                         >
                           Glow: {cinemaMode ? "ON ✨" : "OFF"}
                         </button>
@@ -1246,14 +1249,14 @@ function App() {
 
                   {/* VIDEO TITLE + CHANNEL ROW + ACTION PILLS */}
                   <div className="space-y-4">
-                    <h1 className="text-xl md:text-2xl font-bold tracking-tight text-white leading-snug">
+                    <h1 className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-white leading-snug break-words">
                       {activeVideo.title}
                     </h1>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#272727] pb-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-[#272727] pb-4">
                       
-                      {/* Channel Row */}
-                      <div className="flex items-center gap-4">
+                      {/* Channel Row — wraps on mobile */}
+                      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-wrap">
                         <img 
                           src={activeVideo.avatar} 
                           alt={activeVideo.channel} 
@@ -1283,8 +1286,8 @@ function App() {
                         </button>
                       </div>
 
-                      {/* Action Row Horizontal Pills */}
-                      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                      {/* Action Row Horizontal Pills — scrolls on mobile without breaking layout */}
+                      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1 flex-nowrap overscroll-x-contain">
                         
                         {/* Joined Like & Dislike Pill */}
                         <div className="flex items-center bg-[#272727] rounded-full border border-white/5">
@@ -1739,9 +1742,9 @@ function App() {
             </div>
           )}
 
-          {/* ------------------- 2. HOME / DISCOVER FEED ------------------- */}
+          {/* ------------------- 2. HOME / DISCOVER FEED — mobile p-3 prevents overflow ------------------- */}
           {activeTab === "home" && (
-            <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
+            <div className="max-w-[1600px] mx-auto p-3 sm:p-4 md:p-6 space-y-6 overflow-x-hidden">
               {isSearching ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
@@ -1779,8 +1782,8 @@ function App() {
                     </span>
                   </div>
 
-                  {/* Search Tabs: Results vs History — history NEVER vanishes */}
-                  <div className="flex items-center gap-2 border-b border-[#272727] pb-2">
+                  {/* Search Tabs: Results vs History — history NEVER vanishes — wraps/scrolls on mobile */}
+                  <div className="flex items-center gap-1.5 sm:gap-2 border-b border-[#272727] pb-2 overflow-x-auto scrollbar-hide flex-nowrap">
                     <button
                       onClick={()=>setSearchTab("results")}
                       className={`px-4 py-2 rounded-full text-xs font-bold transition-colors ${searchTab==="results" ? "bg-[#00D9FF] text-black" : "bg-[#272727] text-gray-300 hover:bg-[#383838]"}`}
