@@ -102,6 +102,26 @@ const Icon = ({ name, className = "w-5 h-5", style = {} }) => {
   }
 };
 
+// --- Helper to normalize video objects from API or mock ---
+function normalizeVideo(v) {
+  return {
+    id: v.youtubeId || v.id || "dQw4w9WgXcQ",
+    youtubeId: v.youtubeId || v.id || "dQw4w9WgXcQ",
+    title: v.title || "Untitled Video",
+    channel: v.channelName || v.channel || "YouTube Creator",
+    channelName: v.channelName || v.channel || "YouTube Creator",
+    subscribers: v.subscribers || "1.2M",
+    views: v.views || "100K views",
+    timeAgo: v.timeAgo || "Recently uploaded",
+    duration: v.duration || "15:00",
+    tag: v.tag || "YouTube Search",
+    avatar: v.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
+    img: v.thumbnailUrl || v.img || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80",
+    thumbnailUrl: v.thumbnailUrl || v.img || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80",
+    description: v.description || `Watch ${v.title} on Alphatekx Stream.`
+  };
+}
+
 // --- Main App Component ---
 function App() {
   // Navigation & Drawer State
@@ -109,6 +129,8 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(true); // Desktop sidebar toggle
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false); // Mobile drawer slide-over toggle
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
   const [activeChip, setActiveChip] = useState("All");
 
@@ -200,6 +222,49 @@ function App() {
   const [userLiked, setUserLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [showDescriptionMore, setShowDescriptionMore] = useState(false);
+
+  // Real YouTube API Search Effect (400ms Debounce)
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const timer = setTimeout(() => {
+      fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`)
+        .then((res) => {
+          if (!res.ok) throw new Error("API search failed");
+          return res.json();
+        })
+        .then((data) => {
+          if (data && Array.isArray(data.videos) && data.videos.length > 0) {
+            setSearchResults(data.videos.map(normalizeVideo));
+          } else {
+            // Fallback to filtering mock catalog if API returns empty
+            const qLower = searchQuery.toLowerCase();
+            const filtered = videoCatalog.filter(
+              (v) => v.title.toLowerCase().includes(qLower) || v.channel.toLowerCase().includes(qLower)
+            );
+            setSearchResults(filtered.map(normalizeVideo));
+          }
+        })
+        .catch((err) => {
+          console.warn("YouTube API search fetch notice (using fallback):", err);
+          const qLower = searchQuery.toLowerCase();
+          const filtered = videoCatalog.filter(
+            (v) => v.title.toLowerCase().includes(qLower) || v.channel.toLowerCase().includes(qLower)
+          );
+          setSearchResults(filtered.map(normalizeVideo));
+        })
+        .finally(() => {
+          setIsSearching(false);
+        });
+    }, 400);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery, videoCatalog]);
 
   // Video Chapters Interactive Timeline
   const videoChapters = [
@@ -1605,30 +1670,98 @@ function App() {
           {/* ------------------- 2. HOME / DISCOVER FEED ------------------- */}
           {activeTab === "home" && (
             <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {filteredVideos.map((vid) => (
-                  <div 
-                    key={vid.id}
-                    onClick={() => {
-                      setActiveVideo(vid);
-                      setActiveTab("watch");
-                    }}
-                    className="glass-card overflow-hidden hover:border-[#00D9FF] transition-all cursor-pointer group flex flex-col justify-between"
-                  >
-                    <div className="relative aspect-video w-full bg-gray-900 overflow-hidden">
-                      <img src={vid.img} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                      <span className="absolute bottom-2 right-2 bg-black/80 text-xs font-mono px-2 py-0.5 rounded text-white">
-                        {vid.duration}
-                      </span>
+              {isSearching ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                    <div key={n} className="glass-card overflow-hidden animate-pulse p-0 flex flex-col justify-between">
+                      <div className="aspect-video w-full bg-[#1a1a24]" />
+                      <div className="p-4 space-y-3">
+                        <div className="h-4 bg-[#282836] rounded w-5/6" />
+                        <div className="h-3 bg-[#282836] rounded w-1/2" />
+                        <div className="h-3 bg-[#282836] rounded w-1/3" />
+                      </div>
                     </div>
-                    <div className="p-4 space-y-2">
-                      <h3 className="font-bold text-sm text-white group-hover:text-[#00D9FF] line-clamp-2">{vid.title}</h3>
-                      <p className="text-xs text-gray-400">{vid.channel}</p>
-                      <p className="text-[11px] text-gray-500">{vid.views} • {vid.timeAgo}</p>
-                    </div>
+                  ))}
+                </div>
+              ) : searchQuery.trim() ? (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-mono text-[#00D9FF] uppercase tracking-wider flex items-center gap-2">
+                      <Icon name="search" className="w-4 h-4" />
+                      <span>YouTube Search Results for "{searchQuery}"</span>
+                    </h2>
+                    <span className="text-xs text-gray-400 font-mono">
+                      {searchResults.length} videos
+                    </span>
                   </div>
-                ))}
-              </div>
+
+                  {searchResults.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                      {searchResults.map((vid) => (
+                        <div 
+                          key={vid.id || vid.youtubeId}
+                          onClick={() => {
+                            const norm = normalizeVideo(vid);
+                            setActiveVideo(norm);
+                            setActiveTab("watch");
+                            if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                            showToast(`Playing video: ${norm.title}`);
+                          }}
+                          className="glass-card overflow-hidden hover:border-[#00D9FF] transition-all cursor-pointer group flex flex-col justify-between"
+                        >
+                          <div className="relative aspect-video w-full bg-gray-900 overflow-hidden">
+                            <img src={vid.img || vid.thumbnailUrl} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <span className="absolute bottom-2 right-2 bg-black/80 text-xs font-mono px-2 py-0.5 rounded text-white">
+                              {vid.duration}
+                            </span>
+                          </div>
+                          <div className="p-4 space-y-2">
+                            <h3 className="font-bold text-sm text-white group-hover:text-[#00D9FF] line-clamp-2">{vid.title}</h3>
+                            <p className="text-xs text-gray-400">{vid.channel || vid.channelName}</p>
+                            <p className="text-[11px] text-gray-500">{vid.views} • {vid.timeAgo}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="glass-card p-8 text-center space-y-3">
+                      <p className="text-sm text-gray-300">No YouTube videos found matching "{searchQuery}".</p>
+                      <button
+                        onClick={() => setSearchQuery("")}
+                        className="px-4 py-2 bg-[#00D9FF] text-black font-bold text-xs rounded-xl"
+                      >
+                        Clear Search & Return to Feed
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                  {filteredVideos.map((vid) => (
+                    <div 
+                      key={vid.id}
+                      onClick={() => {
+                        setActiveVideo(normalizeVideo(vid));
+                        setActiveTab("watch");
+                        if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                      }}
+                      className="glass-card overflow-hidden hover:border-[#00D9FF] transition-all cursor-pointer group flex flex-col justify-between"
+                    >
+                      <div className="relative aspect-video w-full bg-gray-900 overflow-hidden">
+                        <img src={vid.img} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                        <span className="absolute bottom-2 right-2 bg-black/80 text-xs font-mono px-2 py-0.5 rounded text-white">
+                          {vid.duration}
+                        </span>
+                      </div>
+                      <div className="p-4 space-y-2">
+                        <h3 className="font-bold text-sm text-white group-hover:text-[#00D9FF] line-clamp-2">{vid.title}</h3>
+                        <p className="text-xs text-gray-400">{vid.channel}</p>
+                        <p className="text-[11px] text-gray-500">{vid.views} • {vid.timeAgo}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
