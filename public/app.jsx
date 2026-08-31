@@ -102,6 +102,30 @@ const Icon = ({ name, className = "w-5 h-5", style = {} }) => {
   }
 };
 
+// --- Reusable Channel Components (PRESERVE EXISTING DESIGN — colors/fonts/spacing unchanged) ---
+const ChannelAvatar = ({ src, alt = "Channel", size = 40, verified = false, className = "" }) => (
+  <div className={`relative flex-shrink-0 ${className}`} style={{ width: size, height: size }}>
+    <img src={src} alt={alt} className="w-full h-full rounded-full object-cover border border-[#00D9FF]/40" />
+    {verified && <span className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-[#00FF88] rounded-full flex items-center justify-center text-[8px] text-black font-bold border-2 border-black">✓</span>}
+  </div>
+);
+const ChannelName = ({ name, verified = false, handle = "", className = "" }) => (
+  <div className={`flex items-center gap-1.5 ${className}`}>
+    <span className="font-bold text-white truncate">{name}</span>
+    {verified && <span className="text-[#00FF88] text-xs flex-shrink-0" title="Verified">✓</span>}
+    {handle && <span className="text-xs text-gray-400 truncate hidden sm:inline">{handle}</span>}
+  </div>
+);
+const SubscriberCount = ({ count, label = "subscribers", className = "" }) => (
+  <span className={`text-xs text-gray-400 ${className}`}>{count} {label}</span>
+);
+function slugify(name) { return (name||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); }
+function channelIdFromVideo(v) {
+  // derive channel id from channel name
+  const name = v.channel || v.channelName || "codecraft";
+  return slugify(name) || "codecraft";
+}
+
 // --- Helper to normalize video objects from API or mock ---
 function normalizeVideo(v) {
   return {
@@ -142,6 +166,27 @@ function App() {
   });
   const [searchTab, setSearchTab] = useState("results"); // "results" | "history"
   const [searchIsMock, setSearchIsMock] = useState(null);
+
+  // === NEW: Channel / Upload / Profile / Categories (preserve design) ===
+  const [activeChannelId, setActiveChannelId] = useState("codecraft");
+  const [channelData, setChannelData] = useState(null);
+  const [channelUploads, setChannelUploads] = useState([]);
+  const [isChannelLoading, setIsChannelLoading] = useState(false);
+  const [channelSubscribed, setChannelSubscribed] = useState(false);
+  const [categories, setCategories] = useState(["All","Neural Networks","PyTorch","AI Superpowers","Cloudflare Workers","Naija Dialects"]);
+  // Upload form
+  const [uploadTitle, setUploadTitle] = useState("");
+  const [uploadDesc, setUploadDesc] = useState("");
+  const [uploadCategory, setUploadCategory] = useState("Tech");
+  const [uploadThumbnail, setUploadThumbnail] = useState("");
+  const [uploadVideoUrl, setUploadVideoUrl] = useState("");
+  const [uploadDuration, setUploadDuration] = useState("");
+  const [isUploading, setIsUploading] = useState(false);
+  // Profile editable
+  const [profileData, setProfileData] = useState(null);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ name:"", handle:"", bio:"", avatar:"", banner:"", email:"" });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Persist history to localStorage whenever it changes
   useEffect(() => {
@@ -186,6 +231,60 @@ function App() {
       }
       return deduped.slice(0,100);
     });
+  };
+
+  // === NEW: Fetch categories + profile on mount (preserve design) ===
+  useEffect(() => {
+    fetch("/api/categories").then(r=>r.ok?r.json():null).then(d=>{ if(d && Array.isArray(d.categories)) setCategories(d.categories); }).catch(()=>{});
+    fetch("/api/profile").then(r=>r.ok?r.json():null).then(d=>{
+      if(d && d.profile){ setProfileData(d.profile); setProfileForm({ name:d.profile.name||"", handle:d.profile.handle||"", bio:d.profile.bio||"", avatar:d.profile.avatar||"", banner:d.profile.banner||"", email:d.profile.email||"" }); }
+    }).catch(()=>{});
+  }, []);
+  // Fetch channel when activeChannelId changes or when entering channel tab
+  useEffect(() => {
+    if (activeTab !== "channel") return;
+    setIsChannelLoading(true);
+    fetch(`/api/channel/${encodeURIComponent(activeChannelId)}`).then(r=>r.ok?r.json():null).then(d=>{
+      if(d && d.channel){ setChannelData(d.channel); setChannelUploads(Array.isArray(d.uploads)?d.uploads:[]); }
+      setIsChannelLoading(false);
+    }).catch(()=> setIsChannelLoading(false));
+  }, [activeTab, activeChannelId]);
+  const navigateToChannel = (channelId) => {
+    const cid = slugify(channelId) || "codecraft";
+    setActiveChannelId(cid);
+    setActiveTab("channel");
+    setChannelSubscribed(false);
+    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+  };
+  const handleUploadSubmit = async (e) => {
+    e.preventDefault();
+    if (!uploadTitle.trim() || uploadTitle.trim().length < 3) { showToast("Title must be at least 3 characters"); return; }
+    setIsUploading(true);
+    try {
+      const res = await fetch("/api/upload", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ title: uploadTitle, description: uploadDesc, category: uploadCategory, channelId: activeChannelId || profileForm.handle?.replace("@","") || "codecraft", channelName: profileData?.name || channelData?.name || "Alphatekx Dev", thumbnailUrl: uploadThumbnail, videoUrl: uploadVideoUrl, duration: uploadDuration || "10:00" }) });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Upload failed");
+      showToast(`Uploaded "${data.video.title}" to ${data.video.channelName}! 🎉`);
+      setUploadTitle(""); setUploadDesc(""); setUploadThumbnail(""); setUploadVideoUrl(""); setUploadDuration("");
+      // refresh channel uploads if on that channel
+      setChannelUploads(prev => [data.video, ...prev]);
+      setActiveChannelId(data.video.channelId);
+      setActiveTab("channel");
+    } catch(err){ showToast(err.message || "Upload failed"); }
+    finally { setIsUploading(false); }
+  };
+  const handleSaveProfile = async (e) => {
+    e.preventDefault();
+    setIsSavingProfile(true);
+    try {
+      const res = await fetch("/api/profile", { method:"PUT", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(profileForm) });
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || "Save failed");
+      setProfileData(data.profile);
+      setIsEditingProfile(false);
+      showToast("Profile updated! ✨");
+    } catch(err){ showToast(err.message || "Save failed"); }
+    finally { setIsSavingProfile(false); }
   };
 
   // YouTube UX Features (Theater mode, Mini-player, Voice modal, Share modal)
@@ -849,11 +948,13 @@ function App() {
                 { id: "home", label: "Home", icon: "home" },
                 { id: "watch", label: "Now Playing", icon: "youtube" },
                 { id: "shorts", label: "Shorts", icon: "shorts" },
+                { id: "channel", label: "Channel", icon: "user" },
+                { id: "upload", label: "Upload", icon: "plus" },
                 { id: "community", label: "Subscriptions", icon: "subscriptions" }
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => { setActiveTab(item.id); setMobileDrawerOpen(false); }}
+                  onClick={() => { if(item.id==="channel") navigateToChannel(activeChannelId); else setActiveTab(item.id); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center gap-4 px-3 py-2.5 rounded-xl text-sm font-medium ${
                     activeTab === item.id ? "bg-[#272727] text-[#00D9FF] font-bold" : "text-gray-300"
                   }`}
@@ -871,11 +972,14 @@ function App() {
                 { id: "memory", label: "AI Memory", icon: "brain", color: "text-[#00D9FF]" },
                 { id: "marketplace", label: "Marketplace", icon: "shopping-bag", color: "text-[#00FF88]" },
                 { id: "studio", label: "AI Studio", icon: "studio", color: "text-purple-400" },
+                { id: "profile", label: "Profile", icon: "user", color: "text-[#00D9FF]" },
+                { id: "upload", label: "Upload", icon: "plus", color: "text-[#00FF88]" },
+                { id: "channel", label: "Channel", icon: "user", color: "text-[#00D9FF]" },
                 { id: "pricing", label: "Pro Subscription", icon: "crown", color: "text-yellow-400" }
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => { setActiveTab(item.id); setMobileDrawerOpen(false); }}
+                  onClick={() => { if(item.id==="channel") navigateToChannel(activeChannelId); else setActiveTab(item.id); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center gap-4 px-3 py-2.5 rounded-xl text-sm font-medium ${
                     activeTab === item.id ? "bg-[#272727] text-white font-bold" : "text-gray-300"
                   }`}
@@ -991,9 +1095,9 @@ function App() {
         {/* Right Actions — compact on mobile */}
         <div className="flex items-center gap-0.5 sm:gap-2 flex-shrink-0">
           <button 
-            onClick={() => setActiveTab("studio")} 
+            onClick={() => setActiveTab("upload")} 
             className="p-2 rounded-full hover:bg-[#272727] text-gray-200 hidden sm:flex items-center gap-1 text-xs font-semibold px-3"
-            title="Create"
+            title="Upload video"
           >
             <Icon name="plus" className="w-5 h-5 text-[#00D9FF]" />
             <span className="hidden lg:inline">Create</span>
@@ -1043,7 +1147,7 @@ function App() {
             className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-[#00D9FF] to-[#00FF88] p-0.5 ml-0.5 sm:ml-1 flex-shrink-0"
           >
             <img 
-              src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" 
+              src={profileData?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80"} 
               alt="Profile Avatar" 
               className="w-full h-full rounded-full object-cover" 
             />
@@ -1068,11 +1172,16 @@ function App() {
                 { id: "home", label: "Home", icon: "home" },
                 { id: "watch", label: "Now Playing", icon: "youtube" },
                 { id: "shorts", label: "Shorts", icon: "shorts" },
+                { id: "channel", label: "Channel", icon: "user" },
+                { id: "upload", label: "Upload", icon: "plus" },
                 { id: "community", label: "Subscriptions", icon: "subscriptions" }
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => {
+                    if(item.id==="channel") navigateToChannel(activeChannelId);
+                    else setActiveTab(item.id);
+                  }}
                   title={!sidebarOpen ? item.label : undefined}
                   className={`w-full flex items-center ${sidebarOpen ? "gap-5 px-3" : "justify-center px-2"} py-2.5 rounded-xl text-sm font-medium transition-colors ${
                     activeTab === item.id 
@@ -1101,11 +1210,12 @@ function App() {
                 { id: "memory", label: "AI Memory", icon: "brain", color: "text-[#00D9FF]" },
                 { id: "marketplace", label: "Marketplace", icon: "shopping-bag", color: "text-[#00FF88]" },
                 { id: "studio", label: "AI Studio", icon: "studio", color: "text-purple-400" },
+                { id: "profile", label: "Profile", icon: "user", color: "text-[#00D9FF]" },
                 { id: "pricing", label: "Pro Subscription", icon: "crown", color: "text-yellow-400" }
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => { if(item.id==="channel") navigateToChannel(activeChannelId); else setActiveTab(item.id); }}
                   title={!sidebarOpen ? item.label : undefined}
                   className={`w-full flex items-center ${sidebarOpen ? "gap-5 px-3" : "justify-center px-2"} py-2.5 rounded-xl text-sm font-medium transition-colors ${
                     activeTab === item.id 
@@ -1131,11 +1241,11 @@ function App() {
                     { name: "Edge AI Lab", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80" },
                     { name: "Serverless Pro", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80" }
                   ].map((ch, idx) => (
-                    <div key={idx} className="flex items-center gap-3 text-xs text-gray-300 hover:text-white cursor-pointer py-1">
+                    <button key={idx} onClick={()=>navigateToChannel(ch.name)} className="w-full flex items-center gap-3 text-xs text-gray-300 hover:text-white cursor-pointer py-1 text-left">
                       <img src={ch.avatar} alt={ch.name} className="w-6 h-6 rounded-full object-cover" />
                       <span className="truncate">{ch.name}</span>
                       <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] ml-auto" />
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
@@ -1147,9 +1257,9 @@ function App() {
         {/* ------------------- INDEPENDENT MAIN SCROLL CONTENT AREA ------------------- */}
         <main ref={mainScrollRef} className="flex-1 overflow-y-auto scroll-smooth pb-24 md:pb-12 h-full">
 
-          {/* TOP TOPIC CHIPS BAR (Sticky Filter Bar inside Main Scroll) — scrolls cleanly on mobile */}
+          {/* TOP TOPIC CHIPS BAR (Sticky Filter Bar inside Main Scroll) — scrolls cleanly on mobile — categories from /api/categories */}
           <div className="bg-[#0f0f0f]/95 backdrop-blur-md border-b border-[#272727] px-2 sm:px-4 py-2 sm:py-2.5 flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide sticky top-0 z-30 overscroll-x-contain">
-            {["All", "Neural Networks", "PyTorch", "AI Superpowers", "Cloudflare Workers", "Naija Dialects"].map((chip) => (
+            {categories.map((chip) => (
               <button
                 key={chip}
                 onClick={() => setActiveChip(chip)}
@@ -1255,20 +1365,15 @@ function App() {
 
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-[#272727] pb-4">
                       
-                      {/* Channel Row — wraps on mobile */}
+                      {/* Channel Row — wraps on mobile — uses ChannelAvatar / ChannelName / SubscriberCount */}
                       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-wrap">
-                        <img 
-                          src={activeVideo.avatar} 
-                          alt={activeVideo.channel} 
-                          className="w-10 h-10 rounded-full object-cover border border-[#00D9FF]/40" 
-                        />
-                        <div>
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-base text-white">{activeVideo.channel}</span>
-                            <span className="text-[#00FF88] text-xs">✓</span>
+                        <button onClick={()=>navigateToChannel(activeVideo.channel)} className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+                          <ChannelAvatar src={activeVideo.avatar} alt={activeVideo.channel} size={40} verified={true} />
+                          <div className="text-left">
+                            <ChannelName name={activeVideo.channel} verified={true} className="text-base" />
+                            <SubscriberCount count={activeVideo.subscribers} />
                           </div>
-                          <p className="text-xs text-gray-400">{activeVideo.subscribers} subscribers</p>
-                        </div>
+                        </button>
 
                         {/* Subscribe Button */}
                         <button
@@ -2382,28 +2487,202 @@ function App() {
             </div>
           )}
 
-          {/* ------------------- USER PROFILE VIEW ------------------- */}
+          {/* ------------------- CHANNEL PAGE (/channel/:id) — uses ChannelAvatar/ChannelName/SubscriberCount ------------------- */}
+          {activeTab === "channel" && (
+            <div className="max-w-6xl mx-auto p-3 sm:p-4 md:p-6 space-y-6 overflow-x-hidden">
+              {isChannelLoading ? (
+                <div className="glass-card p-8 animate-pulse space-y-4">
+                  <div className="h-36 bg-[#1a1a24] rounded-2xl" />
+                  <div className="h-6 bg-[#282836] rounded w-1/3" />
+                  <div className="h-4 bg-[#282836] rounded w-1/2" />
+                </div>
+              ) : channelData ? (
+                <>
+                  <div className="relative rounded-2xl h-36 sm:h-48 overflow-hidden border border-white/10 bg-gradient-to-r from-[#00D9FF]/20 via-purple-900/30 to-[#00FF88]/20">
+                    <img src={channelData.banner || profileData?.banner} alt="Channel Banner" className="absolute inset-0 w-full h-full object-cover opacity-50" />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                  </div>
+                  <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 sm:gap-6 -mt-10 sm:-mt-12 px-2 sm:px-6 relative z-10">
+                    <ChannelAvatar src={channelData.avatar} alt={channelData.name} size={96} verified={channelData.verified} className="border-4 border-black shadow-xl w-24 h-24 flex-shrink-0" />
+                    <div className="flex-1 min-w-0 space-y-1">
+                      <ChannelName name={channelData.name} verified={channelData.verified} handle={channelData.handle} className="text-xl sm:text-2xl" />
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        <SubscriberCount count={channelData.subscribers} />
+                        <span className="text-gray-500">•</span>
+                        <span className="text-xs text-gray-400">{channelUploads.length} videos</span>
+                        <span className="text-gray-500">•</span>
+                        <span className="text-xs text-gray-400">{channelData.joinedAt ? `Joined ${channelData.joinedAt}` : ""}</span>
+                      </div>
+                      <p className="text-xs text-gray-300 max-w-2xl line-clamp-2">{channelData.description}</p>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button onClick={()=>{ setChannelSubscribed(!channelSubscribed); showToast(channelSubscribed ? `Unsubscribed from ${channelData.name}` : `Subscribed to ${channelData.name}! 🎉`); }} className={`px-6 py-2.5 rounded-full font-bold text-xs transition-all active:scale-95 ${channelSubscribed ? "bg-[#272727] text-gray-300" : "bg-[#00D9FF] text-black shadow-[0_0_15px_rgba(0,217,255,0.4)]"}`}>{channelSubscribed ? "Subscribed ✓" : "Subscribe"}</button>
+                      <button onClick={()=>setActiveTab("upload")} className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs font-bold text-white border border-white/10 hidden sm:block">Upload video</button>
+                    </div>
+                  </div>
+                  <div className="border-t border-[#272727] pt-4">
+                    <div className="flex items-center gap-2 mb-4">
+                      <h3 className="font-bold text-white">Uploads</h3>
+                      <span className="text-xs text-gray-400 font-mono">• {channelUploads.length} videos</span>
+                    </div>
+                    {channelUploads.length>0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+                        {channelUploads.map((vid)=>(
+                          <div key={vid.id||vid.youtubeId} onClick={()=>{ setActiveVideo(normalizeVideo({...vid, channelName: channelData.name, avatar: channelData.avatar, subscribers: channelData.subscribers })); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} className="glass-card overflow-hidden hover:border-[#00D9FF] transition-all cursor-pointer group flex flex-col">
+                            <div className="relative aspect-video w-full bg-gray-900 overflow-hidden">
+                              <img src={vid.thumbnailUrl || vid.img || `https://i.ytimg.com/vi/${vid.youtubeId}/hqdefault.jpg`} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              <span className="absolute bottom-2 right-2 bg-black/80 text-xs font-mono px-1.5 py-0.5 rounded text-white">{vid.duration || "10:00"}</span>
+                            </div>
+                            <div className="p-3 space-y-1 flex-1">
+                              <h4 className="font-bold text-sm text-white line-clamp-2 group-hover:text-[#00D9FF]">{vid.title}</h4>
+                              <p className="text-xs text-gray-400 truncate">{channelData.name}</p>
+                              <p className="text-[11px] text-gray-500">{vid.views || "0 views"} • {vid.category || "Tech"}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="glass-card p-8 text-center space-y-3 border-dashed">
+                        <Icon name="youtube" className="w-8 h-8 mx-auto text-gray-600" />
+                        <p className="text-sm text-gray-300">No uploads yet.</p>
+                        <p className="text-xs text-gray-500">This channel hasn't uploaded any videos. Be the first to <button onClick={()=>setActiveTab("upload")} className="text-[#00D9FF] hover:underline font-bold">upload</button>.</p>
+                      </div>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <div className="glass-card p-8 text-center space-y-3">
+                  <p className="text-sm text-gray-300">Channel not found.</p>
+                  <button onClick={()=>setActiveTab("home")} className="px-4 py-2 bg-[#00D9FF] text-black font-bold text-xs rounded-xl">Back to Home</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ------------------- UPLOAD PAGE (/upload) ------------------- */}
+          {activeTab === "upload" && (
+            <div className="max-w-2xl mx-auto p-4 md:p-8 space-y-6">
+              <div className="glass-card neon-border-blue p-6 sm:p-8 space-y-6">
+                <div className="flex items-center gap-3">
+                  <div className="p-3 bg-[#00D9FF]/20 text-[#00D9FF] rounded-2xl"><Icon name="plus" className="w-6 h-6" /></div>
+                  <div>
+                    <h1 className="text-xl font-bold text-white">Upload Video</h1>
+                    <p className="text-xs text-gray-400">Share your content — preserves existing design. Channel: {channelData?.name || profileData?.name || "Alphatekx Dev"}</p>
+                  </div>
+                </div>
+                <form onSubmit={handleUploadSubmit} className="space-y-4">
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Title *</label>
+                    <input value={uploadTitle} onChange={e=>setUploadTitle(e.target.value)} required minLength={3} placeholder="e.g. How I Built an AI Stream in 24 Hours" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#00D9FF]" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Description</label>
+                    <textarea value={uploadDesc} onChange={e=>setUploadDesc(e.target.value)} rows={3} placeholder="Describe your video... (supports Naija translations later)" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#00D9FF]" />
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Category</label>
+                      <select value={uploadCategory} onChange={e=>setUploadCategory(e.target.value)} className="w-full bg-black/80 border border-white/10 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:border-[#00D9FF]">
+                        {categories.filter(c=>c!=="All").map(c=> <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Duration (e.g. 12:30)</label>
+                      <input value={uploadDuration} onChange={e=>setUploadDuration(e.target.value)} placeholder="10:00" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#00FF88]" />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">Thumbnail URL (optional)</label>
+                    <input value={uploadThumbnail} onChange={e=>setUploadThumbnail(e.target.value)} placeholder="https://images.unsplash.com/..." className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#00FF88]" />
+                  </div>
+                  <div>
+                    <label className="text-xs text-gray-400 block mb-1">YouTube / Video URL (optional)</label>
+                    <input value={uploadVideoUrl} onChange={e=>setUploadVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#00FF88]" />
+                  </div>
+                  <button type="submit" disabled={isUploading} className="w-full py-3.5 bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black font-extrabold text-sm rounded-xl shadow-[0_0_20px_rgba(0,217,255,0.3)] hover:opacity-95 disabled:opacity-50 transition-transform active:scale-95">
+                    {isUploading ? "Uploading..." : "Publish to Channel 🚀"}
+                  </button>
+                  <p className="text-[11px] text-center text-gray-500 font-mono">POST /api/upload • Stored in edge memory • Visible on Channel page instantly</p>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* ------------------- USER PROFILE VIEW (/profile) — editable ------------------- */}
           {activeTab === "profile" && (
             <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6">
               <div className="relative rounded-2xl h-40 bg-gradient-to-r from-[#00D9FF]/30 via-purple-900/40 to-[#00FF88]/30 overflow-hidden border border-white/10">
-                <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: `url(https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80)` }} />
+                <img src={profileData?.banner || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80"} alt="Banner" className="absolute inset-0 w-full h-full object-cover opacity-40" />
               </div>
 
-              <div className="flex flex-col sm:flex-row items-center gap-4 -mt-16 px-6 relative z-10">
-                <img 
-                  src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80" 
-                  alt="Channel Avatar" 
-                  className="w-24 h-24 rounded-full object-cover border-4 border-black shadow-xl"
-                />
-                <div className="text-center sm:text-left">
-                  <h1 className="text-2xl font-bold text-white flex items-center gap-2 justify-center sm:justify-start">
-                    <span>Alphatekx Dev</span>
-                    <span className="text-[#00FF88] text-sm">✓</span>
-                  </h1>
-                  <p className="text-xs text-gray-400">@alphatekx_dev • 1.2M subscribers • 142 videos</p>
-                  <p className="text-xs text-gray-300 mt-1">Building high-performance AI video infrastructure with Cloudflare Workers.</p>
+              <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4 -mt-12 sm:-mt-16 px-2 sm:px-6 relative z-10">
+                <ChannelAvatar src={profileData?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80"} alt={profileData?.name || "Alphatekx Dev"} size={96} verified={profileData?.verified} className="border-4 border-black shadow-xl w-24 h-24 flex-shrink-0" />
+                <div className="text-center sm:text-left flex-1 min-w-0">
+                  <ChannelName name={profileData?.name || "Alphatekx Dev"} verified={profileData?.verified} handle={profileData?.handle || "@alphatekx_dev"} className="text-xl sm:text-2xl justify-center sm:justify-start" />
+                  <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-start mt-1">
+                    <SubscriberCount count={profileData?.subscribers || "1.2M"} />
+                    <span className="text-gray-500 text-xs">•</span>
+                    <span className="text-xs text-gray-400">{profileData?.email || "user@alphatekx.com"}</span>
+                  </div>
+                  <p className="text-xs text-gray-300 mt-1 max-w-xl">{profileData?.bio || "Building high-performance AI video infrastructure with Cloudflare Workers."}</p>
                 </div>
+                <button onClick={()=>setIsEditingProfile(!isEditingProfile)} className="px-5 py-2 rounded-full bg-[#272727] hover:bg-[#383838] text-xs font-bold text-white border border-white/10 flex-shrink-0">
+                  {isEditingProfile ? "Cancel" : "Edit Profile"}
+                </button>
               </div>
+
+              {isEditingProfile ? (
+                <form onSubmit={handleSaveProfile} className="glass-card p-6 space-y-4">
+                  <h3 className="font-bold text-white flex items-center gap-2"><Icon name="user" className="w-5 h-5 text-[#00D9FF]" /> Edit Profile — PUT /api/profile</h3>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Display Name</label>
+                      <input value={profileForm.name} onChange={e=>setProfileForm({...profileForm, name:e.target.value})} className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00D9FF]" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Handle (@)</label>
+                      <input value={profileForm.handle} onChange={e=>setProfileForm({...profileForm, handle:e.target.value})} placeholder="@alphatekx_dev" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00D9FF]" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Email</label>
+                      <input value={profileForm.email} onChange={e=>setProfileForm({...profileForm, email:e.target.value})} className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00D9FF]" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Avatar URL</label>
+                      <input value={profileForm.avatar} onChange={e=>setProfileForm({...profileForm, avatar:e.target.value})} placeholder="https://..." className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00FF88]" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="text-xs text-gray-400 block mb-1">Banner URL</label>
+                      <input value={profileForm.banner} onChange={e=>setProfileForm({...profileForm, banner:e.target.value})} placeholder="https://..." className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00FF88]" />
+                    </div>
+                    <div className="sm:col-span-2">
+                      <label className="text-xs text-gray-400 block mb-1">Bio</label>
+                      <textarea value={profileForm.bio} onChange={e=>setProfileForm({...profileForm, bio:e.target.value})} rows={3} className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-[#00D9FF]" />
+                    </div>
+                  </div>
+                  <button type="submit" disabled={isSavingProfile} className="w-full py-3 bg-[#00D9FF] hover:bg-[#00c4e6] text-black font-extrabold text-sm rounded-xl disabled:opacity-50">
+                    {isSavingProfile ? "Saving..." : "Save Profile (PUT /api/profile)"}
+                  </button>
+                </form>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <button onClick={()=>navigateToChannel(profileData?.name || "codecraft")} className="glass-card p-4 hover:border-[#00D9FF] transition-colors text-left">
+                    <p className="text-xs text-gray-400">Your Channel</p>
+                    <p className="font-bold text-white flex items-center gap-1">Go to Channel <span className="text-[#00D9FF]">→</span></p>
+                    <SubscriberCount count={profileData?.subscribers || "1.2M"} className="mt-1" />
+                  </button>
+                  <button onClick={()=>setActiveTab("upload")} className="glass-card p-4 hover:border-[#00FF88] transition-colors text-left">
+                    <p className="text-xs text-gray-400">Create</p>
+                    <p className="font-bold text-white">Upload Video</p>
+                    <p className="text-[11px] text-gray-500">POST /api/upload</p>
+                  </button>
+                  <button onClick={()=>setActiveTab("pricing")} className="glass-card p-4 hover:border-yellow-400 transition-colors text-left">
+                    <p className="text-xs text-gray-400">Membership</p>
+                    <p className="font-bold text-white">{isProUser ? "Pro Active ✓" : "Upgrade to Pro"}</p>
+                    <p className="text-[11px] text-[#00FF88]">$5 / month</p>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -2489,7 +2768,7 @@ function App() {
         </button>
 
         <button 
-          onClick={() => setActiveTab("studio")}
+          onClick={() => setActiveTab("upload")}
           className="w-10 h-10 rounded-full bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black flex items-center justify-center -mt-4 shadow-[0_0_15px_rgba(0,255,136,0.6)]"
         >
           <Icon name="plus" className="w-6 h-6 stroke-[3]" />

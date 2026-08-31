@@ -50,6 +50,132 @@ let inMemoryQueue = [
   { id: 3, userEmail: 'user@alphatekx.com', platform: 'youtube', videoId: 'L_LUpnjgPso', title: 'Building Real-time AI Voice Agents with WebSockets & Edge Computing', thumbnail: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80', duration: '15:10', position: 2, isPlayed: 0, createdAt: Date.now() }
 ];
 
+// === NEW: Channel / Upload / Profile / Categories Stores (preserve existing design) ===
+export const inMemoryCategories = [
+  "All",
+  "Neural Networks",
+  "PyTorch",
+  "AI Superpowers",
+  "Cloudflare Workers",
+  "Naija Dialects",
+  "Music",
+  "Education",
+  "Gaming",
+  "Comedy",
+  "Tech"
+];
+
+export let inMemoryProfile = {
+  id: "user_1",
+  name: "Alphatekx Dev",
+  handle: "@alphatekx_dev",
+  email: "user@alphatekx.com",
+  avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80",
+  banner: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80",
+  bio: "Building high-performance AI video infrastructure with Cloudflare Workers.",
+  subscribers: "1.2M",
+  subscribersCount: 1200000,
+  verified: true,
+  joinedAt: Date.now() - 1000 * 60 * 60 * 24 * 365,
+};
+
+export const inMemoryChannels: Record<string, any> = {
+  "codecraft": {
+    id: "codecraft",
+    name: "CodeCraft Academy",
+    handle: "@codecraft",
+    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
+    banner: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80",
+    subscribers: "1.2M",
+    subscribersCount: 1200000,
+    verified: true,
+    description: "Master AI, PyTorch & Neural Networks from scratch. Weekly deep dives with code.",
+    joinedAt: "Jan 2020"
+  },
+  "edge-ai-lab": {
+    id: "edge-ai-lab",
+    name: "Edge AI Lab",
+    handle: "@edgeailab",
+    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80",
+    banner: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1000&q=80",
+    subscribers: "890K",
+    subscribersCount: 890000,
+    verified: true,
+    description: "Low-latency voice agents & edge GPU streaming. Real-time AI demos.",
+    joinedAt: "Mar 2021"
+  },
+  "serverless-pro": {
+    id: "serverless-pro",
+    name: "Serverless Pro",
+    handle: "@serverlesspro",
+    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80",
+    banner: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1000&q=80",
+    subscribers: "640K",
+    subscribersCount: 640000,
+    verified: false,
+    description: "Cloudflare Workers, Durable Objects & edge SQLite mastery.",
+    joinedAt: "Jun 2021"
+  },
+  "ai-hardware-hub": {
+    id: "ai-hardware-hub",
+    name: "AI Hardware Hub",
+    handle: "@aihardware",
+    avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=120&q=80",
+    banner: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1000&q=80",
+    subscribers: "1.5M",
+    subscribersCount: 1500000,
+    verified: true,
+    description: "vLLM, Triton kernels & sub-100ms LLM inference hacks.",
+    joinedAt: "Feb 2019"
+  },
+  "naija-tech-hub": {
+    id: "naija-tech-hub",
+    name: "Naija Tech Hub",
+    handle: "@naijatech",
+    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
+    banner: "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?auto=format&fit=crop&w=1000&q=80",
+    subscribers: "420K",
+    subscribersCount: 420000,
+    verified: true,
+    description: "Pidgin, Yoruba, Igbo & Hausa AI. Naija AI for global builders 🇳🇬.",
+    joinedAt: "Aug 2022"
+  }
+};
+
+function slugifyChannel(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function resolveChannelById(id: string) {
+  const key = id.toLowerCase();
+  if (inMemoryChannels[key]) return inMemoryChannels[key];
+  // try slugify lookup by name
+  for (const ch of Object.values(inMemoryChannels)) {
+    if (slugifyChannel(ch.name) === key || ch.handle.replace("@","").toLowerCase() === key) return ch;
+  }
+  // fallback: generate channel shell from id
+  const pretty = id.replace(/-/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
+  return {
+    id: key,
+    name: pretty,
+    handle: `@${key}`,
+    avatar: `https://ui-avatars.com/api/?name=${encodeURIComponent(pretty)}&background=00D9FF&color=000&size=200`,
+    banner: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80",
+    subscribers: "12K",
+    subscribersCount: 12000,
+    verified: false,
+    description: `Welcome to ${pretty}'s channel on Alphatekx Stream.`,
+    joinedAt: "2024"
+  };
+}
+
+export let inMemoryUploads: Array<any> = [
+  // seed uploads mapped to channels so channel pages are not empty on first load
+  { id: "upload_1", youtubeId: "dQw4w9WgXcQ", title: "How to Build Neural Networks from Scratch | Full AI Tutorial 2024", channelId: "codecraft", channelName: "CodeCraft Academy", thumbnailUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80", views: "340K views", duration: "22:45", category: "Neural Networks", createdAt: Date.now() - 100000000, description: "Full tutorial on neural nets." },
+  { id: "upload_2", youtubeId: "L_LUpnjgPso", title: "Building Real-time AI Voice Agents with WebSockets & Edge GPUs", channelId: "edge-ai-lab", channelName: "Edge AI Lab", thumbnailUrl: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80", views: "185K views", duration: "15:10", category: "Cloudflare Workers", createdAt: Date.now() - 80000000, description: "Low latency voice agents." },
+  { id: "upload_3", youtubeId: "M576WGiDBdQ", title: "Cloudflare Workers & SQLite Durable Objects Masterclass", channelId: "serverless-pro", channelName: "Serverless Pro", thumbnailUrl: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80", views: "92K views", duration: "18:30", category: "Cloudflare Workers", createdAt: Date.now() - 60000000, description: "Masterclass on Workers." },
+];
+
 // Persistent Search History — survives until worker restarts, deduped by youtubeId, newest first
 // Spec: Array<{youtubeId, title, searchedQuery, timestamp}> with pushToSearchHistory() dedupes by youtubeId, newest-first, cap 100
 export let inMemorySearchHistory: Array<{
@@ -571,6 +697,128 @@ function createApiApp() {
       message: "Pro Subscription Activated! Unlimited AI summaries, Naija Translator, AI Teacher & Memory Chat unlocked.",
       tier: "pro"
     });
+  });
+
+  // === NEW: Categories ===
+  app.get("/api/categories", (c) => {
+    return c.json({ categories: inMemoryCategories });
+  });
+
+  // === NEW: Profile ===
+  app.get("/api/profile", (c) => {
+    return c.json({ profile: inMemoryProfile });
+  });
+
+  app.put("/api/profile", async (c) => {
+    try {
+      const body = await c.req.json<Partial<typeof inMemoryProfile>>();
+      const allowed = ["name", "handle", "bio", "avatar", "banner", "email"] as const;
+      for (const key of allowed) {
+        if (body[key] !== undefined && typeof body[key] === "string" && (body[key] as string).trim() !== "") {
+          (inMemoryProfile as any)[key] = (body[key] as string).trim();
+        }
+      }
+      return c.json({ success: true, profile: inMemoryProfile });
+    } catch (e: any) {
+      return c.json({ success: false, error: e.message || "Invalid JSON" }, 400);
+    }
+  });
+
+  // === NEW: Channel ===
+  app.get("/api/channel/:id", (c) => {
+    const id = c.req.param("id");
+    const channel = resolveChannelById(id);
+    // Collect uploads for this channel: exact channelId match or channelName match
+    const uploads = inMemoryUploads.filter(u => 
+      u.channelId === channel.id || 
+      slugifyChannel(u.channelName) === channel.id ||
+      u.channelName.toLowerCase() === channel.name.toLowerCase()
+    );
+    // also include catalog search fallback: synthesize uploads from static catalog if empty
+    return c.json({ 
+      channel,
+      uploads,
+      uploadsCount: uploads.length,
+      subscriberCount: channel.subscribers,
+      subscriberCountRaw: channel.subscribersCount
+    });
+  });
+
+  // === NEW: Video Upload ===
+  app.post("/api/upload", async (c) => {
+    try {
+      const body = await c.req.json<{
+        title?: string;
+        description?: string;
+        category?: string;
+        channelId?: string;
+        channelName?: string;
+        thumbnailUrl?: string;
+        videoUrl?: string;
+        duration?: string;
+      }>();
+
+      if (!body.title || body.title.trim().length < 3) {
+        return c.json({ success: false, error: "Title must be at least 3 characters" }, 400);
+      }
+
+      const channelId = body.channelId ? slugifyChannel(body.channelId) : "codecraft";
+      const channel = resolveChannelById(channelId);
+      const newId = `upload_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+      const youtubeId = body.videoUrl ? (body.videoUrl.match(/(?:v=|\/embed\/|\.be\/)([^#&?\/]+)/)?.[1] || newId) : newId;
+
+      const newVideo = {
+        id: newId,
+        youtubeId,
+        title: body.title.trim(),
+        channelId: channel.id,
+        channelName: body.channelName?.trim() || channel.name,
+        channelAvatar: channel.avatar,
+        thumbnailUrl: body.thumbnailUrl?.trim() || `https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80`,
+        views: "0 views",
+        duration: body.duration || "10:00",
+        category: body.category && inMemoryCategories.includes(body.category) ? body.category : "Tech",
+        description: body.description?.trim() || `Uploaded via Alphatekx Stream.`,
+        createdAt: Date.now(),
+        videoUrl: body.videoUrl || `https://www.youtube-nocookie.com/embed/${youtubeId}`
+      };
+
+      inMemoryUploads.unshift(newVideo);
+
+      // also make it searchable: push to search history? No—just keep in uploads.
+      return c.json({ success: true, video: newVideo, uploadsCount: inMemoryUploads.length });
+    } catch (e: any) {
+      return c.json({ success: false, error: e.message || "Invalid JSON" }, 400);
+    }
+  });
+
+  // Optional: list all uploads
+  app.get("/api/uploads", (c) => {
+    const category = c.req.query("category");
+    let uploads = inMemoryUploads;
+    if (category && category !== "All" && category !== "all") {
+      uploads = uploads.filter(u => u.category === category);
+    }
+    return c.json({ uploads, count: uploads.length });
+  });
+
+  // Enhance /api/search to also include uploads matching query
+  // (mounted as middleware wrap? Instead augment existing /api/search behavior
+  // by adding upload matches to its fallback—handled inside its handler remain,
+  // but we add a dedicated searchable uploads probe endpoint)
+  app.get("/api/search/uploads", (c) => {
+    const q = (c.req.query("q") || "").toLowerCase();
+    const filtered = inMemoryUploads.filter(u => !q || u.title.toLowerCase().includes(q) || u.channelName.toLowerCase().includes(q) || u.category.toLowerCase().includes(q));
+    return c.json({ videos: filtered.map(u => ({
+      youtubeId: u.youtubeId,
+      title: u.title,
+      channelName: u.channelName,
+      thumbnailUrl: u.thumbnailUrl,
+      views: u.views,
+      duration: u.duration,
+      category: u.category,
+      channelId: u.channelId
+    })) });
   });
 
   return app;
