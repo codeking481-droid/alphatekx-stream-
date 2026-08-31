@@ -171,10 +171,72 @@ function resolveChannelById(id: string) {
 
 export let inMemoryUploads: Array<any> = [
   // seed uploads mapped to channels so channel pages are not empty on first load
-  { id: "upload_1", youtubeId: "dQw4w9WgXcQ", title: "How to Build Neural Networks from Scratch | Full AI Tutorial 2024", channelId: "codecraft", channelName: "CodeCraft Academy", thumbnailUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80", views: "340K views", duration: "22:45", category: "Neural Networks", createdAt: Date.now() - 100000000, description: "Full tutorial on neural nets." },
-  { id: "upload_2", youtubeId: "L_LUpnjgPso", title: "Building Real-time AI Voice Agents with WebSockets & Edge GPUs", channelId: "edge-ai-lab", channelName: "Edge AI Lab", thumbnailUrl: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80", views: "185K views", duration: "15:10", category: "Cloudflare Workers", createdAt: Date.now() - 80000000, description: "Low latency voice agents." },
-  { id: "upload_3", youtubeId: "M576WGiDBdQ", title: "Cloudflare Workers & SQLite Durable Objects Masterclass", channelId: "serverless-pro", channelName: "Serverless Pro", thumbnailUrl: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80", views: "92K views", duration: "18:30", category: "Cloudflare Workers", createdAt: Date.now() - 60000000, description: "Masterclass on Workers." },
+  { id: "upload_1", youtubeId: "dQw4w9WgXcQ", title: "How to Build Neural Networks from Scratch | Full AI Tutorial 2024", channelId: "codecraft", channelName: "CodeCraft Academy", thumbnailUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80", views: "340K views", duration: "22:45", category: "Neural Networks", createdAt: Date.now() - 100000000, description: "Full tutorial on neural nets.", platform: "youtube" },
+  { id: "upload_2", youtubeId: "L_LUpnjgPso", title: "Building Real-time AI Voice Agents with WebSockets & Edge GPUs", channelId: "edge-ai-lab", channelName: "Edge AI Lab", thumbnailUrl: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80", views: "185K views", duration: "15:10", category: "Cloudflare Workers", createdAt: Date.now() - 80000000, description: "Low latency voice agents.", platform: "youtube" },
+  { id: "upload_3", youtubeId: "M576WGiDBdQ", title: "Cloudflare Workers & SQLite Durable Objects Masterclass", channelId: "serverless-pro", channelName: "Serverless Pro", thumbnailUrl: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80", views: "92K views", duration: "18:30", category: "Cloudflare Workers", createdAt: Date.now() - 60000000, description: "Masterclass on Workers.", platform: "youtube" },
 ];
+
+// === UNIFIED AGGREGATOR: YouTube + TikTok + Instagram + Twitter + Facebook ===
+// Preserve existing dark neon design: platform badges use distinct colors but stay glassmorphism
+export const platformMeta: Record<string, { label: string; badge: string; color: string; bg: string }> = {
+  youtube:   { label: "YouTube",   badge: "YT", color: "#FF0000", bg: "rgba(255,0,0,0.9)" },
+  tiktok:    { label: "TikTok",    badge: "TT", color: "#FFFFFF", bg: "rgba(0,0,0,0.9)" },
+  instagram: { label: "Instagram", badge: "IG", color: "#E1306C", bg: "rgba(225,48,108,0.9)" },
+  twitter:   { label: "Twitter",   badge: "X",  color: "#1DA1F2", bg: "rgba(29,161,242,0.9)" },
+  facebook:  { label: "Facebook",  badge: "FB", color: "#1877F2", bg: "rgba(24,119,242,0.9)" },
+};
+
+export let inMemoryWatchLater: Array<any> = [];
+
+function makePlatformCatalogs() {
+  return {
+    tiktok: [
+      { platform: "tiktok", youtubeId: "tt_001", platformId: "719001001", title: "POV: You shaved 500ms off cold start ⚡ #Cloudflare #Workers", channelName: "@tiktokbuilds", handle: "@tiktokbuilds", thumbnailUrl: "https://images.unsplash.com/photo-1611162616305-c69b3fa7fbe0?auto=format&fit=crop&w=600&q=80", views: "2.1M views", duration: "0:47", category: "Tech" },
+      { platform: "tiktok", youtubeId: "tt_002", platformId: "719001002", title: "Naija street food + AI caption sync 🇳🇬 #fyp", channelName: "@naija_eats", handle: "@naija_eats", thumbnailUrl: "https://images.unsplash.com/photo-1504674900247-0877df9cc836?auto=format&fit=crop&w=600&q=80", views: "890K views", duration: "0:31", category: "Comedy" },
+      { platform: "tiktok", youtubeId: "tt_003", platformId: "719001003", title: "How I built neural nets in 60s (sped up 20x)", channelName: "@codecraft_clips", handle: "@codecraft_clips", thumbnailUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80", views: "1.4M views", duration: "0:58", category: "Neural Networks" },
+    ],
+    instagram: [
+      { platform: "instagram", youtubeId: "ig_001", platformId: "IG001", title: "Reel: Pyramid of Giza but make it shaders ✨", channelName: "@shaders Daily", handle: "@shaders_daily", thumbnailUrl: "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?auto=format&fit=crop&w=600&q=80", views: "420K views", duration: "0:22", category: "Tech" },
+      { platform: "instagram", youtubeId: "ig_002", platformId: "IG002", title: "Lagos traffic but AI traffic lights 🚦🇳🇬", channelName: "@lagos.tech", handle: "@lagos_tech", thumbnailUrl: "https://images.unsplash.com/photo-1513635269975-59663e0ac1ad?auto=format&fit=crop&w=600&q=80", views: "310K views", duration: "0:18", category: "Education" },
+      { platform: "instagram", youtubeId: "ig_003", platformId: "IG003", title: "Behind the scenes: Studio setup for AI voices", channelName: "@studio.reels", handle: "@studio_reels", thumbnailUrl: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=600&q=80", views: "198K views", duration: "0:28", category: "Tech" },
+    ],
+    twitter: [
+      { platform: "twitter", youtubeId: "tw_001", platformId: "TW001", title: "Twitter Video: Workers 2.0 launch thread — 100k rps on one shard", channelName: "@cloudflare", handle: "@cloudflare", thumbnailUrl: "https://images.unsplash.com/photo-1611605698335-8b1569810432?auto=format&fit=crop&w=600&q=80", views: "150K views", duration: "1:32", category: "Cloudflare Workers" },
+      { platform: "twitter", youtubeId: "tw_002", platformId: "TW002", title: "Demo: realtime translation tweet-dubbed to Yoruba", channelName: "@naija_ai", handle: "@naija_ai", thumbnailUrl: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80", views: "88K views", duration: "0:45", category: "Naija Dialects" },
+      { platform: "twitter", youtubeId: "tw_003", platformId: "TW003", title: "Thread: How attention is all you need (video)", channelName: "@ai_papers", handle: "@ai_papers", thumbnailUrl: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80", views: "210K views", duration: "2:10", category: "AI Superpowers" },
+    ],
+    facebook: [
+      { platform: "facebook", youtubeId: "fb_001", platformId: "FB001", title: "Facebook Watch: Village village build log — episode 4", channelName: "Naija Builders FB", handle: "fb.com/naija.builders", thumbnailUrl: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=600&q=80", views: "512K views", duration: "8:44", category: "Education" },
+      { platform: "facebook", youtubeId: "fb_002", platformId: "FB002", title: "Live: AI marketplace seller Q&A — make ₦ with models", channelName: "Alphatekx FB Live", handle: "fb.com/alphatekx", thumbnailUrl: "https://images.unsplash.com/photo-1553877522-43269d4ea984?auto=format&fit=crop&w=600&q=80", views: "98K views", duration: "12:30", category: "Tech" },
+      { platform: "facebook", youtubeId: "fb_003", platformId: "FB003", title: "Watch: Afropop + generative visuals (full set)", channelName: "AfroViz", handle: "fb.com/afroviz", thumbnailUrl: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?auto=format&fit=crop&w=600&q=80", views: "670K views", duration: "4:12", category: "Music" },
+    ],
+  };
+}
+
+function aggregateSearch(query: string, youtubeVideos: any[]) {
+  const qLower = query.toLowerCase();
+  const catalogs = makePlatformCatalogs();
+  const other = Object.values(catalogs).flat();
+  const filteredOther = other.filter(v => !query || v.title.toLowerCase().includes(qLower) || v.channelName.toLowerCase().includes(qLower) || v.category.toLowerCase().includes(qLower));
+  // youtubeVideos are already filtered/fallback; tag them platform=youtube and add badge meta
+  const ytTagged = (youtubeVideos || []).map(v => ({ ...v, platform: "youtube", platformMeta: platformMeta.youtube }));
+  const combined = [...ytTagged];
+  // interleave other platforms for single-feed experience (preserve premium dark: shuffle but keep youtube first)
+  for (let i = 0; i < filteredOther.length; i++) {
+    const item = filteredOther[i];
+    // inject platformMeta
+    (item as any).platformMeta = platformMeta[item.platform];
+    // interleave every 2 youtube videos insert one other
+    const pos = Math.min(combined.length, 1 + i * 2);
+    combined.splice(pos, 0, item);
+  }
+  // also include uploads as youtube-like but with platform field
+  const uploadExtra = inMemoryUploads.filter(u => !query || u.title.toLowerCase().includes(qLower) || u.channelName.toLowerCase().includes(qLower)).map(u => ({ ...u, platform: u.platform || "youtube", platformMeta: platformMeta[u.platform || "youtube"], youtubeId: u.youtubeId || u.id }));
+  for (const u of uploadExtra) {
+    if (!combined.find(c => c.youtubeId === u.youtubeId)) combined.splice(2, 0, u);
+  }
+  return combined;
+}
 
 // Persistent Search History — survives until worker restarts, deduped by youtubeId, newest first
 // Spec: Array<{youtubeId, title, searchedQuery, timestamp}> with pushToSearchHistory() dedupes by youtubeId, newest-first, cap 100
@@ -299,11 +361,12 @@ function createApiApp() {
     };
 
     if (!apiKey) {
-      console.warn("[search] YOUTUBE_API_KEY missing — serving mock catalog for q:", q);
+      console.warn("[search] YOUTUBE_API_KEY missing — serving UNIFIED mock catalog for q:", q);
       const fallback = getMockFallback(q);
       // persist mocks too so history never vanishes
       pushToSearchHistory(fallback, q);
-      return c.json({ videos: fallback, isMock: true });
+      const unified = aggregateSearch(q, fallback);
+      return c.json({ videos: unified, isMock: true, unified: true });
     }
 
     try {
@@ -315,7 +378,8 @@ function createApiApp() {
         console.error("[search] YouTube search failed", searchRes.status, await searchRes.text().catch(() => ""), "q:", q);
         const fallback = getMockFallback(q);
         pushToSearchHistory(fallback, q);
-        return c.json({ videos: fallback, isMock: true, status: searchRes.status });
+        const unified = aggregateSearch(q, fallback);
+        return c.json({ videos: unified, isMock: true, unified: true, status: searchRes.status });
       }
 
       const searchData = (await searchRes.json()) as any;
@@ -360,19 +424,23 @@ function createApiApp() {
             item.snippet?.thumbnails?.default?.url ||
             `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
           views: details.views || "100K views",
-          duration: details.duration || "15:00"
+          duration: details.duration || "15:00",
+          platform: "youtube",
+          platformMeta: platformMeta.youtube
         };
       });
 
       // auto-persist real results newest-first, deduped
       pushToSearchHistory(videos, q);
 
-      return c.json({ videos, isMock: false });
+      const unified = aggregateSearch(q, videos);
+      return c.json({ videos: unified, isMock: false, unified: true });
     } catch (err: any) {
       console.error("[search] exception for q:", q, err?.message || err);
       const fallback = getMockFallback(q);
       pushToSearchHistory(fallback, q);
-      return c.json({ videos: fallback, isMock: true, error: err.message });
+      const unified = aggregateSearch(q, fallback);
+      return c.json({ videos: unified, isMock: true, unified: true, error: err.message });
     }
   });
 
@@ -416,6 +484,78 @@ function createApiApp() {
   app.delete("/api/search/history", (c) => {
     inMemorySearchHistory = [];
     return c.json({ success: true, history: [] });
+  });
+
+  // === UNIFIED AGGREGATOR PER-PLATFORM ENDPOINTS ===
+  // GET /api/search/youtube?q=  ...  /tiktok /instagram /twitter /facebook
+  const platformSearch = (platform: string) => async (c: any) => {
+    const q = c.req.query("q") || "";
+    const qLower = q.toLowerCase();
+    // youtube goes through real aggregator fallback (already unified) then filter to youtube only
+    if (platform === "youtube") {
+      // reuse unified but filter
+      const mockCatalog = [
+        { youtubeId: "dQw4w9WgXcQ", title: "How to Build Neural Networks from Scratch | Full AI Tutorial 2024", channelName: "CodeCraft Academy", thumbnailUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80", views: "340K views", duration: "22:45", platform: "youtube", platformMeta: platformMeta.youtube },
+        { youtubeId: "L_LUpnjgPso", title: "Building Real-time AI Voice Agents with WebSockets & Edge GPUs", channelName: "Edge AI Lab", thumbnailUrl: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80", views: "185K views", duration: "15:10", platform: "youtube", platformMeta: platformMeta.youtube },
+        { youtubeId: "M576WGiDBdQ", title: "Cloudflare Workers & SQLite Durable Objects Masterclass", channelName: "Serverless Pro", thumbnailUrl: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80", views: "92K views", duration: "18:30", platform: "youtube", platformMeta: platformMeta.youtube },
+        { youtubeId: "fJ9rUzIMcZQ", title: "Sub-100ms LLM Streaming Inference on Edge GPUs", channelName: "AI Hardware Hub", thumbnailUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80", views: "410K views", duration: "32:15", platform: "youtube", platformMeta: platformMeta.youtube },
+        { youtubeId: "3JZ_D3ELwOQ", title: "Naija Pidgin AI Voice Synthesizer & Subtitle Engine", channelName: "Naija Tech Hub", thumbnailUrl: "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?auto=format&fit=crop&w=600&q=80", views: "512K views", duration: "12:04", platform: "youtube", platformMeta: platformMeta.youtube },
+      ];
+      let vids = mockCatalog.filter(v => !q || v.title.toLowerCase().includes(qLower) || v.channelName.toLowerCase().includes(qLower));
+      if (vids.length===0) vids = mockCatalog;
+      // include uploads that are youtube platform
+      const uploads = inMemoryUploads.filter(u => (u.platform||"youtube")==="youtube" && (!q || u.title.toLowerCase().includes(qLower))).map(u=>({ ...u, platform:"youtube", platformMeta: platformMeta.youtube }));
+      return c.json({ videos: [...vids, ...uploads], platform, count: vids.length + uploads.length });
+    }
+    const catalogs = makePlatformCatalogs() as any;
+    let vids = (catalogs[platform] || []) as any[];
+    vids = vids.filter(v => !q || v.title.toLowerCase().includes(qLower) || v.channelName.toLowerCase().includes(qLower) || v.category.toLowerCase().includes(qLower));
+    // tag meta
+    vids = vids.map(v=> ({ ...v, platformMeta: platformMeta[platform] }));
+    return c.json({ videos: vids, platform, count: vids.length });
+  };
+  app.get("/api/search/youtube", platformSearch("youtube"));
+  app.get("/api/search/tiktok", platformSearch("tiktok"));
+  app.get("/api/search/instagram", platformSearch("instagram"));
+  app.get("/api/search/twitter", platformSearch("twitter"));
+  app.get("/api/search/facebook", platformSearch("facebook"));
+
+  // === WATCH LATER ===
+  app.get("/api/watch-later", (c) => {
+    return c.json({ videos: inMemoryWatchLater, count: inMemoryWatchLater.length });
+  });
+  app.post("/api/watch-later", async (c) => {
+    try {
+      const body = await c.req.json<any>();
+      const id = body.youtubeId || body.id || body.platformId;
+      if (!id) return c.json({ success: false, error: "Missing id/youtubeId" }, 400);
+      if (inMemoryWatchLater.find(v => (v.youtubeId||v.id) === id)) {
+        return c.json({ success: true, videos: inMemoryWatchLater, count: inMemoryWatchLater.length, message: "Already saved" });
+      }
+      const entry = {
+        youtubeId: id,
+        platformId: body.platformId || id,
+        platform: body.platform || "youtube",
+        platformMeta: body.platformMeta || platformMeta[body.platform || "youtube"] || platformMeta.youtube,
+        title: body.title || "Untitled",
+        channelName: body.channelName || body.channel || "Unknown",
+        thumbnailUrl: body.thumbnailUrl || body.img || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+        views: body.views || "0 views",
+        duration: body.duration || "0:00",
+        category: body.category || "Tech",
+        savedAt: Date.now()
+      };
+      inMemoryWatchLater.unshift(entry);
+      if (inMemoryWatchLater.length > 200) inMemoryWatchLater = inMemoryWatchLater.slice(0,200);
+      return c.json({ success: true, videos: inMemoryWatchLater, count: inMemoryWatchLater.length });
+    } catch(e:any){ return c.json({ success:false, error:e.message },400); }
+  });
+  app.delete("/api/watch-later/:id", (c) => {
+    const id = c.req.param("id");
+    const before = inMemoryWatchLater.length;
+    inMemoryWatchLater = inMemoryWatchLater.filter(v => (v.youtubeId||v.id) !== id && v.platformId !== id);
+    const removed = before !== inMemoryWatchLater.length;
+    return c.json({ success: removed, videos: inMemoryWatchLater, count: inMemoryWatchLater.length });
   });
 
   // Community Chat
