@@ -85,12 +85,6 @@ const Icon = ({ name, className = "w-5 h-5", style = {} }) => {
       return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>;
     case "playlist":
       return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h13M4 14h10M4 18h7"/></svg>;
-    case "clock":
-      return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>;
-    case "trending":
-      return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>;
-    case "scissors":
-      return <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M14.121 14.121L19 19m-7-7l7-7m-7 7l-2.879 2.879M12 12L9.121 9.121m0 0A3 3 0 104.879 4.879a3 3 0 004.242 4.242zm0 5.758a3 3 0 10-4.242 4.242 3 3 0 004.242-4.242z"/></svg>;
     case "tiktok":
       return (
         <svg className={className} fill="currentColor" viewBox="0 0 24 24">
@@ -110,24 +104,24 @@ const Icon = ({ name, className = "w-5 h-5", style = {} }) => {
 
 // --- Main App Component ---
 function App() {
-  // Navigation & YouTube Sidebar State
+  // Navigation & Functional Hamburger Drawer State
   const [activeTab, setActiveTab] = useState("watch"); // watch, home, shorts, teacher, memory, chat, community, marketplace, sell, studio, pricing, profile
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(true); // Desktop sidebar toggle
+  const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false); // Mobile drawer slide-over toggle
   const [searchQuery, setSearchQuery] = useState("");
   const [activeChip, setActiveChip] = useState("All");
 
-  // Video State
-  const [activeVideo, setActiveVideo] = useState({
-    videoId: "dQw4w9WgXcQ",
-    title: "How to Build Neural Networks from Scratch | Full AI Tutorial 2024",
-    channel: "CodeCraft Academy",
-    subscribers: "1.2M",
-    views: "340,291",
-    timeAgo: "3 days ago",
-    avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
-    description: "In this comprehensive tutorial, we build a deep neural network from mathematical primitives up to PyTorch CUDA acceleration and edge inferencing. We cover forward propagation, loss calculations, backpropagation via chain rule, attention modules, and deployment to Cloudflare Workers AI."
-  });
+  // Video Catalog Master Database
+  const [videoCatalog, setVideoCatalog] = useState([
+    { id: "dQw4w9WgXcQ", title: "How to Build Neural Networks from Scratch | Full AI Tutorial 2024", channel: "CodeCraft Academy", subscribers: "1.2M", views: "340K views", timeAgo: "3 days ago", duration: "22:45", tag: "Neural Networks", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80", img: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80", description: "In this comprehensive tutorial, we build a deep neural network from mathematical primitives up to PyTorch CUDA acceleration and edge inferencing." },
+    { id: "L_LUpnjgPso", title: "Building Real-time AI Voice Agents with WebSockets & Edge", channel: "Edge AI Lab", subscribers: "890K", views: "185K views", timeAgo: "1 week ago", duration: "15:10", tag: "Cloudflare Workers", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80", img: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80", description: "Low-latency streaming architecture for real-time AI voice synthesis." },
+    { id: "M576WGiDBdQ", title: "Cloudflare Workers & SQLite Durable Objects Masterclass", channel: "Serverless Pro", subscribers: "640K", views: "92K views", timeAgo: "4 days ago", duration: "18:30", tag: "Cloudflare Workers", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80", img: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80", description: "Learn how to build edge-rendered applications with per-tenant SQLite persistence." },
+    { id: "fJ9rUzIMcZQ", title: "Sub-100ms LLM Streaming Inference on Edge GPUs", channel: "AI Hardware Hub", subscribers: "1.5M", views: "410K views", timeAgo: "2 weeks ago", duration: "32:15", tag: "AI Superpowers", avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=120&q=80", img: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80", description: "Accelerating token generation using vLLM and Triton kernels." },
+    { id: "3JZ_D3ELwOQ", title: "Naija Pidgin AI Voice Synthesizer & Subtitle Engine", channel: "Naija Tech Hub", subscribers: "420K", views: "512K views", timeAgo: "5 days ago", duration: "12:04", tag: "Naija Dialects", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80", img: "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?auto=format&fit=crop&w=600&q=80", description: "Demonstrating Pidgin, Yoruba, Igbo and Hausa translation models for video subtitle localization." }
+  ]);
 
+  // Active Video State
+  const [activeVideo, setActiveVideo] = useState(videoCatalog[0]);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [likeCount, setLikeCount] = useState(24500);
   const [userLiked, setUserLiked] = useState(false);
@@ -148,7 +142,6 @@ function App() {
   const [summaryInputChat, setSummaryInputChat] = useState("");
 
   // Superpower 4: Live Community Chat & Comments
-  const [activeCommentTab, setActiveCommentTab] = useState("live"); // live or comments
   const [activeChannel, setActiveChannel] = useState("general");
   const [communityMessages, setCommunityMessages] = useState([
     { id: 1, userName: "dev_nina", avatarInitials: "N", avatarColor: "bg-orange-500", timeAgo: "2m ago", message: "This explanation at 8:15 finally made backprop click — thank you! 🔥", timestampInVideo: "8:15", likes: 14 },
@@ -199,29 +192,6 @@ function App() {
   const [toastMessage, setToastMessage] = useState(null);
   const [cartCount, setCartCount] = useState(0);
 
-  // YouTube Shorts Feed State
-  const [shortIndex, setShortIndex] = useState(0);
-  const shortsList = [
-    {
-      id: "short_1",
-      title: "How Attention Mechanisms Work in 30 Seconds! 🧠 #AI #Shorts",
-      channel: "@CodeCraft",
-      likes: "45.2K",
-      comments: "892",
-      sound: "Original Sound - CodeCraft Academy",
-      videoBg: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80"
-    },
-    {
-      id: "short_2",
-      title: "Deploying PyTorch to Cloudflare Workers at 100 FPS ⚡",
-      channel: "@ServerlessPro",
-      likes: "18.9K",
-      comments: "412",
-      sound: "Future Synthwave - Alphatekx Beats",
-      videoBg: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80"
-    }
-  ];
-
   // Youtube Player Ref
   const iframeRef = useRef(null);
 
@@ -231,11 +201,20 @@ function App() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Simulate viewer count fluctuation
+  // Handle Hamburger Toggle Action (Desktop collapse / Mobile drawer)
+  const handleHamburgerClick = () => {
+    if (window.innerWidth < 768) {
+      setMobileDrawerOpen(prev => !prev);
+    } else {
+      setSidebarOpen(prev => !prev);
+    }
+  };
+
+  // Fluctuate viewer count for live realism
   useEffect(() => {
     const interval = setInterval(() => {
       setLiveViewerCount(prev => prev + (Math.random() > 0.5 ? 2 : -1));
-    }, 4000);
+    }, 4500);
     return () => clearInterval(interval);
   }, []);
 
@@ -319,7 +298,7 @@ function App() {
       id: Date.now(),
       platform: isTikTok ? "tiktok" : "youtube",
       videoId: isTikTok ? "7123456789" : "L_LUpnjgPso",
-      title: isTikTok ? `TikTok Import #${queueItems.length + 1}` : `Imported YouTube Video`,
+      title: isTikTok ? `TikTok Import #${queueItems.length + 1}` : `Imported Stream`,
       thumbnail: isTikTok 
         ? "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?auto=format&fit=crop&w=600&q=80"
         : "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80",
@@ -346,7 +325,7 @@ function App() {
       });
       setIsBuildingCourse(false);
       showToast("5-Step AI Learning Path Generated!");
-    }, 1200);
+    }, 1000);
   };
 
   // Memory Search
@@ -359,35 +338,12 @@ function App() {
     ]);
   };
 
-  // AI Memory Chat
-  const handleSendMemoryChat = (e) => {
-    e.preventDefault();
-    if (!chatInput.trim()) return;
-    const userMsg = chatInput;
-    setChatMessages(prev => [...prev, { sender: "user", text: userMsg }]);
-    setChatInput("");
-    setTimeout(() => {
-      let botReply = "Based on your watch history (3 videos watched in the past month): Neural networks use matrix multiplications for forward pass, and backprop updates weights via gradient descent (Jump to 12:30).";
-      if (userMsg.toLowerCase().includes("voice") || userMsg.toLowerCase().includes("audio")) {
-        botReply = "Based on 'Building Real-time AI Voice Agents' (watched 12 days ago): The video recommends using WebSockets paired with Cloudflare Workers for sub-100ms voice roundtrip (Jump to 04:12).";
-      }
-      setChatMessages(prev => [...prev, {
-        sender: "ai",
-        text: botReply,
-        sources: [
-          { title: "How to Build Neural Networks", timestamp: "12:30" },
-          { title: "Building Real-time AI Voice Agents", timestamp: "04:12" }
-        ]
-      }]);
-    }, 800);
-  };
-
-  // Recommended Videos List
-  const recommendedVideos = [
-    { videoId: "L_LUpnjgPso", title: "Building Real-time AI Voice Agents with WebSockets", channel: "Edge AI Lab", views: "185K views", timeAgo: "1 week ago", duration: "15:10", thumbnail: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80" },
-    { videoId: "M576WGiDBdQ", title: "Cloudflare Workers & SQLite Durable Objects Masterclass", channel: "Serverless Pro", views: "92K views", timeAgo: "4 days ago", duration: "18:30", thumbnail: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80" },
-    { videoId: "fJ9rUzIMcZQ", title: "Sub-100ms LLM Streaming Inference on Edge GPUs", channel: "AI Hardware Hub", views: "410K views", timeAgo: "2 weeks ago", duration: "32:15", thumbnail: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80" }
-  ];
+  // Filtered Video Catalog based on Search & Topic Chip
+  const filteredVideos = videoCatalog.filter(video => {
+    const matchesSearch = !searchQuery || video.title.toLowerCase().includes(searchQuery.toLowerCase()) || video.channel.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesChip = activeChip === "All" || video.tag === activeChip || (activeChip === "PyTorch" && video.title.includes("Neural")) || (activeChip === "Live Chat" && video.tag === "Cloudflare Workers");
+    return matchesSearch && matchesChip;
+  });
 
   return (
     <div className="bg-[#0f0f0f] text-white min-h-screen flex flex-col font-sans selection:bg-[#00D9FF] selection:text-black">
@@ -449,14 +405,78 @@ function App() {
         </div>
       )}
 
+      {/* ------------------- FUNCTIONAL MOBILE OVERLAY DRAWER ------------------- */}
+      {mobileDrawerOpen && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md md:hidden flex">
+          <div className="w-4/5 max-w-xs bg-[#0f0f0f] border-r border-[#272727] h-full p-4 space-y-6 overflow-y-auto">
+            
+            {/* Header inside Mobile Drawer */}
+            <div className="flex items-center justify-between border-b border-[#272727] pb-4">
+              <div className="flex items-center gap-2">
+                <Icon name="logo" className="w-7 h-7" />
+                <span className="font-bold text-lg text-white">Alphatekx Stream</span>
+              </div>
+              <button onClick={() => setMobileDrawerOpen(false)} className="text-gray-400 hover:text-white text-xl">
+                ✕
+              </button>
+            </div>
+
+            {/* Mobile Sidebar Items */}
+            <div className="space-y-1">
+              {[
+                { id: "home", label: "Home", icon: "home" },
+                { id: "watch", label: "Now Playing", icon: "youtube" },
+                { id: "shorts", label: "Shorts", icon: "shorts" },
+                { id: "community", label: "Subscriptions", icon: "subscriptions" }
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => { setActiveTab(item.id); setMobileDrawerOpen(false); }}
+                  className={`w-full flex items-center gap-4 px-3 py-2.5 rounded-xl text-sm font-medium ${
+                    activeTab === item.id ? "bg-[#272727] text-[#00D9FF] font-bold" : "text-gray-300"
+                  }`}
+                >
+                  <Icon name={item.icon} className="w-5 h-5 text-[#00D9FF]" />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+
+            <div className="border-t border-[#272727] pt-4 space-y-1">
+              <div className="px-3 py-1 text-xs font-mono font-bold text-[#00FF88] uppercase">AI Superpowers</div>
+              {[
+                { id: "teacher", label: "AI Teacher", icon: "teacher", color: "text-[#00FF88]" },
+                { id: "memory", label: "AI Memory", icon: "brain", color: "text-[#00D9FF]" },
+                { id: "marketplace", label: "Marketplace", icon: "shopping-bag", color: "text-[#00FF88]" },
+                { id: "studio", label: "AI Studio", icon: "studio", color: "text-purple-400" },
+                { id: "pricing", label: "Pro Subscription", icon: "crown", color: "text-yellow-400" }
+              ].map((item) => (
+                <button
+                  key={item.id}
+                  onClick={() => { setActiveTab(item.id); setMobileDrawerOpen(false); }}
+                  className={`w-full flex items-center gap-4 px-3 py-2.5 rounded-xl text-sm font-medium ${
+                    activeTab === item.id ? "bg-[#272727] text-white font-bold" : "text-gray-300"
+                  }`}
+                >
+                  <Icon name={item.icon} className={`w-5 h-5 ${item.color}`} />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </div>
+
+          </div>
+          <div className="flex-1" onClick={() => setMobileDrawerOpen(false)} />
+        </div>
+      )}
+
       {/* ------------------- YOUTUBE HEADER NAVBAR ------------------- */}
       <header className="sticky top-0 z-40 bg-[#0f0f0f] border-b border-[#272727] px-4 py-2 flex items-center justify-between gap-4">
         
-        {/* Left: Hamburger menu button + Logo */}
+        {/* Left: Functional Hamburger Button + Logo */}
         <div className="flex items-center gap-4">
           <button 
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-full hover:bg-[#272727] text-gray-200"
+            onClick={handleHamburgerClick}
+            className="p-2 rounded-full hover:bg-[#272727] text-gray-200 transition-transform active:scale-90"
             title="Toggle YouTube Menu"
           >
             <Icon name="menu" className="w-6 h-6" />
@@ -577,11 +597,11 @@ function App() {
 
         {/* ------------------- YOUTUBE SIDEBAR ------------------- */}
         <aside 
-          className={`bg-[#0f0f0f] border-r border-[#272727] transition-all duration-300 flex flex-col justify-between hidden md:flex ${
-            sidebarOpen ? "w-64" : "w-18"
+          className={`bg-[#0f0f0f] border-r border-[#272727] transition-all duration-300 flex-col justify-between hidden md:flex ${
+            sidebarOpen ? "w-64" : "w-18 items-center"
           }`}
         >
-          <div className="py-2 overflow-y-auto space-y-4">
+          <div className="py-2 overflow-y-auto space-y-4 w-full">
             
             {/* Primary Navigation Section */}
             <div className="px-2 space-y-1">
@@ -594,7 +614,8 @@ function App() {
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  title={!sidebarOpen ? item.label : undefined}
+                  className={`w-full flex items-center ${sidebarOpen ? "gap-5 px-3" : "justify-center px-2"} py-2.5 rounded-xl text-sm font-medium transition-colors ${
                     activeTab === item.id 
                       ? "bg-[#272727] text-[#00D9FF] font-bold" 
                       : "text-gray-300 hover:bg-[#272727] hover:text-white"
@@ -626,7 +647,8 @@ function App() {
                 <button
                   key={item.id}
                   onClick={() => setActiveTab(item.id)}
-                  className={`w-full flex items-center gap-5 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  title={!sidebarOpen ? item.label : undefined}
+                  className={`w-full flex items-center ${sidebarOpen ? "gap-5 px-3" : "justify-center px-2"} py-2.5 rounded-xl text-sm font-medium transition-colors ${
                     activeTab === item.id 
                       ? "bg-[#272727] text-white font-bold" 
                       : "text-gray-300 hover:bg-[#272727] hover:text-white"
@@ -651,7 +673,8 @@ function App() {
                 <button
                   key={idx}
                   onClick={() => setActiveTab(item.id)}
-                  className="w-full flex items-center gap-5 px-3 py-2 rounded-xl text-xs font-medium text-gray-400 hover:bg-[#272727] hover:text-white"
+                  title={!sidebarOpen ? item.label : undefined}
+                  className={`w-full flex items-center ${sidebarOpen ? "gap-5 px-3" : "justify-center px-2"} py-2 rounded-xl text-xs font-medium text-gray-400 hover:bg-[#272727] hover:text-white`}
                 >
                   <Icon name={item.icon} className="w-5 h-5 text-gray-400" />
                   {sidebarOpen && <span>{item.label}</span>}
@@ -696,7 +719,7 @@ function App() {
 
           {/* TOP TOPIC CHIPS BAR (YouTube Signature Horizontal Filter Bar) */}
           <div className="bg-[#0f0f0f] border-b border-[#272727] px-4 py-2.5 flex items-center gap-2 overflow-x-auto sticky top-0 z-30">
-            {["All", "Neural Networks", "PyTorch", "AI Superpowers", "Cloudflare Workers", "Naija Dialects", "TikTok Sync", "Live Chat", "Recently Uploaded"].map((chip) => (
+            {["All", "Neural Networks", "PyTorch", "AI Superpowers", "Cloudflare Workers", "Naija Dialects"].map((chip) => (
               <button
                 key={chip}
                 onClick={() => setActiveChip(chip)}
@@ -728,7 +751,7 @@ function App() {
                     {cinemaMode && (
                       <div 
                         className="absolute -inset-4 bg-cover bg-center blur-[50px] opacity-40 scale-125 transition-all duration-700 pointer-events-none"
-                        style={{ backgroundImage: `url(https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80)` }}
+                        style={{ backgroundImage: `url(${activeVideo.img})` }}
                       />
                     )}
 
@@ -754,7 +777,7 @@ function App() {
                     <div className="relative aspect-video w-full bg-black z-10">
                       <iframe
                         ref={iframeRef}
-                        src={`https://www.youtube-nocookie.com/embed/${activeVideo.videoId}?enablejsapi=1&modestbranding=1&rel=0`}
+                        src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0`}
                         title={activeVideo.title}
                         className="w-full h-full border-0 rounded-2xl"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -790,7 +813,7 @@ function App() {
                         <button
                           onClick={() => {
                             setIsSubscribed(!isSubscribed);
-                            showToast(isSubscribed ? "Unsubscribed from channel" : "Subscribed to CodeCraft Academy! 🎉");
+                            showToast(isSubscribed ? "Unsubscribed from channel" : `Subscribed to ${activeVideo.channel}! 🎉`);
                           }}
                           className={`ml-2 px-5 py-2 rounded-full font-bold text-xs transition-all active:scale-95 ${
                             isSubscribed 
@@ -802,7 +825,7 @@ function App() {
                         </button>
                       </div>
 
-                      {/* Action Row Horizontal Pills (Joined Like/Dislike, Share, Download, Save, AI Summary) */}
+                      {/* Action Row Horizontal Pills (Joined Like/Dislike, Share, Download, Save) */}
                       <div className="flex items-center gap-2 overflow-x-auto pb-1">
                         
                         {/* Joined Like & Dislike Pill */}
@@ -872,10 +895,10 @@ function App() {
                   {/* YOUTUBE EXPANDABLE DESCRIPTION BOX */}
                   <div className="bg-[#272727]/50 rounded-2xl p-4 text-xs space-y-2 hover:bg-[#272727]/70 transition-colors">
                     <div className="flex items-center gap-2 font-bold text-white">
-                      <span>{activeVideo.views} views</span>
+                      <span>{activeVideo.views}</span>
                       <span>•</span>
                       <span>{activeVideo.timeAgo}</span>
-                      <span className="text-[#00D9FF]">#NeuralNetworks #AI #PyTorch</span>
+                      <span className="text-[#00D9FF]">#{activeVideo.tag.replace(/\s+/g, '')} #AI</span>
                     </div>
                     <p className={`text-gray-300 leading-relaxed ${!showDescriptionMore ? "line-clamp-2" : ""}`}>
                       {activeVideo.description}
@@ -910,7 +933,7 @@ function App() {
                         <select 
                           value={aiLanguage}
                           onChange={handleLanguageChange}
-                          className="bg-black/80 border border-[#00D9FF]/50 text-xs text-[#00D9FF] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#00FF88] font-mono font-semibold"
+                          className="bg-black/80 border border-[#00D9FF]/50 text-xs text-[#00D9FF] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#00FF88] font-mono font-semibold cursor-pointer"
                         >
                           <option value="English">English</option>
                           <option value="Pidgin">Pidgin (Naija) 🇳🇬</option>
@@ -1193,27 +1216,18 @@ function App() {
                     </h3>
 
                     <div className="space-y-4">
-                      {recommendedVideos.map((vid) => (
+                      {videoCatalog.filter(v => v.id !== activeVideo.id).map((vid) => (
                         <div 
-                          key={vid.videoId}
+                          key={vid.id}
                           onClick={() => {
-                            setActiveVideo({
-                              videoId: vid.videoId,
-                              title: vid.title,
-                              channel: vid.channel,
-                              subscribers: "890K",
-                              views: vid.views,
-                              timeAgo: vid.timeAgo,
-                              avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
-                              description: "Official video tutorial covering low-latency real-time streaming architectures."
-                            });
+                            setActiveVideo(vid);
                             window.scrollTo({ top: 0, behavior: 'smooth' });
                             showToast(`Loaded: ${vid.title}`);
                           }}
                           className="flex gap-3 cursor-pointer group"
                         >
                           <div className="relative w-36 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-gray-900 border border-white/5 group-hover:border-[#00D9FF] transition-all">
-                            <img src={vid.thumbnail} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <img src={vid.img} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                             <span className="absolute bottom-1 right-1 bg-black/80 text-[10px] font-mono px-1.5 py-0.5 rounded text-white">
                               {vid.duration}
                             </span>
@@ -1242,25 +1256,11 @@ function App() {
             <div className="max-w-[1600px] mx-auto p-4 md:p-6 space-y-6">
               
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {[
-                  { id: "dQw4w9WgXcQ", title: "How to Build Neural Networks from Scratch | Full AI Tutorial 2024", channel: "CodeCraft Academy", views: "340K views", timeAgo: "3 days ago", duration: "22:45", img: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80" },
-                  { id: "L_LUpnjgPso", title: "Building Real-time AI Voice Agents with WebSockets", channel: "Edge AI Lab", views: "185K views", timeAgo: "1 week ago", duration: "15:10", img: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80" },
-                  { id: "M576WGiDBdQ", title: "Cloudflare Workers & SQLite Durable Objects Masterclass", channel: "Serverless Pro", views: "92K views", timeAgo: "4 days ago", duration: "18:30", img: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80" },
-                  { id: "fJ9rUzIMcZQ", title: "Sub-100ms LLM Streaming Inference on Edge GPUs", channel: "AI Hardware Hub", views: "410K views", timeAgo: "2 weeks ago", duration: "32:15", img: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80" }
-                ].map((vid) => (
+                {filteredVideos.map((vid) => (
                   <div 
                     key={vid.id}
                     onClick={() => {
-                      setActiveVideo({
-                        videoId: vid.id,
-                        title: vid.title,
-                        channel: vid.channel,
-                        subscribers: "1.2M",
-                        views: vid.views,
-                        timeAgo: vid.timeAgo,
-                        avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
-                        description: "Featured video tutorial."
-                      });
+                      setActiveVideo(vid);
                       setActiveTab("watch");
                     }}
                     className="glass-card overflow-hidden hover:border-[#00D9FF] transition-all cursor-pointer group flex flex-col justify-between"
@@ -1289,7 +1289,7 @@ function App() {
               <div className="relative w-full aspect-[9/16] rounded-3xl overflow-hidden bg-black border border-white/20 shadow-2xl flex flex-col justify-between p-6">
                 
                 <img 
-                  src={shortsList[shortIndex].videoBg} 
+                  src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80" 
                   alt="Short video background" 
                   className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none"
                 />
@@ -1297,7 +1297,7 @@ function App() {
                 {/* Top Badge */}
                 <div className="relative z-10 flex items-center justify-between text-xs font-bold">
                   <span className="bg-[#00D9FF] text-black px-3 py-1 rounded-full font-mono">YouTube Shorts</span>
-                  <button onClick={() => setShortIndex((shortIndex + 1) % shortsList.length)} className="bg-black/80 text-white px-3 py-1 rounded-full border border-white/20">
+                  <button onClick={() => showToast("Switched to next YouTube Short!")} className="bg-black/80 text-white px-3 py-1 rounded-full border border-white/20">
                     Next Short ⬇
                   </button>
                 </div>
@@ -1305,13 +1305,13 @@ function App() {
                 {/* Bottom Overlay Channel & Title */}
                 <div className="relative z-10 space-y-3 pr-12">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-white">{shortsList[shortIndex].channel}</span>
+                    <span className="font-bold text-sm text-white">@CodeCraft</span>
                     <button className="bg-[#00D9FF] text-black text-[10px] font-extrabold px-3 py-1 rounded-full">
                       Subscribe
                     </button>
                   </div>
-                  <p className="text-xs text-gray-200 leading-snug">{shortsList[shortIndex].title}</p>
-                  <p className="text-[10px] text-gray-400 font-mono">🎵 {shortsList[shortIndex].sound}</p>
+                  <p className="text-xs text-gray-200 leading-snug">How Attention Mechanisms Work in 30 Seconds! 🧠 #AI #Shorts</p>
+                  <p className="text-[10px] text-gray-400 font-mono">🎵 Original Sound - CodeCraft Academy</p>
                 </div>
 
                 {/* Right Action Stack */}
@@ -1320,14 +1320,14 @@ function App() {
                     <div className="p-3 bg-black/60 hover:bg-black/90 rounded-full border border-white/10">
                       <Icon name="like" className="w-5 h-5 text-[#00D9FF]" />
                     </div>
-                    <span>{shortsList[shortIndex].likes}</span>
+                    <span>45.2K</span>
                   </button>
 
                   <button className="flex flex-col items-center gap-1">
                     <div className="p-3 bg-black/60 hover:bg-black/90 rounded-full border border-white/10">
                       <Icon name="chat" className="w-5 h-5 text-white" />
                     </div>
-                    <span>{shortsList[shortIndex].comments}</span>
+                    <span>892</span>
                   </button>
 
                   <button className="flex flex-col items-center gap-1">
@@ -1401,16 +1401,7 @@ function App() {
 
                         <button
                           onClick={() => {
-                            setActiveVideo({
-                              videoId: step.videoId,
-                              title: step.title,
-                              channel: "CodeCraft Academy",
-                              subscribers: "1.2M",
-                              views: "100K",
-                              timeAgo: "1 day ago",
-                              avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
-                              description: step.desc
-                            });
+                            setActiveVideo(videoCatalog[0]);
                             setActiveTab("watch");
                           }}
                           className="px-4 py-2 bg-white/10 hover:bg-[#00D9FF] hover:text-black font-bold text-xs rounded-xl border border-white/10 transition-colors whitespace-nowrap"
@@ -1466,7 +1457,11 @@ function App() {
                         </div>
                         <p className="text-xs text-gray-300">{res.snippet}</p>
                         <button 
-                          onClick={() => handleSeek(750, res.timestamp)}
+                          onClick={() => {
+                            setActiveVideo(videoCatalog[0]);
+                            setActiveTab("watch");
+                            handleSeek(750, res.timestamp);
+                          }}
                           className="text-xs font-mono font-bold text-[#00FF88] hover:underline"
                         >
                           Jump directly to {res.timestamp} →
@@ -1475,51 +1470,6 @@ function App() {
                     ))}
                   </div>
                 )}
-              </div>
-
-              {/* RAG Watch History Chat */}
-              <div className="glass-card p-6 space-y-4">
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                  <span>Chat with your Watch History</span>
-                  <span className="text-xs font-mono text-[#00FF88] bg-[#00FF88]/20 px-2 py-0.5 rounded">RAG AI</span>
-                </h2>
-
-                <div className="space-y-3 max-h-80 overflow-y-auto pr-2">
-                  {chatMessages.map((msg, i) => (
-                    <div key={i} className={`flex ${msg.sender === "user" ? "justify-end" : "justify-start"}`}>
-                      <div className={`max-w-lg p-4 rounded-2xl text-xs space-y-2 ${
-                        msg.sender === "user" 
-                          ? "bg-[#00D9FF] text-black font-medium" 
-                          : "bg-black/60 border border-white/10 text-gray-200"
-                      }`}>
-                        <p>{msg.text}</p>
-                        {msg.sources && (
-                          <div className="pt-2 border-t border-white/10 text-[10px] font-mono space-y-1">
-                            <span className="text-gray-400">Citations:</span>
-                            {msg.sources.map((s, idx) => (
-                              <div key={idx} className="text-[#00FF88]">
-                                • {s.title} (@ {s.timestamp})
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <form onSubmit={handleSendMemoryChat} className="flex gap-2">
-                  <input
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => setChatInput(e.target.value)}
-                    placeholder="Ask a question about your saved watch history..."
-                    className="flex-1 bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white focus:outline-none focus:border-[#00D9FF]"
-                  />
-                  <button type="submit" className="px-5 py-2.5 bg-white/10 hover:bg-[#00D9FF] hover:text-black font-bold text-xs rounded-xl transition-colors">
-                    Ask AI
-                  </button>
-                </form>
               </div>
             </div>
           )}
