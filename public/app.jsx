@@ -1769,7 +1769,7 @@ function App() {
                         </span>
                       )}
                       {searchIsMock === true && (
-                        <span className="text-[10px] font-bold bg-yellow-400/20 text-yellow-400 border border-yellow-400/50 px-2.5 py-1 rounded-full">
+                        <span className="text-[10px] font-bold bg-gray-500/20 text-gray-400 border border-gray-500/50 px-2.5 py-1 rounded-full">
                           Demo • Mock
                         </span>
                       )}
@@ -1804,18 +1804,35 @@ function App() {
                       Search History {searchHistory.length>0 && `(${searchHistory.length})`}
                     </button>
                     {searchHistory.length>0 && searchTab==="history" && (
-                      <button
-                        onClick={()=>{
-                          if(!confirm("Clear all search history?")) return;
-                          setSearchHistory([]);
-                          localStorage.removeItem("alphatekx_search_history");
-                          fetch("/api/search/history",{method:"DELETE"}).catch(()=>{});
-                          showToast("Search history cleared");
-                        }}
-                        className="ml-auto text-[10px] text-gray-500 hover:text-red-400 font-mono"
-                      >
-                        Clear history
-                      </button>
+                      <>
+                        <button
+                          onClick={()=>{
+                            fetch("/api/search/history").then(r=>r.ok?r.json():null).then(data=>{
+                              if(data && Array.isArray(data.history)) {
+                                const vids=data.history.map(normalizeVideo);
+                                setSearchHistory(vids);
+                                try{ localStorage.setItem("alphatekx_search_history", JSON.stringify(vids.slice(0,100))); }catch{}
+                                showToast(`History refreshed — ${vids.length} videos`);
+                              }
+                            }).catch(()=>{ showToast("Refresh failed"); });
+                          }}
+                          className="ml-auto px-3 py-1 text-[10px] font-bold bg-[#272727] text-gray-300 hover:bg-[#383838] rounded-full border border-white/10"
+                        >
+                          Refresh
+                        </button>
+                        <button
+                          onClick={()=>{
+                            if(!confirm("Clear all search history?")) return;
+                            setSearchHistory([]);
+                            localStorage.removeItem("alphatekx_search_history");
+                            fetch("/api/search/history",{method:"DELETE"}).catch(()=>{});
+                            showToast("Search history cleared");
+                          }}
+                          className="text-[10px] text-gray-500 hover:text-red-400 font-mono"
+                        >
+                          Clear history
+                        </button>
+                      </>
                     )}
                   </div>
 

@@ -51,6 +51,7 @@ let inMemoryQueue = [
 ];
 
 // Persistent Search History — survives until worker restarts, deduped by youtubeId, newest first
+// Spec: Array<{youtubeId, title, searchedQuery, timestamp}> with pushToSearchHistory() dedupes by youtubeId, newest-first, cap 100
 export let inMemorySearchHistory: Array<{
   youtubeId: string;
   title: string;
@@ -60,6 +61,7 @@ export let inMemorySearchHistory: Array<{
   duration: string;
   searchedQuery: string;
   searchedAt: number;
+  timestamp: number; // alias for spec compatibility
 }> = [];
 
 function pushToSearchHistory(videos: any[], searchedQuery: string) {
@@ -68,10 +70,12 @@ function pushToSearchHistory(videos: any[], searchedQuery: string) {
     if (!youtubeId) continue;
     // dedupe by youtubeId — if exists, update searchedAt/query and move to front
     const existingIdx = inMemorySearchHistory.findIndex((h) => h.youtubeId === youtubeId);
+    const now = Date.now();
     if (existingIdx !== -1) {
       const existing = inMemorySearchHistory.splice(existingIdx, 1)[0];
       existing.searchedQuery = searchedQuery || existing.searchedQuery;
-      existing.searchedAt = Date.now();
+      existing.searchedAt = now;
+      (existing as any).timestamp = now;
       // refresh title/thumbnail in case updated
       existing.title = v.title || existing.title;
       existing.channelName = v.channelName || existing.channelName;
@@ -88,7 +92,8 @@ function pushToSearchHistory(videos: any[], searchedQuery: string) {
         views: v.views || "100K views",
         duration: v.duration || "15:00",
         searchedQuery: searchedQuery || "",
-        searchedAt: Date.now(),
+        searchedAt: now,
+        timestamp: now,
       });
     }
   }
