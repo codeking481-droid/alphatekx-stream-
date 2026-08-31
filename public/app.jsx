@@ -133,6 +133,60 @@ function App() {
   const [isSearching, setIsSearching] = useState(false);
   const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
   const [activeChip, setActiveChip] = useState("All");
+  // Persistent Search History — Never vanishes (localStorage + server)
+  const [searchHistory, setSearchHistory] = useState(() => {
+    try {
+      const raw = localStorage.getItem("alphatekx_search_history");
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  const [searchTab, setSearchTab] = useState("results"); // "results" | "history"
+  const [searchIsMock, setSearchIsMock] = useState(null);
+
+  // Persist history to localStorage whenever it changes
+  useEffect(() => {
+    try { localStorage.setItem("alphatekx_search_history", JSON.stringify(searchHistory.slice(0,100))); } catch {}
+  }, [searchHistory]);
+
+  // Load history from server on mount — merge with localStorage (server newest first)
+  useEffect(() => {
+    fetch("/api/search/history").then(r=>r.ok?r.json():null).then(data=>{
+      if (data && Array.isArray(data.history) && data.history.length>0) {
+        // Merge server + local, dedupe by youtubeId, keep newest
+        const merged = [...data.history.map(normalizeVideo)];
+        const seen = new Set(merged.map(v=>v.youtubeId||v.id));
+        for (const h of searchHistory) {
+          const id = h.youtubeId||h.id;
+          if (!seen.has(id)) { merged.push(h); seen.add(id); }
+        }
+        // also hydrate localStorage if server has more
+        if (merged.length !== searchHistory.length) setSearchHistory(merged.slice(0,100));
+      }
+    }).catch(()=>{});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const persistSearchHistory = (videos, query) => {
+    if (!videos || videos.length===0) return;
+    const enriched = videos.map(v=>({
+      ...normalizeVideo(v),
+      searchedQuery: query || "",
+      searchedAt: Date.now()
+    }));
+    setSearchHistory(prev => {
+      const map = new Map(prev.map(p=>[(p.youtubeId||p.id), p]));
+      // prepend newest, dedupe
+      const next = [...enriched.filter(e=>!map.has(e.youtubeId||e.id)), ...prev.filter(p=>!enriched.some(e=>(e.youtubeId||e.id)===(p.youtubeId||p.id)))];
+      // keep enriched at front (already), but deduped enrich should be first
+      const deduped = [];
+      const seen = new Set();
+      for (const item of [...enriched, ...prev]) {
+        const id = item.youtubeId||item.id;
+        if (!seen.has(id)) { deduped.push(item); seen.add(id); }
+      }
+      return deduped.slice(0,100);
+    });
+  };
 
   // YouTube UX Features (Theater mode, Mini-player, Voice modal, Share modal)
   const [theaterMode, setTheaterMode] = useState(false);
@@ -223,11 +277,12 @@ function App() {
   const [isSaved, setIsSaved] = useState(false);
   const [showDescriptionMore, setShowDescriptionMore] = useState(false);
 
-  // Real YouTube API Search Effect (400ms Debounce)
+  // Real YouTube API Search Effect (400ms Debounce) — persists to history + localStorage
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
       setIsSearching(false);
+      setSearchIsMock(null);
       return;
     }
 
@@ -239,24 +294,41 @@ function App() {
           return res.json();
         })
         .then((data) => {
+          const isMock = data?.isMock === true;
+          setSearchIsMock(isMock);
+          let vids = [];
           if (data && Array.isArray(data.videos) && data.videos.length > 0) {
-            setSearchResults(data.videos.map(normalizeVideo));
+            vids = data.videos.map(normalizeVideo);
+            setSearchResults(vids);
           } else {
-            // Fallback to filtering mock catalog if API returns empty
             const qLower = searchQuery.toLowerCase();
             const filtered = videoCatalog.filter(
               (v) => v.title.toLowerCase().includes(qLower) || v.channel.toLowerCase().includes(qLower)
             );
-            setSearchResults(filtered.map(normalizeVideo));
+            vids = (filtered.length>0?filtered:videoCatalog).map(normalizeVideo);
+            setSearchResults(vids);
+            setSearchIsMock(true);
           }
+          // NEVER vanish: persist to server + localStorage
+          if (vids.length>0) {
+            persistSearchHistory(vids, searchQuery);
+            // fire-and-forget POST to server for persistent history
+            fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ videos: vids, searchedQuery: searchQuery }) }).catch(()=>{});
+          }
+          setSearchTab("results");
         })
         .catch((err) => {
           console.warn("YouTube API search fetch notice (using fallback):", err);
           const qLower = searchQuery.toLowerCase();
-          const filtered = videoCatalog.filter(
+          let filtered = videoCatalog.filter(
             (v) => v.title.toLowerCase().includes(qLower) || v.channel.toLowerCase().includes(qLower)
           );
-          setSearchResults(filtered.map(normalizeVideo));
+          if (filtered.length===0) filtered = videoCatalog; // burna boy fix
+          const vids = filtered.map(normalizeVideo);
+          setSearchResults(vids);
+          setSearchIsMock(true);
+          persistSearchHistory(vids, searchQuery);
+          fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ videos: vids, searchedQuery: searchQuery }) }).catch(()=>{});
         })
         .finally(() => {
           setIsSearching(false);
@@ -1685,54 +1757,145 @@ function App() {
                 </div>
               ) : searchQuery.trim() ? (
                 <div className="space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-sm font-mono text-[#00D9FF] uppercase tracking-wider flex items-center gap-2">
-                      <Icon name="search" className="w-4 h-4" />
-                      <span>YouTube Search Results for "{searchQuery}"</span>
-                    </h2>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h2 className="text-sm font-mono text-[#00D9FF] uppercase tracking-wider flex items-center gap-2">
+                        <Icon name="search" className="w-4 h-4" />
+                        <span>YouTube Search Results for "{searchQuery}"</span>
+                      </h2>
+                      {searchIsMock === false && (
+                        <span className="text-[10px] font-bold bg-[#00FF88]/20 text-[#00FF88] border border-[#00FF88]/50 px-2.5 py-1 rounded-full flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] animate-pulse"></span> Real YouTube • Live
+                        </span>
+                      )}
+                      {searchIsMock === true && (
+                        <span className="text-[10px] font-bold bg-yellow-400/20 text-yellow-400 border border-yellow-400/50 px-2.5 py-1 rounded-full">
+                          Demo • Mock
+                        </span>
+                      )}
+                    </div>
                     <span className="text-xs text-gray-400 font-mono">
-                      {searchResults.length} videos
+                      {searchTab==="results" ? `${searchResults.length} videos` : `${searchHistory.length} saved`}
                     </span>
                   </div>
 
-                  {searchResults.length > 0 ? (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                      {searchResults.map((vid) => (
-                        <div 
-                          key={vid.id || vid.youtubeId}
-                          onClick={() => {
-                            const norm = normalizeVideo(vid);
-                            setActiveVideo(norm);
-                            setActiveTab("watch");
-                            if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                            showToast(`Playing video: ${norm.title}`);
-                          }}
-                          className="glass-card overflow-hidden hover:border-[#00D9FF] transition-all cursor-pointer group flex flex-col justify-between"
-                        >
-                          <div className="relative aspect-video w-full bg-gray-900 overflow-hidden">
-                            <img src={vid.img || vid.thumbnailUrl} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                            <span className="absolute bottom-2 right-2 bg-black/80 text-xs font-mono px-2 py-0.5 rounded text-white">
-                              {vid.duration}
-                            </span>
-                          </div>
-                          <div className="p-4 space-y-2">
-                            <h3 className="font-bold text-sm text-white group-hover:text-[#00D9FF] line-clamp-2">{vid.title}</h3>
-                            <p className="text-xs text-gray-400">{vid.channel || vid.channelName}</p>
-                            <p className="text-[11px] text-gray-500">{vid.views} • {vid.timeAgo}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="glass-card p-8 text-center space-y-3">
-                      <p className="text-sm text-gray-300">No YouTube videos found matching "{searchQuery}".</p>
+                  {/* Search Tabs: Results vs History — history NEVER vanishes */}
+                  <div className="flex items-center gap-2 border-b border-[#272727] pb-2">
+                    <button
+                      onClick={()=>setSearchTab("results")}
+                      className={`px-4 py-2 rounded-full text-xs font-bold transition-colors ${searchTab==="results" ? "bg-[#00D9FF] text-black" : "bg-[#272727] text-gray-300 hover:bg-[#383838]"}`}
+                    >
+                      Search Results {searchResults.length>0 && `(${searchResults.length})`}
+                    </button>
+                    <button
+                      onClick={()=>{
+                        setSearchTab("history");
+                        // refresh history from server when switching
+                        fetch("/api/search/history").then(r=>r.ok?r.json():null).then(data=>{
+                          if(data && Array.isArray(data.history)) {
+                            const vids=data.history.map(normalizeVideo);
+                            if(vids.length>0) setSearchHistory(vids);
+                          }
+                        }).catch(()=>{});
+                      }}
+                      className={`px-4 py-2 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 ${searchTab==="history" ? "bg-[#00FF88] text-black" : "bg-[#272727] text-gray-300 hover:bg-[#383838]"}`}
+                    >
+                      <Icon name="history" className="w-3.5 h-3.5" />
+                      Search History {searchHistory.length>0 && `(${searchHistory.length})`}
+                    </button>
+                    {searchHistory.length>0 && searchTab==="history" && (
                       <button
-                        onClick={() => setSearchQuery("")}
-                        className="px-4 py-2 bg-[#00D9FF] text-black font-bold text-xs rounded-xl"
+                        onClick={()=>{
+                          if(!confirm("Clear all search history?")) return;
+                          setSearchHistory([]);
+                          localStorage.removeItem("alphatekx_search_history");
+                          fetch("/api/search/history",{method:"DELETE"}).catch(()=>{});
+                          showToast("Search history cleared");
+                        }}
+                        className="ml-auto text-[10px] text-gray-500 hover:text-red-400 font-mono"
                       >
-                        Clear Search & Return to Feed
+                        Clear history
                       </button>
-                    </div>
+                    )}
+                  </div>
+
+                  {searchTab==="history" ? (
+                    searchHistory.length>0 ? (
+                      <div className="space-y-3">
+                        <p className="text-[11px] text-gray-500 font-mono flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#00FF88]"></span> Persisted in localStorage "alphatekx_search_history" + server — never vanishes on refresh</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                          {searchHistory.map((vid)=>(
+                            <div
+                              key={`hist-${vid.youtubeId||vid.id}-${vid.searchedAt||""}`}
+                              onClick={()=>{
+                                setActiveVideo(normalizeVideo(vid));
+                                setActiveTab("watch");
+                                if(mainScrollRef.current) mainScrollRef.current.scrollTop=0;
+                                showToast(`Playing from history: ${vid.title}`);
+                              }}
+                              className="glass-card overflow-hidden hover:border-[#00FF88] transition-all cursor-pointer group flex flex-col justify-between border-[#00FF88]/20"
+                            >
+                              <div className="relative aspect-video w-full bg-gray-900 overflow-hidden">
+                                <img src={vid.img||vid.thumbnailUrl} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                                <span className="absolute bottom-2 right-2 bg-black/80 text-xs font-mono px-2 py-0.5 rounded text-white">{vid.duration}</span>
+                                <span className="absolute top-2 left-2 bg-[#00FF88]/90 text-black text-[9px] font-bold px-1.5 py-0.5 rounded">HISTORY</span>
+                              </div>
+                              <div className="p-4 space-y-1.5">
+                                <h3 className="font-bold text-sm text-white group-hover:text-[#00FF88] line-clamp-2">{vid.title}</h3>
+                                <p className="text-xs text-gray-400">{vid.channel||vid.channelName}</p>
+                                <p className="text-[11px] text-gray-500">{vid.views} • {vid.searchedQuery?`query:"${vid.searchedQuery}"`:vid.timeAgo}</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="glass-card p-8 text-center space-y-3 border-dashed">
+                        <Icon name="history" className="w-8 h-8 mx-auto text-gray-600" />
+                        <p className="text-sm text-gray-300">No search history yet.</p>
+                        <p className="text-xs text-gray-500">Search for "burna boy", "wizkid", "davido" etc — videos are saved forever in localStorage.</p>
+                      </div>
+                    )
+                  ) : (
+                    searchResults.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                        {searchResults.map((vid) => (
+                          <div 
+                            key={vid.id || vid.youtubeId}
+                            onClick={() => {
+                              const norm = normalizeVideo(vid);
+                              setActiveVideo(norm);
+                              setActiveTab("watch");
+                              if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+                              showToast(`Playing video: ${norm.title}`);
+                            }}
+                            className="glass-card overflow-hidden hover:border-[#00D9FF] transition-all cursor-pointer group flex flex-col justify-between"
+                          >
+                            <div className="relative aspect-video w-full bg-gray-900 overflow-hidden">
+                              <img src={vid.img || vid.thumbnailUrl} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                              <span className="absolute bottom-2 right-2 bg-black/80 text-xs font-mono px-2 py-0.5 rounded text-white">
+                                {vid.duration}
+                              </span>
+                            </div>
+                            <div className="p-4 space-y-2">
+                              <h3 className="font-bold text-sm text-white group-hover:text-[#00D9FF] line-clamp-2">{vid.title}</h3>
+                              <p className="text-xs text-gray-400">{vid.channel || vid.channelName}</p>
+                              <p className="text-[11px] text-gray-500">{vid.views} • {vid.timeAgo}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="glass-card p-8 text-center space-y-3">
+                        <p className="text-sm text-gray-300">No YouTube videos found matching "{searchQuery}".</p>
+                        <button
+                          onClick={() => setSearchQuery("")}
+                          className="px-4 py-2 bg-[#00D9FF] text-black font-bold text-xs rounded-xl"
+                        >
+                          Clear Search & Return to Feed
+                        </button>
+                      </div>
+                    )
                   )}
                 </div>
               ) : (

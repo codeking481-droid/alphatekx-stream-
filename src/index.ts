@@ -50,6 +50,52 @@ let inMemoryQueue = [
   { id: 3, userEmail: 'user@alphatekx.com', platform: 'youtube', videoId: 'L_LUpnjgPso', title: 'Building Real-time AI Voice Agents with WebSockets & Edge Computing', thumbnail: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80', duration: '15:10', position: 2, isPlayed: 0, createdAt: Date.now() }
 ];
 
+// Persistent Search History — survives until worker restarts, deduped by youtubeId, newest first
+export let inMemorySearchHistory: Array<{
+  youtubeId: string;
+  title: string;
+  channelName: string;
+  thumbnailUrl: string;
+  views: string;
+  duration: string;
+  searchedQuery: string;
+  searchedAt: number;
+}> = [];
+
+function pushToSearchHistory(videos: any[], searchedQuery: string) {
+  for (const v of videos) {
+    const youtubeId = v.youtubeId || v.id;
+    if (!youtubeId) continue;
+    // dedupe by youtubeId — if exists, update searchedAt/query and move to front
+    const existingIdx = inMemorySearchHistory.findIndex((h) => h.youtubeId === youtubeId);
+    if (existingIdx !== -1) {
+      const existing = inMemorySearchHistory.splice(existingIdx, 1)[0];
+      existing.searchedQuery = searchedQuery || existing.searchedQuery;
+      existing.searchedAt = Date.now();
+      // refresh title/thumbnail in case updated
+      existing.title = v.title || existing.title;
+      existing.channelName = v.channelName || existing.channelName;
+      existing.thumbnailUrl = v.thumbnailUrl || existing.thumbnailUrl;
+      existing.views = v.views || existing.views;
+      existing.duration = v.duration || existing.duration;
+      inMemorySearchHistory.unshift(existing);
+    } else {
+      inMemorySearchHistory.unshift({
+        youtubeId,
+        title: v.title || "YouTube Video",
+        channelName: v.channelName || "YouTube Creator",
+        thumbnailUrl: v.thumbnailUrl || `https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`,
+        views: v.views || "100K views",
+        duration: v.duration || "15:00",
+        searchedQuery: searchedQuery || "",
+        searchedAt: Date.now(),
+      });
+    }
+  }
+  // cap at 100 items to avoid unbounded memory
+  if (inMemorySearchHistory.length > 100) inMemorySearchHistory = inMemorySearchHistory.slice(0, 100);
+}
+
 function createApiApp() {
   const app = new Hono<{ Bindings: Env }>();
 
@@ -60,7 +106,7 @@ function createApiApp() {
 
   app.get("/api/health", (c) => c.json({ status: "ok", app: "Alphatekx Stream", scale: "1M+ Ready" }));
 
-  // REAL YouTube Data API v3 Search Endpoint
+  // REAL YouTube Data API v3 Search Endpoint — ALWAYS works, persists to history
   app.get("/api/search", async (c) => {
     const q = c.req.query("q") || "";
     const apiKey = c.env?.YOUTUBE_API_KEY || "";
@@ -108,14 +154,25 @@ function createApiApp() {
       }
     ];
 
-    if (!apiKey) {
-      const qLower = q.toLowerCase();
-      const filtered = mockCatalog.filter(item =>
-        !q ||
+    // Helper: return mocks but NEVER vanish — if filter yields 0, return full catalog so user never sees empty
+    const getMockFallback = (query: string) => {
+      const qLower = query.toLowerCase();
+      let filtered = mockCatalog.filter(item =>
+        !query ||
         item.title.toLowerCase().includes(qLower) ||
         item.channelName.toLowerCase().includes(qLower)
       );
-      return c.json({ videos: filtered, isMock: true });
+      // FIX: "burna boy" / "wizkid" previously returned [] — now returns full catalog instead of empty
+      if (filtered.length === 0) filtered = mockCatalog;
+      return filtered;
+    };
+
+    if (!apiKey) {
+      console.warn("[search] YOUTUBE_API_KEY missing — serving mock catalog for q:", q);
+      const fallback = getMockFallback(q);
+      // persist mocks too so history never vanishes
+      pushToSearchHistory(fallback, q);
+      return c.json({ videos: fallback, isMock: true });
     }
 
     try {
@@ -124,13 +181,10 @@ function createApiApp() {
       );
 
       if (!searchRes.ok) {
-        const qLower = q.toLowerCase();
-        const filtered = mockCatalog.filter(item =>
-          !q ||
-          item.title.toLowerCase().includes(qLower) ||
-          item.channelName.toLowerCase().includes(qLower)
-        );
-        return c.json({ videos: filtered, isMock: true, status: searchRes.status });
+        console.error("[search] YouTube search failed", searchRes.status, await searchRes.text().catch(() => ""), "q:", q);
+        const fallback = getMockFallback(q);
+        pushToSearchHistory(fallback, q);
+        return c.json({ videos: fallback, isMock: true, status: searchRes.status });
       }
 
       const searchData = (await searchRes.json()) as any;
@@ -138,6 +192,7 @@ function createApiApp() {
       const videoIds = items.map((it: any) => it.id?.videoId).filter(Boolean);
 
       if (videoIds.length === 0) {
+        console.warn("[search] YouTube returned 0 items for q:", q);
         return c.json({ videos: [], isMock: false });
       }
 
@@ -154,6 +209,8 @@ function createApiApp() {
               views: formatViews(vItem.statistics?.viewCount)
             };
           });
+        } else {
+          console.warn("[search] YouTube details fetch not ok", detailsRes.status);
         }
       } catch (e) {
         console.warn("Failed to fetch YouTube details:", e);
@@ -176,16 +233,58 @@ function createApiApp() {
         };
       });
 
+      // auto-persist real results newest-first, deduped
+      pushToSearchHistory(videos, q);
+
       return c.json({ videos, isMock: false });
     } catch (err: any) {
-      const qLower = q.toLowerCase();
-      const filtered = mockCatalog.filter(item =>
-        !q ||
-        item.title.toLowerCase().includes(qLower) ||
-        item.channelName.toLowerCase().includes(qLower)
-      );
-      return c.json({ videos: filtered, isMock: true, error: err.message });
+      console.error("[search] exception for q:", q, err?.message || err);
+      const fallback = getMockFallback(q);
+      pushToSearchHistory(fallback, q);
+      return c.json({ videos: fallback, isMock: true, error: err.message });
     }
+  });
+
+  // Persistent Search History Endpoints
+  app.get("/api/search/history", (c) => {
+    // newest first already due to unshift
+    return c.json({ history: inMemorySearchHistory, count: inMemorySearchHistory.length });
+  });
+
+  app.post("/api/search/save", async (c) => {
+    try {
+      const body = await c.req.json<{
+        videos?: any[];
+        youtubeId?: string;
+        title?: string;
+        channelName?: string;
+        thumbnailUrl?: string;
+        views?: string;
+        duration?: string;
+        searchedQuery?: string;
+      }>();
+      // Support both single video object and { videos: [...] } batch
+      if (Array.isArray(body.videos) && body.videos.length > 0) {
+        const q = (body as any).searchedQuery || body.videos[0]?.searchedQuery || "";
+        pushToSearchHistory(body.videos, q);
+        return c.json({ success: true, history: inMemorySearchHistory, count: inMemorySearchHistory.length });
+      }
+      // single item legacy
+      const single = body.youtubeId ? [body] : [];
+      if (single.length > 0) {
+        pushToSearchHistory(single, body.searchedQuery || "");
+        return c.json({ success: true, history: inMemorySearchHistory, count: inMemorySearchHistory.length });
+      }
+      // empty batch
+      return c.json({ success: false, error: "No videos provided" }, 400);
+    } catch (e: any) {
+      return c.json({ success: false, error: e.message }, 400);
+    }
+  });
+
+  app.delete("/api/search/history", (c) => {
+    inMemorySearchHistory = [];
+    return c.json({ success: true, history: [] });
   });
 
   // Community Chat

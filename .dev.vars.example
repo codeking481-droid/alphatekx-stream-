@@ -1,0 +1,4 @@
+YOUTUBE_API_KEY=PASTE_HERE
+# Get your key at https://console.cloud.google.com/apis/credentials -> Create API Key -> Enable YouTube Data API v3
+# Then run: bunx wrangler secret put YOUTUBE_API_KEY
+# And for local dev: cp .dev.vars.example .dev.vars and paste real key
