@@ -342,6 +342,61 @@ function App() {
       return next;
     });
   };
+  // MISSION 1 — Watch page panels below video (Code / AI)
+  const [watchPanelTab, setWatchPanelTab] = useState("code");
+  const [codeValue, setCodeValue] = useState(`// Alphatekx Stream — Code alongside the video
+// Write your code here while watching
+
+function helloAlphatekx() {
+  console.log("Hello from Alphatekx Stream! 🚀🇳🇬");
+}
+
+helloAlphatekx();`);
+  const [aiChatInput, setAiChatInput] = useState("");
+  const [aiChatMessages, setAiChatMessages] = useState([
+    { role: "ai", text: "Hi! I'm your AI Teacher. Ask me anything about this video. 🎓" }
+  ]);
+  const monacoRef = useRef(null);
+  const monacoEditorRef = useRef(null);
+  const handleAiSend = () => {
+    const q = aiChatInput.trim();
+    if (!q) return;
+    setAiChatMessages(prev => [...prev, { role: "user", text: q }, { role: "ai", text: `Great question about "${q}" — in this video, try the Code tab to experiment while watching at 2:15!` }]);
+    setAiChatInput("");
+  };
+  // Monaco loader — upgrade textarea to real Monaco when available (keeps fallback)
+  useEffect(() => {
+    if (watchPanelTab !== "code") return;
+    if (monacoEditorRef.current) return;
+    const container = monacoRef.current;
+    if (!container) return;
+    if (window.monaco) return;
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js";
+    script.onload = () => {
+      const requireFn = window.require;
+      if (!requireFn) return;
+      requireFn.config({ paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs" } });
+      requireFn(["vs/editor/editor.main"], () => {
+        if (!container || monacoEditorRef.current) return;
+        const ta = container.querySelector("textarea");
+        if (ta) ta.style.display = "none";
+        monacoEditorRef.current = window.monaco.editor.create(container, {
+          value: codeValue,
+          language: "javascript",
+          theme: "vs-dark",
+          automaticLayout: true,
+          minimap: { enabled: false },
+          fontSize: 13,
+        });
+        monacoEditorRef.current.onDidChangeModelContent(() => {
+          setCodeValue(monacoEditorRef.current.getValue());
+        });
+      });
+    };
+    document.head.appendChild(script);
+    return () => {};
+  }, [watchPanelTab]);
 
   // === NEW: Channel / Upload / Profile / Categories (preserve design) ===
   // PROMPT #7: Official ALPHATEKX channel as default
@@ -1991,6 +2046,39 @@ function App() {
                         ))}
                       </div>
 
+                    </div>
+                  </div>
+
+                  {/* MISSION 1 — VIDEO ON TOP (60%), PANELS BELOW (40%): Code + AI Tabs */}
+                  <div className="bg-[#0B0215] border border-white/10 rounded-2xl overflow-hidden">
+                    <div className="flex border-b border-white/10 bg-[#0B0215]">
+                      <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 py-3.5 text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="code" ? "bg-[#FFD700] text-black" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>Code</button>
+                      <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 py-3.5 text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="ai" ? "bg-[#FFD700] text-black" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>AI</button>
+                    </div>
+                    <div className="h-[40vh] min-h-[320px] max-h-[420px] bg-[#0B0215] flex flex-col">
+                      {watchPanelTab==="code" ? (
+                        <div className="flex-1 flex flex-col min-h-0">
+                          <div ref={monacoRef} className="flex-1 min-h-0 bg-[#1e1e1e] flex">
+                            <textarea value={codeValue} onChange={e=>setCodeValue(e.target.value)} className="w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[13px] leading-5 p-4 resize-none focus:outline-none" spellCheck={false} />
+                          </div>
+                          <div className="px-3 py-2 bg-[#1e1e1e] border-t border-white/10 flex items-center gap-2 text-[11px] font-mono text-gray-500">
+                            <span className="w-2 h-2 rounded-full bg-[#00FF88] animate-pulse" /> Monaco Editor • JavaScript • {codeValue.split('\n').length} lines
+                            <button onClick={()=>{ setCodeValue(`// Reset\nconsole.log("Hello Alphatekx! 🚀");`); showToast("Editor reset"); }} className="ml-auto text-xs text-gray-400 hover:text-white">Reset</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex-1 flex flex-col min-h-0 p-3 bg-[#0B0215]">
+                          <div className="flex-1 overflow-y-auto space-y-2 mb-3 pr-1 scrollbar-hide">
+                            {aiChatMessages.map((m,i)=>(
+                              <div key={i} className={`p-3 rounded-xl text-sm leading-snug max-w-[85%] ${m.role==="user" ? "bg-[#FFD700] text-black font-medium ml-auto" : "bg-[#272727] text-gray-200 mr-auto border border-white/5"}`}>{m.text}</div>
+                            ))}
+                          </div>
+                          <div className="flex gap-2">
+                            <input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter" && handleAiSend()} placeholder="Ask AI about this video..." className="flex-1 bg-[#272727] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]" />
+                            <button onClick={handleAiSend} className="px-5 py-2.5 bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold text-sm rounded-xl hover:scale-105 transition shadow-lg">Send</button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
 
