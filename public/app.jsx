@@ -342,8 +342,9 @@ function App() {
       return next;
     });
   };
-  // MISSION 1 — Watch page panels below video (Code / AI)
+  // MISSION 1 — Premium icon-triggered workspace (video 60% top, icon opens Code/AI 40% below)
   const [watchPanelTab, setWatchPanelTab] = useState("code");
+  const [watchPanelOpen, setWatchPanelOpen] = useState(false);
   const [codeValue, setCodeValue] = useState(`// Alphatekx Stream — Code alongside the video
 // Write your code here while watching
 
@@ -2049,11 +2050,18 @@ helloAlphatekx();`);
                     </div>
                   </div>
 
-                  {/* MISSION 1 — VIDEO ON TOP (60%), PANELS BELOW (40%): Code + AI Tabs */}
-                  <div className="bg-[#0B0215] border border-white/10 rounded-2xl overflow-hidden">
-                    <div className="flex border-b border-white/10 bg-[#0B0215]">
-                      <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 py-3.5 text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="code" ? "bg-[#FFD700] text-black" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>Code</button>
-                      <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 py-3.5 text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="ai" ? "bg-[#FFD700] text-black" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>AI</button>
+                  {/* MISSION 1 — PREMIUM ICON: Video 60% top, Code/AI 40% opens on click */}
+                  <div className="flex justify-center">
+                    <button onClick={()=>setWatchPanelOpen(!watchPanelOpen)} className="group flex items-center gap-3 px-7 py-3.5 rounded-full bg-gradient-to-r from-[#FFD700] via-[#F59E0B] to-[#FFD700] text-black font-extrabold text-sm tracking-wide shadow-[0_0_20px_rgba(255,215,0,0.35)] hover:shadow-[0_0_30px_rgba(255,215,0,0.5)] hover:scale-[1.02] active:scale-95 transition-all border border-white/20">
+                      <span className="w-8 h-8 rounded-full bg-black text-[#FFD700] flex items-center justify-center group-hover:rotate-12 transition-transform"><Icon name="sparkles" className="w-4 h-4" /></span>
+                      <span>{watchPanelOpen ? "Close Workspace ✕" : "Open Code + AI Workspace →"}</span>
+                    </button>
+                  </div>
+                  {watchPanelOpen && (
+                  <div className="bg-[#0B0215] border border-[#FFD700]/20 rounded-2xl overflow-hidden animate-fade-in shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
+                    <div className="flex border-b border-white/10 bg-[#0B0215]/80 backdrop-blur">
+                      <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 py-3.5 text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="code" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>Code</button>
+                      <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 py-3.5 text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="ai" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>AI</button>
                     </div>
                     <div className="h-[40vh] min-h-[320px] max-h-[420px] bg-[#0B0215] flex flex-col">
                       {watchPanelTab==="code" ? (
@@ -2081,6 +2089,7 @@ helloAlphatekx();`);
                       )}
                     </div>
                   </div>
+                  )}
 
                   {/* VIDEO TITLE + CHANNEL ROW + ACTION PILLS */}
                   <div className="space-y-4">
