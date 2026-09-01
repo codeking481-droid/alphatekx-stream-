@@ -1111,13 +1111,13 @@ function App() {
     return () => clearTimeout(timer);
   }, [searchQuery, videoCatalog]);
 
-  // Video Chapters Interactive Timeline
+  // Video Chapters — exact image: 00:00 Intro, 02:14 Architecture, 07:30 Training Loop, 14:05 Evaluation, 22:18 Demo
   const videoChapters = [
-    { title: "Intro & Math Primitives", timestamp: "0:00", seconds: 0 },
-    { title: "Neurons & Activation", timestamp: "2:15", seconds: 135 },
-    { title: "Backpropagation Calculus", timestamp: "8:15", seconds: 495 },
-    { title: "Loss Function & Loop", timestamp: "12:30", seconds: 750 },
-    { title: "PyTorch GPU Acceleration", timestamp: "18:45", seconds: 1125 }
+    { title: "Intro", timestamp: "00:00", seconds: 0 },
+    { title: "Architecture", timestamp: "02:14", seconds: 134 },
+    { title: "Training Loop", timestamp: "07:30", seconds: 450 },
+    { title: "Evaluation", timestamp: "14:05", seconds: 845 },
+    { title: "Demo", timestamp: "22:18", seconds: 1338 }
   ];
 
   // Superpower 1: Enhanced Cinema Mode Ambient Glow
@@ -1549,8 +1549,8 @@ function App() {
   const homeFiltered = activePlatform==="all" ? filteredVideos : filteredVideos.filter(v=> (v.platform||"youtube")===activePlatform);
 
   return (
-    <div className="h-screen w-full max-w-[100vw] overflow-hidden flex flex-col bg-[#0B0215] text-white font-sans selection:bg-[#FFD700] selection:text-black">
-      
+    <div className="h-screen w-full max-w-[100vw] overflow-hidden flex flex-col bg-[#08080f] p-2 sm:p-3 text-white font-sans selection:bg-[#FFD700] selection:text-black">
+      <div className="flex-1 flex flex-col overflow-hidden rounded-2xl bg-[#0f0f1f] border border-white/10 shadow-2xl">
       {/* Toast Notification Banner */}
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 bg-[#00D9FF] text-black font-semibold px-4 py-3 rounded-xl shadow-[0_0_25px_rgba(0,217,255,0.6)] flex items-center gap-3 animate-fade-in">
@@ -1811,175 +1811,30 @@ function App() {
         </div>
       )}
 
-      {/* ------------------- FIXED YOUTUBE HEADER — Mobile Optimized ------------------- */}
-      <header className="h-14 flex-shrink-0 bg-[#0f0f0f] border-b border-[#272727] px-2 sm:px-4 flex items-center justify-between gap-2 sm:gap-4 z-40 relative">
-        
-        {/* Left Logo & Hamburger */}
-        <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-          <button 
-            onClick={handleHamburgerClick}
-            className="p-2 rounded-full hover:bg-[#272727] text-gray-200 transition-transform active:scale-90"
-            title="Toggle Menu"
-          >
-            <Icon name="menu" className="w-6 h-6" />
-          </button>
-
-          <div 
-            onClick={() => setActiveTab("watch")} 
-            className="flex items-center gap-1.5 sm:gap-2 cursor-pointer group min-w-0"
-          >
-            <Icon name="logo" className="w-6 h-6 sm:w-7 sm:h-7 transition-transform group-hover:scale-105 flex-shrink-0" />
-            <div className="flex items-center gap-1 sm:gap-1.5 min-w-0">
-              <span className="font-extrabold text-[15px] sm:text-lg tracking-tighter text-white whitespace-nowrap">Alphatekx</span>
-              <span className="hidden sm:inline font-light text-lg tracking-tighter text-gray-400">Stream</span>
-              <span className="hidden sm:inline-flex text-[9px] font-bold font-mono bg-[#00FF88]/20 text-[#00FF88] border border-[#00FF88]/40 px-1.5 py-0.2 rounded ml-1">
-                AI NG
-              </span>
-            </div>
+      {/* HEADER — exact like image 100%: Alphatekx Stream | Search | bell settings A */}
+      <header className="h-[56px] flex-shrink-0 bg-[#0f0f1f] border-b border-white/10 px-4 sm:px-6 flex items-center justify-between gap-4 z-40 relative">
+        <div onClick={()=>setActiveTab("watch")} className="flex items-center gap-2.5 cursor-pointer flex-shrink-0">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FFD700] to-[#F59E0B] flex items-center justify-center border border-white/10">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 4.8 5.2.8-3.8 3.7.9 5.2L12 14.5l-4.7 2.5.9-5.2L4.4 7.6l5.2-.8L12 2z" fill="white"/><circle cx="12" cy="12" r="2" fill="#0f0f1f"/></svg>
+          </div>
+          <span className="font-extrabold text-[20px] tracking-tight text-white">Alphatekx</span>
+          <span className="font-light text-[20px] tracking-tight text-white/80">Stream</span>
+        </div>
+        <div className="hidden sm:flex flex-1 max-w-[560px] mx-6">
+          <div className="relative w-full">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500"><Icon name="search" className="w-4 h-4" /></span>
+            <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onFocus={()=>setSearchSuggestionsOpen(true)} onBlur={()=>setTimeout(()=>setSearchSuggestionsOpen(false),200)} onKeyDown={e=>{if(e.key==="Enter"){setActiveTab("home"); setSearchSuggestionsOpen(false);}}} placeholder="Search videos, AI tools, channels..." className="w-full bg-[#1a1a2e]/80 border border-[#2a2a4a] rounded-full pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]/50 focus:bg-[#1a1a2e]" />
           </div>
         </div>
-
-        {/* Center Search Bar & Voice Search — DESKTOP: clean, MOBILE: hidden (replaced by big mobile bar below) */}
-        <div className="hidden sm:flex flex-1 min-w-0 max-w-2xl mx-1 sm:mx-auto items-center gap-1.5 sm:gap-3 relative">
-          <form 
-            onSubmit={(e) => { e.preventDefault(); setActiveTab("home"); setSearchSuggestionsOpen(false); }}
-            className="flex-1 min-w-0 flex items-center bg-[#121212] border border-[#303030] rounded-full focus-within:border-[#FFD700] focus-within:ring-2 focus-within:ring-[#FFD700]/20 overflow-hidden shadow-sm"
-          >
-            <input
-              id="youtube-search-input"
-              type="text"
-              value={searchQuery}
-              onFocus={() => setSearchSuggestionsOpen(true)}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search YouTube, TikTok, Instagram, Twitter, Facebook…"
-              title="Search in Alphatekx Stream (Press '/' to focus)"
-              className="w-full min-w-0 bg-transparent px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none"
-            />
-            {searchQuery && (
-              <button 
-                type="button" 
-                onClick={() => setSearchQuery("")} 
-                className="text-gray-400 hover:text-white px-2 text-sm flex-shrink-0"
-              >
-                ✕
-              </button>
-            )}
-            <button 
-              type="submit" 
-              className="px-6 py-2.5 bg-[#222222] hover:bg-[#303030] border-l border-[#303030] text-gray-300 flex-shrink-0"
-              title="Search"
-            >
-              <Icon name="search" className="w-4 h-4" />
-            </button>
-          </form>
-
-          {/* Voice Mic Button — desktop */}
-          <button 
-            onClick={() => { setVoiceModalOpen(true); setVoiceListening(true); }}
-            className="hidden sm:flex p-2.5 rounded-full bg-[#222222] hover:bg-[#303030] text-gray-200 hover:text-[#00D9FF] transition-colors flex-shrink-0"
-            title="Search with voice"
-          >
-            <Icon name="mic" className="w-5 h-5" />
-          </button>
-
-          {/* Search Suggestions Dropdown — desktop */}
-          {searchSuggestionsOpen && (
-            <div className="hidden sm:block absolute top-12 left-0 right-12 bg-[#121212] border border-[#303030] rounded-2xl shadow-2xl overflow-hidden z-50 text-xs">
-              <div className="p-2 text-[10px] font-mono font-bold text-gray-500 uppercase px-3">Trending Searches</div>
-              {[
-                "Neural Networks PyTorch scratch tutorial",
-                "Cloudflare Workers SQLite Durable Objects",
-                "Naija Pidgin AI Voice Translation",
-                "TikTok Stream Unified Queue"
-              ].map((sug, idx) => (
-                <div 
-                  key={idx}
-                  onClick={() => {
-                    setSearchQuery(sug);
-                    setSearchSuggestionsOpen(false);
-                    setActiveTab("home");
-                  }}
-                  className="px-4 py-2.5 hover:bg-[#272727] text-gray-200 cursor-pointer flex items-center gap-3"
-                >
-                  <Icon name="search" className="w-3.5 h-3.5 text-gray-400" />
-                  <span>{sug}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Right Actions — compact on mobile — search near notification like YouTube */}
-        <div className="flex items-center gap-0.5 sm:gap-2 flex-shrink-0">
-          <button 
-            onClick={() => { setMobileSearchOpen(true); setTimeout(()=>document.getElementById("mobile-search-overlay-input")?.focus(), 100); }}
-            className="p-2 rounded-full hover:bg-[#272727] text-gray-200 flex sm:hidden items-center justify-center"
-            title="Search"
-          >
-            <Icon name="search" className="w-5 h-5" />
-          </button>
-          <button 
-            onClick={() => setActiveTab("upload")} 
-            className="p-2 rounded-full hover:bg-[#272727] text-gray-200 hidden sm:flex items-center gap-1 text-xs font-semibold px-3"
-            title="Upload video"
-          >
-            <Icon name="plus" className="w-5 h-5 text-[#00D9FF]" />
-            <span className="hidden lg:inline">Create</span>
-          </button>
-
-          <button 
-            onClick={() => showToast("Searching for Cast devices on local Wi-Fi...")} 
-            className="p-2 rounded-full hover:bg-[#272727] text-gray-200 hidden sm:block"
-            title="Cast to Device"
-          >
-            <Icon name="cast" className="w-5 h-5" />
-          </button>
-
-          <button 
-            onClick={() => setActiveTab("community")} 
-            className="p-1.5 sm:p-2 rounded-full hover:bg-[#272727] text-gray-200 relative"
-            title="Live Community Chat"
-          >
-            <Icon name="bell" className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#00FF88] rounded-full animate-ping" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#00FF88] rounded-full" />
-          </button>
-
-          <button 
-            onClick={() => setActiveTab("marketplace")} 
-            className="p-1.5 sm:p-2 rounded-full hover:bg-[#272727] text-gray-200 relative"
-            title="Cart"
-          >
-            <Icon name="shopping-bag" className="w-5 h-5" />
-            {cartCount > 0 && (
-              <span className="absolute -top-1 -right-1 bg-[#00D9FF] text-black text-[10px] font-bold px-1.5 py-0.5 rounded-full">
-                {cartCount}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={() => setActiveTab("pricing")}
-            className="hidden lg:flex items-center gap-1 px-3 py-1.5 rounded-full bg-gradient-to-r from-[#00D9FF]/20 to-[#00FF88]/20 border border-[#00D9FF]/50 text-xs font-semibold text-[#00D9FF] hover:border-[#00FF88]"
-          >
-            <Icon name="crown" className="w-3.5 h-3.5 text-[#00FF88]" />
-            <span>{isProUser ? "PRO ACTIVE" : "UPGRADE PRO"}</span>
-          </button>
-
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          <button onClick={()=>showToast("Notifications")} className="w-9 h-9 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-300 hover:text-white"><Icon name="bell" className="w-5 h-5" /></button>
+          <button onClick={()=>setActiveTab("profile")} className="w-9 h-9 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-300 hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 009 15a1.65 1.65 0 001-1.51V13a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 9a1.65 1.65 0 001-1.51V7a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 9a1.65 1.65 0 00-1 1.51V13a1.65 1.65 0 001 1.51z"/></svg></button>
           {isGuest ? (
-            <SignInButton />
+            <button onClick={async()=>{ try{const r=await fetch('/api/auth/url');const d=await r.json(); if(d.url) window.location.href=d.url;}catch{window.location.href='/api/auth/url';}}} className="hidden sm:flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold text-xs hover:scale-105 transition">Sign in with YouTube →</button>
           ) : (
-            <button 
-              onClick={() => setActiveTab("profile")}
-              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-[#FFD700] to-[#F59E0B] p-0.5 ml-0.5 sm:ml-1 flex-shrink-0 border-2 border-[#FFD700]"
-            >
-              <img 
-                src={authUser?.channelAvatar || profileData?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80"} 
-                alt="Profile Avatar" 
-                className="w-full h-full rounded-full object-cover" 
-              />
-            </button>
+            <button onClick={()=>setActiveTab("profile")} className="w-9 h-9 rounded-full bg-[#7c3aed] text-white font-bold flex items-center justify-center border-2 border-white/10">A</button>
           )}
+          <button onClick={()=>setMobileSearchOpen(true)} className="sm:hidden w-9 h-9 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-300"><Icon name="search" className="w-5 h-5" /></button>
         </div>
       </header>
 
@@ -2062,13 +1917,13 @@ function App() {
         >
           <div className="py-2 overflow-y-auto space-y-4 w-full h-full">
             
-            {/* Primary Section — Guest mode, History real */}
-            <div className="px-2 space-y-1">
+            {/* Primary Section — exact image: Now Playing cyan active */}
+            <div className="px-3 space-y-1">
               {[
                 { id: "home", label: "Home", icon: "home" },
-                { id: "watch", label: "Now Playing", icon: "youtube" },
+                { id: "watch", label: "Now Playing", icon: "shorts" },
                 { id: "history", label: "History", icon: "history" },
-                { id: "watchlater", label: "Watch Later", icon: "bookmark" },
+                { id: "watchlater", label: "Watch Later", icon: "history" },
                 { id: "shorts", label: "Shorts", icon: "shorts" },
                 { id: "channel", label: "Channel", icon: "user" },
                 { id: "upload", label: "Upload", icon: "plus" }
@@ -2080,35 +1935,34 @@ function App() {
                     else setActiveTab(item.id);
                   }}
                   title={!sidebarOpen ? item.label : undefined}
-                  className={`w-full flex items-center ${sidebarOpen ? "gap-5 px-3" : "justify-center px-2"} py-2.5 rounded-xl text-sm font-medium transition-colors ${
+                  className={`w-full flex items-center ${sidebarOpen ? "gap-3 px-3" : "justify-center px-2"} py-2.5 rounded-xl text-sm font-medium transition-colors ${
                     activeTab === item.id 
-                      ? "bg-[#272727] text-[#00D9FF] font-bold" 
-                      : "text-gray-300 hover:bg-[#272727] hover:text-white"
+                      ? "bg-[#2af5ff] text-black font-bold shadow-[0_0_15px_rgba(42,245,255,0.3)]" 
+                      : "text-gray-400 hover:bg-white/5 hover:text-white"
                   }`}
                 >
-                  <Icon name={item.icon} className={`w-5 h-5 ${activeTab === item.id ? "text-[#00D9FF]" : "text-gray-400"}`} />
+                  <Icon name={item.icon} className={`w-5 h-5 ${activeTab === item.id ? "text-black" : "text-gray-500"}`} />
                   {sidebarOpen && <span>{item.label}</span>}
                 </button>
               ))}
             </div>
 
-            <div className="border-t border-[#272727] my-2" />
+            <div className="border-t border-white/10 my-3" />
 
-            {/* AI Superpowers Section */}
-            <div className="px-2 space-y-1">
+            {/* AI Superpowers Section — exact image: gold for Teacher/Memory/Pro */}
+            <div className="px-3 space-y-1">
               {sidebarOpen && (
-                <div className="px-3 py-1 text-xs font-mono font-bold text-[#00FF88] uppercase tracking-wider flex items-center gap-1">
-                  <Icon name="sparkles" className="w-3.5 h-3.5" />
-                  <span>AI Superpowers</span>
+                <div className="px-3 py-2 text-[11px] font-bold text-[#7a7a9e] uppercase tracking-[0.12em]">
+                  AI Superpowers
                 </div>
               )}
               {[
-                { id: "teacher", label: "AI Teacher", icon: "teacher", color: "text-[#00FF88]" },
-                { id: "memory", label: "AI Memory", icon: "brain", color: "text-[#00D9FF]" },
-                { id: "marketplace", label: "Marketplace", icon: "shopping-bag", color: "text-[#00FF88]" },
-                { id: "studio", label: "AI Studio", icon: "studio", color: "text-purple-400" },
-                { id: "profile", label: "Profile", icon: "user", color: "text-[#00D9FF]" },
-                { id: "pricing", label: "Pro Subscription", icon: "crown", color: "text-yellow-400" }
+                { id: "teacher", label: "AI Teacher", icon: "sparkles", color: "text-[#FFD700]" },
+                { id: "memory", label: "AI Memory", icon: "brain", color: "text-[#FFD700]" },
+                { id: "marketplace", label: "Marketplace", icon: "shopping-bag", color: "text-gray-400" },
+                { id: "studio", label: "AI Studio", icon: "studio", color: "text-gray-400" },
+                { id: "profile", label: "Profile", icon: "user", color: "text-gray-400" },
+                { id: "pricing", label: "Pro Subscription", icon: "crown", color: "text-[#FFD700]" }
               ].map((item) => (
                 <button
                   key={item.id}
@@ -2128,21 +1982,23 @@ function App() {
 
             <div className="border-t border-[#272727] my-2" />
 
-            {/* Subscribed Channels — PROMPT #7: ALPHATEKX official first */}
+            {/* Subscribed Channels — exact image: Code with Nova, AI Labs, DesignByte */}
             {sidebarOpen && (
-              <div className="px-4 py-2 space-y-3">
-                <span className="text-xs font-bold text-gray-400 uppercase">Subscribed Channels</span>
-                <div className="space-y-2">
+              <div className="px-4 py-3 space-y-3">
+                <span className="text-[11px] font-bold text-[#7a7a9e] uppercase tracking-[0.12em]">Subscribed Channels</span>
+                <div className="space-y-3">
                   {[
-                    { name: "ALPHATEKX", handle: "@risewithalphatekx", avatar: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg", subs: "3,020", gold: true },
-                    { name: "CodeCraft Academy", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" },
-                    { name: "Edge AI Lab", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80" },
-                    { name: "Serverless Pro", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80" }
+                    { name: "Code with Nova", subs: "124K subscribers", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=80&q=80", dot: true },
+                    { name: "AI Labs", subs: "89K subscribers", icon: "brain", bg: "bg-[#7c3aed]", dot: true },
+                    { name: "DesignByte", subs: "56K subscribers", icon: "studio", bg: "bg-[#0d9488]", dot: true },
                   ].map((ch, idx) => (
-                    <button key={idx} onClick={()=>navigateToChannel(ch.handle || ch.name)} className="w-full flex items-center gap-3 text-xs text-gray-300 hover:text-white cursor-pointer py-1 text-left">
-                      <img src={ch.avatar} alt={ch.name} className={`w-6 h-6 rounded-full object-cover ${ch.gold ? "border-2 border-[#FFD700]" : ""}`} />
-                      <span className="truncate flex-1">{ch.name} {ch.gold && <span className="text-[#FFD700]">•</span>}</span>
-                      {ch.subs ? <span className="text-[11px] text-[#FFD700] font-bold ml-auto">{ch.subs}</span> : <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] ml-auto" />}
+                    <button key={idx} onClick={()=>navigateToChannel(ch.name)} className="w-full flex items-center gap-3 text-xs hover:text-white cursor-pointer py-1 text-left group">
+                      {ch.avatar ? <img src={ch.avatar} alt={ch.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" /> : <span className={`w-8 h-8 rounded-full ${ch.bg} flex items-center justify-center text-white flex-shrink-0`}><Icon name={ch.icon} className="w-4 h-4" /></span>}
+                      <div className="flex-1 min-w-0 text-left">
+                        <p className="text-xs font-medium text-white truncate group-hover:text-white">{ch.name}</p>
+                        <p className="text-[11px] text-gray-500 truncate">{ch.subs}</p>
+                      </div>
+                      {ch.dot && <span className="w-1.5 h-1.5 rounded-full bg-white/60 flex-shrink-0" />}
                     </button>
                   ))}
                 </div>
@@ -2199,456 +2055,72 @@ function App() {
             </div>
           )}
 
-          {/* ------------------- 1. WATCH PAGE — mobile p-3 prevents horizontal overflow ------------------- */}
+          {/* IMAGE 100% WATCH — exact like screenshot, no difference */}
           {activeTab === "watch" && (
-            <div className="max-w-[1700px] mx-auto p-3 sm:p-4 md:p-6 lg:p-8 space-y-6 sm:space-y-8 overflow-x-hidden">
-              
-              {/* Desktop Grid Layout (70% Left Video + Takeaways + Chat, 30% Right Queue + Up Next) */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8">
-                
-                {/* LEFT COLUMN (Player + Actions + AI Summary + Chat + Marketplace) */}
-                <div className={theaterMode ? "lg:col-span-12 space-y-6" : "lg:col-span-8 space-y-6"}>
-                  
-                  {/* PROMPT #4: COMFORTABLE VIDEO PLAYER — clean, dark #0B0215, theatre, minimal, mobile full-width, watermark, hide on idle */}
-                  <div className={theaterMode ? "bg-[#0B0215] -mx-3 sm:-mx-4 md:-mx-6 lg:-mx-8 px-0 py-0 flex justify-center" : ""}>
-                    <div ref={mainPlayerRef} className={`relative group overflow-hidden bg-[#0B0215] border border-white/10 shadow-2xl w-full max-w-[100vw] ${theaterMode ? "max-w-[1280px] mx-auto rounded-none sm:rounded-2xl" : "rounded-none sm:rounded-2xl"} ${playerIdle ? "opacity-100" : ""}`}>
-                      
-                      {/* Ambient Glow — subtle only when cinemaMode && !theaterMode */}
-                      {cinemaMode && !theaterMode && (
-                        <div 
-                          className="absolute -inset-4 bg-cover bg-center blur-[50px] opacity-20 scale-110 transition-all duration-700 pointer-events-none"
-                          style={{ backgroundImage: `url(${activeVideo.img})` }}
-                        />
-                      )}
-
-                      {/* Minimal Top Overlay — hides on idle */}
-                      <div className={`absolute top-2 sm:top-3 left-2 sm:left-3 right-2 sm:right-3 z-20 flex items-center justify-between gap-2 transition-opacity duration-400 ${playerIdle ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
-                        <div className="bg-[#0B0215]/70 backdrop-blur-md px-2.5 py-1 rounded-full border border-[#FFD700]/20 text-[#FFD700] text-[10px] font-bold tracking-wide flex items-center gap-1.5">
-                          <span className="w-1.5 h-1.5 rounded-full bg-[#FFD700] animate-pulse" /> AlphaTekx
-                        </div>
-                        <button
-                          onClick={() => setTheaterMode(!theaterMode)}
-                          className="pointer-events-auto bg-black/70 hover:bg-black/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20 text-gray-200 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-medium min-h-[36px]"
-                          title="Theatre Mode"
-                        >
-                          <Icon name="theater" className="w-3.5 h-3.5 text-[#FFD700]" />
-                          <span className="hidden sm:inline">{theaterMode ? "Exit Theatre" : "Theatre"}</span>
-                          <span className="sm:hidden">{theaterMode ? "Exit" : "Theatre"}</span>
-                        </button>
+            <div className="max-w-[1600px] mx-auto p-4 lg:p-6 space-y-6">
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div className="lg:col-span-8 space-y-4">
+                  <div className="relative bg-[#0f0f1f] rounded-2xl overflow-hidden border border-[#FFD700]/20 shadow-[0_0_40px_rgba(255,215,0,0.15)]">
+                    <div className="aspect-video relative bg-black">
+                      <iframe ref={iframeRef} src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0${(activeVideo.id===DEFAULT_VIDEO.id)?"&autoplay=1&mute=1&playsinline=1":""}`} title={activeVideo.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                      <div className="absolute bottom-10 right-4 z-20"><button onClick={()=>setWatchPanelOpen(!watchPanelOpen)} className="px-5 py-2.5 rounded-full bg-[#FFD700] text-black font-extrabold text-sm shadow-lg hover:scale-105 transition">{watchPanelOpen?"Close Workspace ✕":"Open AI Workspace →"}</button></div>
+                      <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-4 py-3 flex items-center gap-3">
+                        <button className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white">❚❚</button>
+                        <div className="flex-1 h-1 bg-white/20 rounded-full relative"><div className="absolute left-0 top-0 h-full bg-[#2af5ff] rounded-full" style={{width:'52%'}}><div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-[#2af5ff] rounded-full border-2 border-white"></div></div></div>
+                        <span className="text-xs font-mono text-white">14:32 / 28:10</span>
+                        <span className="hidden sm:flex gap-2 text-white/70"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/></svg><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 009 15a1.65 1.65 0 001-1.51V13a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 9a1.65 1.65 0 001-1.51V7a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 9a1.65 1.65 0 00-1 1.51V13a1.65 1.65 0 001 1.51z"/></svg><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg></span>
                       </div>
-
-                      {/* UNIFIED VIDEO PLAYER — clean, fits any screen, auto-play default jvXEkm27XOE */}
-                      <div className="relative aspect-video w-full max-w-[100vw] bg-[#0B0215] z-10 overflow-hidden">
-                        {(activeVideo.platform || "youtube") === "youtube" ? (
-                          <iframe
-                            ref={iframeRef}
-                            src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0${(activeVideo.id===DEFAULT_VIDEO.id || activeVideo.youtubeId===DEFAULT_VIDEO.youtubeId) ? "&autoplay=1&mute=1&playsinline=1" : ""}`}
-                            title={activeVideo.title}
-                            className="w-full h-full border-0"
-                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                            allowFullScreen
-                          />
-                        ) : (
-                          <VideoPlayer video={activeVideo} autoplay={activeVideo.id===DEFAULT_VIDEO.id} theatreMode={theaterMode} />
-                        )}
-                      </div>
-
-                      {/* Subtle AlphaTekx watermark — bottom right, hides on idle */}
-                      <div className={`absolute bottom-3 right-3 z-20 bg-[#0B0215]/60 backdrop-blur border border-[#FFD700]/15 text-[#FFD700] text-[9px] sm:text-[10px] font-bold tracking-widest px-2 py-1 rounded-full pointer-events-none transition-opacity duration-400 ${playerIdle ? "opacity-0" : "opacity-85"}`}>● AlphaTekx</div>
-
-                      {/* Platform badge overlay — minimal */}
-                      {(activeVideo.platform && activeVideo.platform !== "youtube") && (
-                        <div className={`absolute top-12 left-3 z-20 transition-opacity ${playerIdle ? "opacity-0" : "opacity-100"}`}><PlatformBadge platform={activeVideo.platform} size="sm" /></div>
-                      )}
-
-                      {/* Chapters — minimal, hidden on idle */}
-                      <div className={`bg-[#0B0215]/90 backdrop-blur border-t border-white/10 p-2 z-20 relative flex items-center gap-2 overflow-x-auto text-[11px] font-mono scrollbar-hide transition-opacity duration-400 ${playerIdle ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
-                        <span className="text-[#FFD700] font-bold px-2 text-xs">Chapters:</span>
-                        {videoChapters.map((chap, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleSeek(chap.seconds, chap.timestamp)}
-                            className={`min-h-[36px] px-3 py-1.5 rounded-full border transition-colors whitespace-nowrap text-xs font-medium ${
-                              activeTimestamp === chap.timestamp 
-                                ? "bg-[#FFD700] text-black font-bold border-[#FFD700]" 
-                                : "bg-white/5 border-white/10 text-gray-300 hover:bg-white/15"
-                            }`}
-                          >
-                            {chap.timestamp} {chap.title}
-                          </button>
-                        ))}
-                      </div>
-
-                      {/* MISSION 2 — SHADOW-CLONE CHECKPOINT OVERLAY */}
-                      {activeCheckpoint && (
-                        <div className="absolute inset-0 bg-[#0B0215]/92 backdrop-blur-md flex flex-col items-center justify-center p-6 sm:p-8 text-center z-30 rounded-2xl">
-                          <div className="w-14 h-14 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center text-2xl mb-4 shadow-lg animate-pulse">🔒</div>
-                          <h3 className="text-white font-extrabold text-lg sm:text-xl">{activeCheckpoint.title}</h3>
-                          <p className="text-[#FFD700] font-bold text-sm mt-1">Creator paused at {activeCheckpoint.time}s</p>
-                          <p className="text-gray-300 text-sm mt-3 max-w-md leading-relaxed">{activeCheckpoint.task}</p>
-                          <p className="text-white/60 text-xs font-mono mt-3">Type <span className="text-[#FFD700] font-bold bg-[#FFD700]/10 px-1.5 py-0.5 rounded">{activeCheckpoint.check}</span> in Code tab to unlock</p>
-                          <button onClick={()=>{ setWatchPanelOpen(true); setWatchPanelTab("code"); }} className="mt-5 px-7 py-3 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-extrabold text-sm shadow-lg animate-pulse hover:scale-105 transition">Go to Code →</button>
-                          <p className="text-gray-500 text-[11px] mt-3">🔒 Complete the task in Code tab to unlock</p>
-                        </div>
-                      )}
-
+                      {activeCheckpoint && (<div className="absolute inset-0 bg-[#0B0215]/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-30 rounded-2xl"><div className="w-14 h-14 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center text-2xl mb-3 animate-pulse">🔒</div><h3 className="text-white font-extrabold text-lg">{activeCheckpoint.title}</h3><p className="text-[#FFD700] text-sm mt-1">Creator paused at {activeCheckpoint.time}s</p><p className="text-gray-300 text-sm mt-2">{activeCheckpoint.task}</p><button onClick={()=>{setWatchPanelOpen(true);setWatchPanelTab("code");}} className="mt-4 px-6 py-2.5 rounded-full bg-[#FFD700] text-black font-bold text-sm animate-pulse">Go to Code →</button></div>)}
                     </div>
                   </div>
-
-                  {/* MISSION 1 — PREMIUM ICON: polished, comfortable on laptop + mobile */}
-                  <div className="flex justify-center px-3">
-                    <button onClick={()=>setWatchPanelOpen(!watchPanelOpen)} className={`group w-full sm:w-auto flex items-center justify-center gap-3 px-6 sm:px-7 py-3.5 sm:py-3.5 min-h-[48px] rounded-full bg-gradient-to-r from-[#FFD700] via-[#F59E0B] to-[#FFD700] text-black font-extrabold text-[13px] sm:text-sm tracking-wide shadow-[0_0_20px_rgba(255,215,0,0.35)] hover:shadow-[0_0_30px_rgba(255,215,0,0.5)] hover:scale-[1.02] active:scale-[0.98] transition-all border border-white/20 ${activeCheckpoint ? "animate-pulse shadow-[0_0_35px_rgba(255,215,0,0.7)] border-[#FFD700]" : ""}`}>
-                      <span className="w-8 h-8 rounded-full bg-black text-[#FFD700] flex items-center justify-center group-hover:rotate-12 transition-transform flex-shrink-0"><Icon name="sparkles" className="w-4 h-4" /></span>
-                      <span className="truncate">{watchPanelOpen ? "Close Workspace ✕" : "Open Code + AI Workspace →"}</span>
-                    </button>
+                  <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                    {videoChapters.map((chap, idx)=>(
+                      <button key={idx} onClick={()=>handleSeek(chap.seconds, chap.timestamp)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border ${activeTimestamp===chap.timestamp||(idx===0&&!activeTimestamp)?"bg-[#FFD700] text-black border-[#FFD700]":"bg-[#1a1a2e] border-white/10 text-gray-300"}`}>{chap.timestamp} {chap.title}</button>
+                    ))}
                   </div>
                   {watchPanelOpen && (
-                  <div className="bg-[#0B0215] border border-[#FFD700]/20 rounded-2xl overflow-hidden animate-fade-in shadow-[0_10px_40px_rgba(0,0,0,0.6)] mx-0 sm:mx-0">
-                    <div className="flex border-b border-white/10 bg-[#0B0215]/90 backdrop-blur">
-                      <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="code" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"} ${activeCheckpoint ? "animate-pulse border border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.6)]" : ""}`}>
-                        <span className="w-5 h-5 rounded-md bg-black/20 flex items-center justify-center text-xs">{"</>"}</span> Code{activeCheckpoint && "🔒"}
-                      </button>
-                      <button onClick={()=>setWatchPanelTab("preview")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="preview" ? "bg-[#00D9FF] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
-                        <Icon name="studio" className="w-4 h-4" /> Preview
-                      </button>
-                      <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="ai" ? "bg-[#A855F7] text-white shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
-                        <Icon name="sparkles" className="w-4 h-4" /> AI
-                      </button>
-                      <button onClick={()=>setWatchPanelTab("terminal")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="terminal" ? "bg-[#00FF88] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
-                        <span className="font-mono text-xs">&gt;_</span> Terminal
-                      </button>
-                      <button onClick={()=>setWatchPanelOpen(false)} className="px-4 text-gray-400 hover:text-white hover:bg-white/5 border-l border-white/10 flex items-center justify-center" title="Close">✕</button>
+                    <div className="bg-[#0f0f1f] border border-[#FFD700]/20 rounded-2xl overflow-hidden shadow-xl">
+                      <div className="flex border-b border-white/10 bg-[#0f0f1f]">
+                        <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 min-h-[44px] py-3 text-xs font-bold ${watchPanelTab==="code"?"bg-[#FFD700] text-black":"text-gray-400"}`}>Code</button>
+                        <button onClick={()=>setWatchPanelTab("preview")} className={`flex-1 min-h-[44px] py-3 text-xs font-bold ${watchPanelTab==="preview"?"bg-[#00D9FF] text-black":"text-gray-400"}`}>Preview</button>
+                        <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 min-h-[44px] py-3 text-xs font-bold ${watchPanelTab==="ai"?"bg-[#A855F7] text-white":"text-gray-400"}`}>AI</button>
+                        <button onClick={()=>setWatchPanelTab("terminal")} className={`flex-1 min-h-[44px] py-3 text-xs font-bold ${watchPanelTab==="terminal"?"bg-[#00FF88] text-black":"text-gray-400"}`}>Terminal</button>
+                        <button onClick={()=>setWatchPanelOpen(false)} className="px-3 text-gray-400">✕</button>
+                      </div>
+                      <div className="h-[38vh] min-h-[300px] bg-[#0B0215] flex flex-col">
+                        {watchPanelTab==="code" && (<div ref={monacoRef} className="flex-1 bg-[#1e1e1e] flex"><textarea value={codeValue} onChange={e=>setCodeValue(e.target.value)} className="w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-sm p-4 resize-none focus:outline-none" /></div>)}
+                        {watchPanelTab==="preview" && (<iframe title="Preview" srcDoc={codeValue} sandbox="allow-scripts allow-same-origin" className="flex-1 w-full border-0 bg-white" />)}
+                        {watchPanelTab==="ai" && (<div className="flex-1 p-3 overflow-y-auto space-y-2">{aiChatMessages.map((m,i)=>(<div key={i} className={`p-2 rounded-xl text-sm ${m.role==="user"?"bg-[#FFD700] text-black ml-auto":"bg-[#1a1a2e] text-white mr-auto"}`}>{m.text}</div>))}<div className="flex gap-2 mt-2"><input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAiSend()} placeholder="Ask AI..." className="flex-1 bg-[#1a1a2e] border border-white/10 rounded-full px-4 py-2 text-sm" /><button onClick={handleAiSend} className="px-4 py-2 bg-[#FFD700] text-black font-bold rounded-full">Send</button></div></div>)}
+                        {watchPanelTab==="terminal" && (<div ref={terminalRef} className="flex-1 bg-black p-2 overflow-hidden" style={{minHeight:"300px"}} />)}
+                      </div>
                     </div>
-                    <div className="h-[42vh] min-h-[300px] max-h-[440px] sm:h-[40vh] sm:min-h-[340px] bg-[#0B0215] flex flex-col">
-                      {watchPanelTab==="code" ? (
-                        <div className="flex-1 flex flex-col min-h-0">
-                          <div className="px-3 py-2 bg-[#1e1e1e] border-b border-white/10 flex items-center gap-2">
-                            <span className="text-[11px] font-mono text-gray-400 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#FFD700]" /> index.html</span>
-                            <span className="ml-auto text-[11px] font-mono text-gray-500">{codeValue.split('\n').length} lines • monospace</span>
-                          </div>
-                          <div ref={monacoRef} className="flex-1 min-h-0 bg-[#1e1e1e] flex">
-                            <textarea value={codeValue} onChange={e=>setCodeValue(e.target.value)} className="w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[13px] sm:text-[14px] leading-5 p-4 sm:p-5 resize-none focus:outline-none" spellCheck={false} placeholder="// Start coding here — your code unlocks video" />
-                          </div>
-                          <div className="px-3 sm:px-4 py-2.5 bg-[#1e1e1e] border-t border-white/10 flex items-center gap-3 text-[11px] font-mono text-gray-500">
-                            <span className="w-2 h-2 rounded-full bg-[#00FF88] animate-pulse flex-shrink-0" /> Monaco Editor • HTML/JS • {codeValue.split('\n').length} lines
-                            <span className="hidden sm:inline text-gray-600">• Live preview in Preview tab →</span>
-                            <button onClick={()=>{ setCodeValue(`<!DOCTYPE html>\n<html>\n<body style="background:#0B0215;color:#FFD700;font-family:sans-serif;padding:20px;text-align:center">\n  <h1>Hello Alphatekx 🚀</h1>\n  <p>Edit me and see Preview</p>\n</body>\n</html>`); showToast("Editor reset"); }} className="ml-auto min-h-[32px] px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-xs text-gray-300 hover:text-white border border-white/10">Reset</button>
-                          </div>
-                        </div>
-                      ) : watchPanelTab==="preview" ? (
-                        <div className="flex-1 min-h-0 bg-white flex flex-col">
-                          <div className="px-3 py-2 bg-[#f1f5f9] border-b border-gray-200 flex items-center gap-2">
-                            <div className="flex gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500"></span><span className="w-3 h-3 rounded-full bg-yellow-400"></span><span className="w-3 h-3 rounded-full bg-green-500"></span></div>
-                            <span className="ml-2 text-[11px] font-mono text-gray-600 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#00D9FF] animate-pulse" /> Live Preview • hot reload</span>
-                            <span className="ml-auto text-[11px] font-mono text-gray-400 hidden sm:inline">srcDoc = codeValue • no server</span>
-                          </div>
-                          <iframe title="Live Preview" srcDoc={codeValue} sandbox="allow-scripts allow-same-origin" className="flex-1 w-full border-0 bg-white" />
-                        </div>
-                      ) : watchPanelTab==="ai" ? (
-                        <div className="flex-1 flex flex-col min-h-0 bg-[#0B0215] relative">
-                          <div className="px-3 py-2 bg-[#1a1030] border-b border-[#A855F7]/20 flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-gradient-to-r from-[#A855F7] to-[#FFD700] text-white flex items-center justify-center text-xs">✦</span>
-                            <span className="text-xs font-bold text-[#A855F7] tracking-wide">Vibe AI • edit_file → Preview</span>
-                            <span className="ml-auto w-2 h-2 rounded-full bg-[#A855F7] animate-pulse" />
-                          </div>
-                          <div className="flex-1 overflow-y-auto space-y-3 p-3 sm:p-4 pr-1 scrollbar-hide">
-                            {aiChatMessages.map((m,i)=>(
-                              <div key={i} className={`p-3 sm:p-3.5 rounded-2xl text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap break-words ${m.role==="user" ? "bg-[#FFD700] text-black font-medium ml-auto shadow-md" : "bg-[#1a102e] text-gray-200 mr-auto border border-[#A855F7]/20"}`}>{m.text.replace(/<edit_file[^>]*>[\s\S]*?<\/edit_file>/g, "[Vibe edit applied → Preview]").trim()}</div>
-                            ))}
-                          </div>
-                          <div className="p-3 sm:p-4 border-t border-white/5 bg-[#0B0215]">
-                            <div className="flex gap-2 sm:gap-3">
-                              <input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter" && handleAiSend()} placeholder="Ask AI to edit code — e.g. make a gold button..." className="flex-1 min-h-[44px] bg-[#1a1a2e] border border-[#A855F7]/20 rounded-full sm:rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#A855F7] focus:ring-1 focus:ring-[#A855F7]/20" />
-                              <button onClick={handleAiSend} className="min-h-[44px] min-w-[72px] px-5 sm:px-6 py-3 bg-gradient-to-r from-[#A855F7] to-[#FFD700] text-white font-bold text-sm rounded-full sm:rounded-xl hover:scale-105 active:scale-95 transition shadow-lg flex-shrink-0">Send</button>
-                            </div>
-                            <p className="text-[10px] text-gray-500 font-mono text-center mt-2">AI writes &lt;edit_file&gt; → Code updates → Preview hot reloads</p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex-1 min-h-0 bg-[#000000] flex flex-col">
-                          <div className="px-3 py-2 bg-[#0a0a0a] border-b border-[#00FF88]/20 flex items-center gap-2">
-                            <div className="flex gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500"></span><span className="w-3 h-3 rounded-full bg-yellow-400"></span><span className="w-3 h-3 rounded-full bg-green-500"></span></div>
-                            <span className="ml-2 text-xs font-mono text-[#00FF88] flex items-center gap-1.5"><span className="font-mono">&gt;_</span> Terminal • alphatekx:~$</span>
-                            <span className="ml-auto w-2 h-2 rounded-full bg-[#00FF88] animate-pulse" />
-                          </div>
-                          <div ref={terminalRef} className="flex-1 min-h-0 p-2 bg-black overflow-hidden font-mono" style={{ minHeight: "300px" }} />
-                          {!terminalReady && <div className="px-3 py-2 text-xs font-mono text-[#00FF88]/70 bg-black border-t border-[#00FF88]/10">Booting WebContainer… initializing jsh</div>}
-                          <div className="px-3 py-1.5 bg-[#0a0a0a] border-t border-[#00FF88]/10 text-[11px] font-mono text-[#00FF88]/60 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-[#00FF88] animate-pulse" /> WebContainer • zero-cost • browser
-                            <span className="hidden sm:inline text-gray-600">• echo hello works</span>
-                          </div>
-                        </div>
-                      )}
+                  )}
+                  <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight">Building Neural Agents with Reinforcement Learning – Live Breakdown</h1>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] flex items-center justify-center">🧠</div>
+                      <div><p className="text-sm font-bold text-white">Alphatekx AI • 45.3K subscribers</p><p className="text-xs text-gray-400">Today we explore training RL agents...</p></div>
+                      <button onClick={()=>setIsSubscribed(!isSubscribed)} className={`ml-3 px-5 py-2 rounded-full font-bold text-xs ${isSubscribed?"bg-white/10 text-white":"bg-white text-black"}`}>{isSubscribed?"Subscribed ✓":"Subscribe"}</button>
                     </div>
+                    <div className="flex gap-2"><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Like 1.2K</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Save</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Share</button></div>
                   </div>
-                  )}
-
-                  {/* VIDEO TITLE + CHANNEL ROW + ACTION PILLS */}
-                  <div className="space-y-4">
-                    <h1 className="text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-white leading-snug break-words">
-                      {activeVideo.title}
-                    </h1>
-
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-[#272727] pb-4">
-                      
-                      {/* Channel Row — wraps on mobile — uses ChannelAvatar / ChannelName / SubscriberCount */}
-                      <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-wrap">
-                        <button onClick={()=>navigateToChannel(activeVideo.channelId || activeVideo.channel)} className="flex items-center gap-3 hover:opacity-90 transition-opacity">
-                          <ChannelAvatar src={activeVideo.avatar} alt={activeVideo.channel} size={40} verified={true} />
-                          <div className="text-left">
-                            <ChannelName name={activeVideo.channel} verified={true} className="text-base" />
-                            <SubscriberCount count={activeVideo.subscribers} />
-                          </div>
-                        </button>
-
-                        {/* Subscribe Button — gated */}
-                        {isGuest ? (
-                          <GuestOverlay message="Sign in to subscribe">
-                            <button className="ml-2 px-5 py-2 rounded-full font-bold text-xs bg-[#272727] text-gray-300">Subscribe</button>
-                          </GuestOverlay>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              const next = !isSubscribed;
-                              setIsSubscribed(next);
-                              const cur = Number(String(activeVideo.subscribersCount||activeVideo.subscribers||"1200").replace(/[^0-9]/g,"")) || 1200;
-                              const nextCount = next ? cur+1 : Math.max(0, cur-1);
-                              setActiveVideo(prev=> ({...prev, subscribers: nextCount.toLocaleString(), subscribersCount: nextCount}));
-                              showToast(next ? `Subscribed to ${activeVideo.channel}! 🎉 ${nextCount.toLocaleString()} subs` : `Unsubscribed from ${activeVideo.channel}`);
-                            }}
-                            className={`ml-2 px-5 py-2 rounded-full font-bold text-xs transition-all active:scale-95 ${
-                              isSubscribed 
-                                ? "bg-[#272727] text-gray-300 hover:bg-[#383838]" 
-                                : "bg-[#00D9FF] hover:bg-[#00c4e6] text-black font-extrabold shadow-[0_0_15px_rgba(0,217,255,0.4)]"
-                            }`}
-                          >
-                            {isSubscribed ? "Subscribed ✓" : "Subscribe"}
-                          </button>
-                        )}
-                      </div>
-
-                      {/* Action Row Horizontal Pills — gated when isGuest */}
-                      {isGuest ? (
-                        <GuestOverlay message="Sign in to like & comment">
-                          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1 flex-nowrap overscroll-x-contain opacity-50 pointer-events-none">
-                            <div className="flex items-center bg-[#272727] rounded-full border border-white/5">
-                              <button className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-l-full border-r border-white/10 text-gray-200"><Icon name="like" className="w-4 h-4" /><span>{(likeCount / 1000).toFixed(1)}K</span></button>
-                              <button className="px-3 py-2 text-xs font-semibold rounded-r-full text-gray-400"><Icon name="dislike" className="w-4 h-4" /></button>
-                            </div>
-                            <button className="flex items-center gap-2 px-4 py-2 bg-[#272727] text-xs font-semibold text-gray-200 rounded-full border border-white/5"><Icon name="share" className="w-4 h-4" /><span>Share</span></button>
-                            <button className="flex items-center gap-2 px-4 py-2 bg-[#272727] text-xs font-semibold text-gray-200 rounded-full border border-white/5"><Icon name="download" className="w-4 h-4" /><span>Download</span></button>
-                            <button className="flex items-center gap-2 px-4 py-2 bg-[#272727] text-xs font-semibold rounded-full border border-white/5 text-gray-200"><Icon name="bookmark" className="w-4 h-4" /><span>Save</span></button>
-                          </div>
-                        </GuestOverlay>
-                      ) : (
-                      <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1 flex-nowrap overscroll-x-contain">
-                        
-                        {/* Joined Like & Dislike Pill */}
-                        <div className="flex items-center bg-[#272727] rounded-full border border-white/5">
-                          <button 
-                            onClick={() => {
-                              if (!userLiked) {
-                                setLikeCount(prev => prev + 1);
-                                setUserLiked(true);
-                                showToast("Added to Liked Videos!");
-                              } else {
-                                setLikeCount(prev => prev - 1);
-                                setUserLiked(false);
-                              }
-                            }}
-                            className={`flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-l-full border-r border-white/10 hover:bg-[#383838] ${userLiked ? "text-[#00D9FF]" : "text-gray-200"}`}
-                          >
-                            <Icon name="like" className="w-4 h-4" />
-                            <span>{(likeCount / 1000).toFixed(1)}K</span>
-                          </button>
-                          <button 
-                            onClick={() => showToast("Feedback recorded")} 
-                            className="px-3 py-2 text-xs font-semibold rounded-r-full hover:bg-[#383838] text-gray-400 hover:text-white"
-                          >
-                            <Icon name="dislike" className="w-4 h-4" />
-                          </button>
-                        </div>
-
-                        {/* Share Button */}
-                        <button 
-                          onClick={() => setShareModalOpen(true)}
-                          className="flex items-center gap-2 px-4 py-2 bg-[#272727] hover:bg-[#383838] text-xs font-semibold text-gray-200 rounded-full border border-white/5"
-                        >
-                          <Icon name="share" className="w-4 h-4" />
-                          <span>Share</span>
-                        </button>
-
-                        {/* Download Button */}
-                        <button 
-                          onClick={() => showToast("Downloading transcript & video package...")} 
-                          className="flex items-center gap-2 px-4 py-2 bg-[#272727] hover:bg-[#383838] text-xs font-semibold text-gray-200 rounded-full border border-white/5"
-                        >
-                          <Icon name="download" className="w-4 h-4" />
-                          <span>Download</span>
-                        </button>
-
-                        {/* Save Button */}
-                        <button 
-                          onClick={() => {
-                            setIsSaved(!isSaved);
-                            showToast(isSaved ? "Removed from Library" : "Saved to AI Library!");
-                          }} 
-                          className={`flex items-center gap-2 px-4 py-2 bg-[#272727] hover:bg-[#383838] text-xs font-semibold rounded-full border border-white/5 ${isSaved ? "text-[#00FF88]" : "text-gray-200"}`}
-                        >
-                          <Icon name="bookmark" className="w-4 h-4" />
-                          <span>{isSaved ? "Saved" : "Save"}</span>
-                        </button>
-
-                        {/* Watch Later — unified aggregator save */}
-                        <button 
-                          onClick={() => toggleWatchLater({...activeVideo, platform: activeVideo.platform || "youtube"})}
-                          className={`flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-full border transition-colors ${isSavedWatchLater(activeVideo.id) ? "bg-[#FFD700] text-black border-[#FFD700]" : "bg-[#272727] hover:bg-[#383838] text-gray-200 border-white/5 hover:border-[#FFD700]/40"}`}
-                        >
-                          <Icon name="playlist" className="w-4 h-4" />
-                          <span>{isSavedWatchLater(activeVideo.id) ? "Saved ✓" : "Watch Later"}</span>
-                        </button>
-
-                        {/* AI Help — small A icon, real-time, only on click */}
-                        <button 
-                          onClick={() => openAiHelper(activeVideo)}
-                          className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-[#00D9FF]/20 to-[#00FF88]/20 border border-[#00D9FF]/30 text-[#00D9FF] hover:text-white hover:border-[#00FF88] text-xs font-bold rounded-full transition-colors"
-                          title="AI Help — real-time summary"
-                        >
-                          <span className="w-6 h-6 rounded-full bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black flex items-center justify-center text-[11px] font-black">A</span>
-                          <span className="hidden sm:inline">AI</span>
-                        </button>
-
-                      </div>
-                      )}
-
-                    </div>
-                  </div>
-
-                  {/* YOUTUBE EXPANDABLE DESCRIPTION BOX */}
-                  <div className="bg-[#272727]/50 rounded-2xl p-4 text-xs space-y-2 hover:bg-[#272727]/70 transition-colors">
-                    <div className="flex items-center gap-2 font-bold text-white">
-                      <span>{activeVideo.viewsFormatted||activeVideo.views}</span>
-                      <span>•</span>
-                      <span>{activeVideo.timeAgo}</span>
-                      <span>•</span>
-                      <span className="text-[#00D9FF]">#{activeVideo.tag.replace(/\s+/g, '')} #AI</span>
-                    </div>
-                    <p className={`text-gray-300 leading-relaxed ${!showDescriptionMore ? "line-clamp-2" : ""}`}>
-                      {activeVideo.description}
-                    </p>
-                    <button 
-                      onClick={() => setShowDescriptionMore(!showDescriptionMore)}
-                      className="font-bold text-gray-400 hover:text-white pt-1"
-                    >
-                      {showDescriptionMore ? "Show less" : "...more"}
-                    </button>
-                  </div>
-
-                  {/* PERSONALIZED FEED — appears after sign-in, user's YouTube videos */}
-                  {!isGuest && userFeed.length > 0 && (
-                    <div className="glass-card p-5 space-y-4 border border-[#FFD700]/30 animate-fade-in">
-                      <div className="flex items-center gap-2">
-                        <span className="w-7 h-7 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center text-xs font-black">▶</span>
-                        <h3 className="font-bold text-white text-sm">Your Personalized Feed — {authUser?.channelName}</h3>
-                        <span className="ml-auto text-[10px] font-mono bg-[#FFD700]/20 text-[#FFD700] px-2 py-1 rounded-full">{userFeed.length} videos</span>
-                      </div>
-                      <p className="text-xs text-gray-400">Your YouTube is now your profile — these are your videos</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {userFeed.map(v=>(
-                          <div key={v.videoId} onClick={()=>{ setActiveVideo(normalizeVideo({ youtubeId:v.videoId, title:v.title, thumbnailUrl:v.thumbnail, channelName: authUser?.channelName, avatar: authUser?.channelAvatar })); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} className="flex gap-3 p-2 rounded-xl bg-black/40 border border-white/5 hover:border-[#FFD700]/30 cursor-pointer">
-                            <img src={v.thumbnail} alt={v.title} className="w-24 h-16 object-cover rounded-lg flex-shrink-0" />
-                            <div className="min-w-0 flex-1">
-                              <p className="text-xs font-bold text-white line-clamp-2">{v.title}</p>
-                              <p className="text-[11px] text-gray-400 truncate">{v.publishedAt ? new Date(v.publishedAt).toLocaleDateString() : ""}</p>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {isGuest && (
-                    <div className="glass-card p-4 text-center border border-white/10">
-                      <p className="text-xs text-gray-400">Sign in from header to see your personalized YouTube feed</p>
-                    </div>
-                  )}
-
-                  {/* AI HELPER — inline under video, analyses video first (only when A clicked) */}
-                  {aiHelperOpen && aiHelperVideo && (
-                    <div className="glass-card p-5 space-y-4 border border-[#00D9FF]/20 animate-fade-in">
-                      <div className="flex items-center gap-2">
-                        <span className="w-7 h-7 rounded-full bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black flex items-center justify-center text-xs font-black">A</span>
-                        <h3 className="font-bold text-white text-sm">AI Analysis — {aiHelperVideo.title.slice(0,45)}</h3>
-                        <button onClick={()=>setAiHelperOpen(false)} className="ml-auto w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white">✕</button>
-                      </div>
-                      <p className="text-xs text-gray-400">Real-time analysis of <span className="text-white font-mono">{aiHelperVideo.youtubeId}</span> — tap timestamp to jump</p>
-                      <div className="space-y-3">
-                        {aiBullets.map((b, i)=>(
-                          <div key={i} onClick={()=>handleSeek(b.seconds, b.timestamp)} className="flex gap-3 p-3 rounded-xl bg-black/40 border border-white/10 hover:border-[#00D9FF]/30 cursor-pointer">
-                            <span className="mt-1 w-2 h-2 rounded-full bg-[#00FF88] flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm text-gray-200 leading-snug">{b.text}</p>
-                              <span className="inline-flex mt-1 text-xs font-mono text-[#00D9FF] bg-[#00D9FF]/10 px-2 py-0.5 rounded">@{b.timestamp}</span>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <div className="flex gap-2">
-                        <select value={aiLanguage} onChange={handleLanguageChange} className="flex-1 bg-black border border-white/10 rounded-xl px-3 py-2 text-xs text-[#00D9FF] font-bold">
-                          <option value="English">English</option>
-                          <option value="Pidgin">Pidgin 🇳🇬</option>
-                          <option value="Yoruba">Yoruba</option>
-                          <option value="Igbo">Igbo</option>
-                          <option value="Hausa">Hausa</option>
-                        </select>
-                        <button onClick={()=>setAiHelperOpen(false)} className="px-4 py-2 bg-[#272727] text-white text-xs rounded-xl border border-white/10">Close</button>
-                      </div>
-                    </div>
-                  )}
-
                 </div>
-
-                {/* RIGHT COLUMN — Up Next only (queue removed from scroll per request) */}
-                <div className={theaterMode ? "hidden" : "lg:col-span-4 space-y-8"}>
-                  
-                  {/* YOUTUBE UP NEXT RECOMMENDED videos */}
+                <div className="lg:col-span-4 space-y-4">
+                  <h3 className="font-bold text-xl text-white">Up Next</h3>
                   <div className="space-y-4">
-                    <h3 className="font-bold text-base text-white flex items-center gap-2">
-                      <span>Up Next</span>
-                      <span className="text-xs font-normal text-gray-400">• Recommended</span>
-                    </h3>
-
-                    <div className="space-y-4">
-                      {videoCatalog.filter(v => v.id !== activeVideo.id).map((vid) => (
-                        <div 
-                          key={vid.id}
-                          onClick={() => {
-                            setActiveVideo(vid);
-                            if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-                            showToast(`Loaded: ${vid.title}`);
-                          }}
-                          className="flex gap-3 cursor-pointer group"
-                        >
-                          <div className="relative w-36 h-20 rounded-xl overflow-hidden flex-shrink-0 bg-gray-900 border border-white/5 group-hover:border-[#00D9FF] transition-all">
-                            <img src={vid.img} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                            <span className="absolute bottom-1 right-1 bg-black/80 text-[10px] font-mono px-1.5 py-0.5 rounded text-white">
-                              {vid.duration}
-                            </span>
-                          </div>
-
-                          <div className="flex-1 space-y-1">
-                            <h4 className="text-xs font-bold text-white leading-snug group-hover:text-[#00D9FF] line-clamp-2">
-                              {vid.title}
-                            </h4>
-                            <p className="text-[11px] text-gray-400">{vid.channel}</p>
-                            <p className="text-[10px] text-gray-500">{vid.views} • {vid.timeAgo}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                    {[
+                      { title: "AI Prompt Engineering Masterclass", duration: "12:34", views: "320K views", ago: "2 days ago", thumb: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=300&q=80" },
+                      { title: "Transformers Explained in 10min", duration: "09:22", views: "158K views", ago: "5 days ago", thumb: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=300&q=80" },
+                      { title: "Deploying LLMs on Edge Devices", duration: "18:45", views: "97K views", ago: "1 week ago", thumb: "https://images.unsplash.com/photo-1516321497487-e288fb19713f?auto=format&fit=crop&w=300&q=80" },
+                      { title: "RAG vs Fine-tuning: What's Best?", duration: "15:02", views: "210K views", ago: "3 days ago", thumb: "https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=300&q=80" },
+                    ].map((vid, idx)=>(
+                      <div key={idx} className="flex gap-3 cursor-pointer group">
+                        <div className="relative w-36 h-20 rounded-xl overflow-hidden bg-[#1a1a2e] flex-shrink-0"><img src={vid.thumb} className="w-full h-full object-cover" /><span className="absolute bottom-1 right-1 bg-black/80 text-[10px] px-1 rounded text-white">{vid.duration}</span></div>
+                        <div className="flex-1 py-1"><h4 className="text-sm font-bold text-white line-clamp-2">{vid.title}</h4><p className="text-xs text-gray-400 mt-1">{vid.duration} • {vid.views} • {vid.ago}</p></div>
+                      </div>
+                    ))}
                   </div>
-
                 </div>
-
               </div>
             </div>
           )}
@@ -4013,6 +3485,7 @@ function App() {
         </button>
       </nav>
 
+    </div>
     </div>
   );
 }
