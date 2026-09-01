@@ -2306,15 +2306,15 @@ function App() {
                   <div className="bg-[#0B0215] border border-[#FFD700]/20 rounded-2xl overflow-hidden animate-fade-in shadow-[0_10px_40px_rgba(0,0,0,0.6)] mx-0 sm:mx-0">
                     <div className="flex border-b border-white/10 bg-[#0B0215]/90 backdrop-blur">
                       <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="code" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"} ${activeCheckpoint ? "animate-pulse border border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.6)]" : ""}`}>
-                        <span className="w-5 h-5 rounded-md bg-black/10 flex items-center justify-center text-xs">{"</>"}</span> Code{activeCheckpoint && "🔒"}
+                        <span className="w-5 h-5 rounded-md bg-black/20 flex items-center justify-center text-xs">{"</>"}</span> Code{activeCheckpoint && "🔒"}
                       </button>
-                      <button onClick={()=>setWatchPanelTab("preview")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="preview" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
+                      <button onClick={()=>setWatchPanelTab("preview")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="preview" ? "bg-[#00D9FF] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
                         <Icon name="studio" className="w-4 h-4" /> Preview
                       </button>
-                      <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="ai" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
+                      <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="ai" ? "bg-[#A855F7] text-white shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
                         <Icon name="sparkles" className="w-4 h-4" /> AI
                       </button>
-                      <button onClick={()=>setWatchPanelTab("terminal")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="terminal" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
+                      <button onClick={()=>setWatchPanelTab("terminal")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="terminal" ? "bg-[#00FF88] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
                         <span className="font-mono text-xs">&gt;_</span> Terminal
                       </button>
                       <button onClick={()=>setWatchPanelOpen(false)} className="px-4 text-gray-400 hover:text-white hover:bg-white/5 border-l border-white/10 flex items-center justify-center" title="Close">✕</button>
@@ -2322,6 +2322,10 @@ function App() {
                     <div className="h-[42vh] min-h-[300px] max-h-[440px] sm:h-[40vh] sm:min-h-[340px] bg-[#0B0215] flex flex-col">
                       {watchPanelTab==="code" ? (
                         <div className="flex-1 flex flex-col min-h-0">
+                          <div className="px-3 py-2 bg-[#1e1e1e] border-b border-white/10 flex items-center gap-2">
+                            <span className="text-[11px] font-mono text-gray-400 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#FFD700]" /> index.html</span>
+                            <span className="ml-auto text-[11px] font-mono text-gray-500">{codeValue.split('\n').length} lines • monospace</span>
+                          </div>
                           <div ref={monacoRef} className="flex-1 min-h-0 bg-[#1e1e1e] flex">
                             <textarea value={codeValue} onChange={e=>setCodeValue(e.target.value)} className="w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[13px] sm:text-[14px] leading-5 p-4 sm:p-5 resize-none focus:outline-none" spellCheck={false} placeholder="// Start coding here — your code unlocks video" />
                           </div>
@@ -2333,32 +2337,45 @@ function App() {
                         </div>
                       ) : watchPanelTab==="preview" ? (
                         <div className="flex-1 min-h-0 bg-white flex flex-col">
-                          <div className="px-3 py-2 bg-[#1e1e1e] border-b border-white/10 flex items-center gap-2 text-[11px] font-mono text-gray-400">
-                            <span className="w-2 h-2 rounded-full bg-[#FFD700] animate-pulse" /> Live Preview • hot reload • no server
-                            <span className="ml-auto text-gray-500">srcDoc = codeValue</span>
+                          <div className="px-3 py-2 bg-[#f1f5f9] border-b border-gray-200 flex items-center gap-2">
+                            <div className="flex gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500"></span><span className="w-3 h-3 rounded-full bg-yellow-400"></span><span className="w-3 h-3 rounded-full bg-green-500"></span></div>
+                            <span className="ml-2 text-[11px] font-mono text-gray-600 flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-[#00D9FF] animate-pulse" /> Live Preview • hot reload</span>
+                            <span className="ml-auto text-[11px] font-mono text-gray-400 hidden sm:inline">srcDoc = codeValue • no server</span>
                           </div>
                           <iframe title="Live Preview" srcDoc={codeValue} sandbox="allow-scripts allow-same-origin" className="flex-1 w-full border-0 bg-white" />
                         </div>
                       ) : watchPanelTab==="ai" ? (
-                        <div className="flex-1 flex flex-col min-h-0 p-3 sm:p-4 bg-[#0B0215]">
-                          <div className="flex-1 overflow-y-auto space-y-3 mb-3 pr-1 scrollbar-hide">
+                        <div className="flex-1 flex flex-col min-h-0 bg-[#0B0215] relative">
+                          <div className="px-3 py-2 bg-[#1a1030] border-b border-[#A855F7]/20 flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-gradient-to-r from-[#A855F7] to-[#FFD700] text-white flex items-center justify-center text-xs">✦</span>
+                            <span className="text-xs font-bold text-[#A855F7] tracking-wide">Vibe AI • edit_file → Preview</span>
+                            <span className="ml-auto w-2 h-2 rounded-full bg-[#A855F7] animate-pulse" />
+                          </div>
+                          <div className="flex-1 overflow-y-auto space-y-3 p-3 sm:p-4 pr-1 scrollbar-hide">
                             {aiChatMessages.map((m,i)=>(
-                              <div key={i} className={`p-3 sm:p-3.5 rounded-2xl text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap break-words ${m.role==="user" ? "bg-[#FFD700] text-black font-medium ml-auto shadow-md" : "bg-[#1a1a2e] text-gray-200 mr-auto border border-white/10"}`}>{m.text.replace(/<edit_file[^>]*>[\s\S]*?<\/edit_file>/g, "[Vibe edit applied → Preview]").trim()}</div>
+                              <div key={i} className={`p-3 sm:p-3.5 rounded-2xl text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap break-words ${m.role==="user" ? "bg-[#FFD700] text-black font-medium ml-auto shadow-md" : "bg-[#1a102e] text-gray-200 mr-auto border border-[#A855F7]/20"}`}>{m.text.replace(/<edit_file[^>]*>[\s\S]*?<\/edit_file>/g, "[Vibe edit applied → Preview]").trim()}</div>
                             ))}
                           </div>
-                          <div className="flex gap-2 sm:gap-3">
-                            <input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter" && handleAiSend()} placeholder="Ask AI to edit code — e.g. make a gold button..." className="flex-1 min-h-[44px] bg-[#1a1a2e] border border-white/10 rounded-full sm:rounded-xl px-4 sm:px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700] focus:ring-1 focus:ring-[#FFD700]/20" />
-                            <button onClick={handleAiSend} className="min-h-[44px] min-w-[72px] px-5 sm:px-6 py-3 bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold text-sm rounded-full sm:rounded-xl hover:scale-105 active:scale-95 transition shadow-lg flex-shrink-0">Send</button>
+                          <div className="p-3 sm:p-4 border-t border-white/5 bg-[#0B0215]">
+                            <div className="flex gap-2 sm:gap-3">
+                              <input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter" && handleAiSend()} placeholder="Ask AI to edit code — e.g. make a gold button..." className="flex-1 min-h-[44px] bg-[#1a1a2e] border border-[#A855F7]/20 rounded-full sm:rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#A855F7] focus:ring-1 focus:ring-[#A855F7]/20" />
+                              <button onClick={handleAiSend} className="min-h-[44px] min-w-[72px] px-5 sm:px-6 py-3 bg-gradient-to-r from-[#A855F7] to-[#FFD700] text-white font-bold text-sm rounded-full sm:rounded-xl hover:scale-105 active:scale-95 transition shadow-lg flex-shrink-0">Send</button>
+                            </div>
+                            <p className="text-[10px] text-gray-500 font-mono text-center mt-2">AI writes &lt;edit_file&gt; → Code updates → Preview hot reloads</p>
                           </div>
-                          <p className="text-[10px] text-gray-500 font-mono text-center mt-2">Vibe: AI writes &lt;edit_file path="..."&gt; → Preview updates</p>
                         </div>
                       ) : (
-                        <div className="flex-1 min-h-0 bg-[#0B0215] flex flex-col">
-                          <div ref={terminalRef} className="flex-1 min-h-0 p-1 sm:p-2 bg-[#0B0215] overflow-hidden" style={{ minHeight: "300px" }} />
-                          {!terminalReady && <div className="px-3 py-2 text-xs font-mono text-gray-500 bg-[#0B0215] border-t border-white/10">Booting WebContainer… alphatekx:~$</div>}
-                          <div className="px-3 py-1.5 bg-[#1a1a2e] border-t border-white/10 text-[11px] font-mono text-gray-500 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-[#00FF88] animate-pulse" /> Terminal • WebContainer • zero-cost
-                            <span className="hidden sm:inline text-gray-600">• echo hello, ls, node --version</span>
+                        <div className="flex-1 min-h-0 bg-[#000000] flex flex-col">
+                          <div className="px-3 py-2 bg-[#0a0a0a] border-b border-[#00FF88]/20 flex items-center gap-2">
+                            <div className="flex gap-1.5"><span className="w-3 h-3 rounded-full bg-red-500"></span><span className="w-3 h-3 rounded-full bg-yellow-400"></span><span className="w-3 h-3 rounded-full bg-green-500"></span></div>
+                            <span className="ml-2 text-xs font-mono text-[#00FF88] flex items-center gap-1.5"><span className="font-mono">&gt;_</span> Terminal • alphatekx:~$</span>
+                            <span className="ml-auto w-2 h-2 rounded-full bg-[#00FF88] animate-pulse" />
+                          </div>
+                          <div ref={terminalRef} className="flex-1 min-h-0 p-2 bg-black overflow-hidden font-mono" style={{ minHeight: "300px" }} />
+                          {!terminalReady && <div className="px-3 py-2 text-xs font-mono text-[#00FF88]/70 bg-black border-t border-[#00FF88]/10">Booting WebContainer… initializing jsh</div>}
+                          <div className="px-3 py-1.5 bg-[#0a0a0a] border-t border-[#00FF88]/10 text-[11px] font-mono text-[#00FF88]/60 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-[#00FF88] animate-pulse" /> WebContainer • zero-cost • browser
+                            <span className="hidden sm:inline text-gray-600">• echo hello works</span>
                           </div>
                         </div>
                       )}
