@@ -1821,14 +1821,19 @@ export const defaultConfig: AgentConfig = {
         </div>
       )}
 
-      {/* HEADER — exact like image 100%: Alphatekx Stream | Search | bell settings A */}
-      <header className="h-[56px] flex-shrink-0 bg-[#0f0f1f] border-b border-white/10 px-4 sm:px-6 flex items-center justify-between gap-4 z-40 relative">
-        <div onClick={()=>setActiveTab("watch")} className="flex items-center gap-2.5 cursor-pointer flex-shrink-0">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FFD700] to-[#F59E0B] flex items-center justify-center border border-white/10">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 4.8 5.2.8-3.8 3.7.9 5.2L12 14.5l-4.7 2.5.9-5.2L4.4 7.6l5.2-.8L12 2z" fill="white"/><circle cx="12" cy="12" r="2" fill="#0f0f1f"/></svg>
+      {/* HEADER — exact like image 100% + hamburger for sidebar */}
+      <header className="h-[56px] flex-shrink-0 bg-[#0f0f1f] border-b border-white/10 px-2 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 z-40 relative">
+        <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          <button onClick={handleHamburgerClick} className="w-9 h-9 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-300 hover:text-white transition" title="Toggle sidebar">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+          </button>
+          <div onClick={()=>setActiveTab("watch")} className="flex items-center gap-2.5 cursor-pointer flex-shrink-0">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-[#FFD700] to-[#F59E0B] flex items-center justify-center border border-white/10">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M12 2l2.4 4.8 5.2.8-3.8 3.7.9 5.2L12 14.5l-4.7 2.5.9-5.2L4.4 7.6l5.2-.8L12 2z" fill="white"/><circle cx="12" cy="12" r="2" fill="#0f0f1f"/></svg>
+            </div>
+            <span className="font-extrabold text-[20px] tracking-tight text-white hidden sm:inline">Alphatekx</span>
+            <span className="font-light text-[20px] tracking-tight text-white/80 hidden sm:inline">Stream</span>
           </div>
-          <span className="font-extrabold text-[20px] tracking-tight text-white">Alphatekx</span>
-          <span className="font-light text-[20px] tracking-tight text-white/80">Stream</span>
         </div>
         <div className="hidden sm:flex flex-1 max-w-[560px] mx-6">
           <div className="relative w-full">
@@ -2073,13 +2078,7 @@ export const defaultConfig: AgentConfig = {
                   <div className="relative bg-[#0f0f1f] rounded-2xl overflow-hidden border border-[#FFD700]/20 shadow-[0_0_40px_rgba(255,215,0,0.15)]">
                     <div className="aspect-video relative bg-black">
                       <iframe ref={iframeRef} src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0${(activeVideo.id===DEFAULT_VIDEO.id)?"&autoplay=1&mute=1&playsinline=1":""}`} title={activeVideo.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-                      <div className="absolute bottom-10 right-4 z-20"><button onClick={()=>setWatchPanelOpen(true)} className="px-5 py-2.5 rounded-full bg-[#FFD700] text-black font-extrabold text-sm shadow-lg hover:scale-105 transition">Open AI Workspace →</button></div>
-                      <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-4 py-3 flex items-center gap-3">
-                        <button className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white">❚❚</button>
-                        <div className="flex-1 h-1 bg-white/20 rounded-full relative"><div className="absolute left-0 top-0 h-full bg-[#2af5ff] rounded-full" style={{width:'52%'}}><div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-[#2af5ff] rounded-full border-2 border-white"></div></div></div>
-                        <span className="text-xs font-mono text-white">14:32 / 28:10</span>
-                        <span className="hidden sm:flex gap-2 text-white/70"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/></svg><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 009 15a1.65 1.65 0 001-1.51V13a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 9a1.65 1.65 0 001-1.51V7a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 9a1.65 1.65 0 00-1 1.51V13a1.65 1.65 0 001 1.51z"/></svg><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M8 3H5a2 2 0 00-2 2v3m18 0V5a2 2 0 00-2-2h-3m0 18h3a2 2 0 002-2v-3M3 16v3a2 2 0 002 2h3"/></svg></span>
-                      </div>
+                      <div className="absolute bottom-4 right-4 z-20"><button onClick={()=>setWatchPanelOpen(true)} className="px-5 py-2.5 rounded-full bg-[#FFD700] text-black font-extrabold text-sm shadow-lg hover:scale-105 transition">Open AI Workspace →</button></div>
                       {activeCheckpoint && (<div className="absolute inset-0 bg-[#0B0215]/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-30 rounded-2xl"><div className="w-14 h-14 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center text-2xl mb-3 animate-pulse">🔒</div><h3 className="text-white font-extrabold text-lg">{activeCheckpoint.title}</h3><p className="text-[#FFD700] text-sm mt-1">Creator paused at {activeCheckpoint.time}s</p><p className="text-gray-300 text-sm mt-2">{activeCheckpoint.task}</p><button onClick={()=>{setWatchPanelOpen(true);setWatchPanelTab("code");}} className="mt-4 px-6 py-2.5 rounded-full bg-[#FFD700] text-black font-bold text-sm animate-pulse">Go to Code →</button></div>)}
                     </div>
                   </div>
@@ -2134,12 +2133,7 @@ export const defaultConfig: AgentConfig = {
                     <div className="aspect-video relative bg-black">
                       <div className="absolute top-3 left-3 z-20 bg-black/60 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-[#FFD700] flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Live • AI Agents Network Visualization</div>
                       <iframe src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0`} title={activeVideo.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-3 py-2 flex items-center gap-2">
-                        <button className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white">❚❚</button>
-                        <span className="text-xs font-mono text-white/70">02:18 / 06:42</span>
-                        <div className="flex-1 h-1 bg-white/20 rounded-full"><div className="h-full bg-[#FFD700] rounded-full" style={{width:'35%'}}></div></div>
-                        <span className="text-white/70">🔊 ⛶ ⋯</span>
-                      </div>
+
                     </div>
                   </div>
                 </div>
