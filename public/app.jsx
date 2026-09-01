@@ -219,17 +219,23 @@ const SignInButton = () => {
     </button>
   );
 };
-const GuestOverlay = ({ children, message }) => (
-  <div className="relative">
-    {children}
-    <div className="absolute inset-0 bg-[#0B0215]/80 backdrop-blur-sm flex items-center justify-center rounded-xl z-10">
-      <div className="text-center p-6">
-        <p className="text-white text-lg font-semibold">{message || 'Sign in to interact'}</p>
-        <div className="mt-4"><SignInButton /></div>
+const GuestOverlay = ({ children, message }) => {
+  const handle = async () => {
+    try { const r = await fetch('/api/auth/url'); const d = await r.json(); if(d.url) { window.location.href=d.url; return; } } catch {}
+    window.location.href='/api/auth/url';
+  };
+  return (
+    <div className="relative">
+      {children}
+      <div className="absolute inset-0 bg-[#0B0215]/70 backdrop-blur-[2px] flex items-center justify-center rounded-xl z-10">
+        <div className="text-center p-3">
+          <p className="text-white/90 text-sm font-medium">{message || 'Sign in to interact'}</p>
+          <button onClick={handle} className="mt-1.5 text-[#FFD700] text-xs font-bold hover:underline">Sign in →</button>
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 // --- PROMPT #3: DEFAULT VIDEO (YOUR VIDEO) — plays first, helps grow YouTube channel ---
 const DEFAULT_VIDEO = {
@@ -2172,10 +2178,8 @@ function App() {
                     </div>
                   )}
                   {isGuest && (
-                    <div className="glass-card p-5 text-center space-y-3 border border-[#FFD700]/20">
-                      <p className="text-sm text-white font-bold">Sign in to unlock personalized feed</p>
-                      <p className="text-xs text-gray-400">Your YouTube channel becomes your Alphatekx profile</p>
-                      <SignInButton />
+                    <div className="glass-card p-4 text-center border border-white/10">
+                      <p className="text-xs text-gray-400">Sign in from header to see your personalized YouTube feed</p>
                     </div>
                   )}
 
@@ -3332,7 +3336,7 @@ function App() {
                   <p className="text-xs text-gray-300 mt-1 max-w-xl">{profileData?.bio || "Browsing as Guest — sign up coming soon. Your history is saved locally."}</p>
                 </div>
                 {profileData?.isGuest ? (
-                  <SignInButton />
+                  <div className="px-4 py-2 rounded-full bg-white/5 border border-white/10 text-xs text-gray-400 flex-shrink-0">Guest — sign in via header ↑</div>
                 ) : (
                   <div className="flex items-center gap-2 flex-shrink-0">
                     <button onClick={()=>setIsEditingProfile(!isEditingProfile)} className="px-5 py-2 rounded-full bg-[#272727] hover:bg-[#383838] text-xs font-bold text-white border border-white/10">
