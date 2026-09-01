@@ -2170,20 +2170,21 @@ export const defaultConfig: AgentConfig = {
                     </div>
                     <div className="flex-1 min-h-0 flex flex-col bg-[#0B0215]">
                       {watchPanelTab==="code" && (
-                        <div className="flex-1 flex flex-col min-h-0">
-                          <div className="flex-1 p-4 overflow-auto font-mono text-sm leading-6 bg-[#0a0a14]">
-                            <div className="flex gap-4">
-                              <div className="text-gray-600 select-none text-right leading-6">{codeValue.split('\n').map((_,i)=>(<div key={i}>{i+1}</div>))}</div>
-                              <pre className="flex-1 text-[#d4d4d4] whitespace-pre-wrap break-words">{codeValue}</pre>
-                            </div>
+                        <div className="flex-1 flex flex-col min-h-0 bg-[#0B0215]">
+                          {/* Editor toolbar */}
+                          <div className="flex items-center gap-2 px-3 py-2 bg-[#1a1a24] border-b border-white/10 text-xs font-mono text-gray-300">
+                            <span className="text-[#FFD700] font-bold">AgentConfig.ts</span>
+                            <span className="text-gray-500">▸ TypeScript</span>
+                            <span className="ml-auto text-green-400">● Live</span>
                           </div>
-                          <div className="hidden"><textarea value={codeValue} onChange={e=>setCodeValue(e.target.value)} className="w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-sm p-4 resize-none focus:outline-none" /></div>
-                          <div ref={monacoRef} className="hidden"></div>
-                          <div className="px-3 py-2 bg-[#0a0a14] border-t border-white/10 flex items-center justify-between text-xs font-mono text-gray-500">
-                            <span>ts • AgentConfig.ts • unsaved</span>
-                            <span className="hidden sm:inline">Press Run to execute</span>
+                          <div ref={monacoRef} className="flex-1 min-h-0 overflow-auto bg-[#0B0215] p-4 font-mono text-sm leading-6 text-[#d4d4d4] whitespace-pre-wrap break-words" contentEditable suppressContentEditableWarning onInput={(e)=>{ const html=e.currentTarget.innerHTML; const text=html.replace(/<br>/gi,"\n").replace(/<div>/gi,"\n").replace(/<\/div>/gi,""); setCodeValue(text); }}>
+                            {codeValue}
                           </div>
-                          <button onClick={()=>{ showToast("Running AgentConfig..."); try{ eval(codeValue); }catch(e){ showToast("Run: "+e.message); } }} className="m-3 py-3.5 rounded-xl bg-[#FFD700] text-black font-extrabold text-lg flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition shadow-lg">▶ Run</button>
+                          <div className="px-3 py-2 bg-[#1a1a24] border-t border-white/10 flex items-center justify-between text-xs font-mono text-gray-400">
+                            <span>Line {codeValue.split('\n').length} • Live • HTML/TS</span>
+                            <button onClick={()=>{ setCodeValue(`interface AgentConfig {\n  name: string;\n  role: "planner" | "executor" | "researcher";\n  model: string;\n  maxRetries?: number;\n  tools: string[];\n  memory?: { type: "ephemeral" | "persistent"; capacity: number };\n}\n\nexport const defaultConfig: AgentConfig = {\n  name: "AlphatekxAgent",\n  role: "planner",\n  model: "gpt-4o",\n  tools: ["search", "code"],\n};`); showToast("AgentConfig reset — ready to code!"); }} className="min-h-[32px] px-3 rounded-full bg-[#FFD700]/10 text-[#FFD700] hover:bg-[#FFD700]/20 text-xs font-bold">Reset to AgentConfig</button>
+                          </div>
+                          <button onClick={()=>{ showToast("Running AgentConfig..."); try{ eval(codeValue); }catch(e){ showToast("Run: "+e.message); } }} className="m-3 py-3.5 rounded-xl bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-extrabold text-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition flex items-center justify-center gap-2">▶ Run</button>
                         </div>
                       )}
                       {watchPanelTab==="preview" && (<iframe title="Live Preview" srcDoc={codeValue.trim().startsWith("<!DOCTYPE") || codeValue.trim().startsWith("<html") ? codeValue : `<!DOCTYPE html><html><head><style>body{background:#0f0f1f;color:#d4d4d4;font-family:monospace;padding:16px;white-space:pre-wrap;word-break:break-word} pre{margin:0}</style></head><body><pre>${codeValue.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</pre></body></html>`} sandbox="allow-scripts allow-same-origin" className="flex-1 w-full border-0 bg-white" />)}
