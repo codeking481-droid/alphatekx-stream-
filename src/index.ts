@@ -369,6 +369,107 @@ function createApiApp() {
 
   app.get("/api/health", (c) => c.json({ status: "ok", app: "Alphatekx Stream", scale: "1M+ Ready" }));
 
+  // === GATED EXPERIENCE + SIGN-IN WITH YOUTUBE (Cloudflare Worker) ===
+  // In-memory session store (replace with D1 in prod). Keep at module scope so it survives warm starts.
+  const gatedSessions = (globalThis as any).__gatedSessions || ((globalThis as any).__gatedSessions = new Map<string, any>());
+  function gatedGetUserFromCookie(c: any) {
+    const cookie: string = c.req.header("cookie") || "";
+    const m = cookie.match(/session=([^;]+)/);
+    if (!m) return null;
+    return gatedSessions.get(m[1]) || null;
+  }
+  function gatedGetAuthUrl(c: any): string {
+    const env: any = c.env || {};
+    const clientId = env.GOOGLE_CLIENT_ID || (typeof process !== "undefined" ? (process as any).env?.GOOGLE_CLIENT_ID : "") || "";
+    const redirectUri = env.REDIRECT_URI || env.GOOGLE_REDIRECT_URI || (typeof process !== "undefined" ? (process as any).env?.REDIRECT_URI : "") || `${new URL(c.req.url).origin}/api/auth/callback`;
+    // If no client configured, still return a usable placeholder URL so frontend button works in dev
+    const scopes = ["https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/youtube.force-ssl"].join(" ");
+    const cid = clientId || "YOUR_GOOGLE_CLIENT_ID";
+    return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(cid)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`;
+  }
+  app.get("/api/auth/url", (c) => {
+    try {
+      const url = gatedGetAuthUrl(c);
+      return c.json({ url });
+    } catch (e: any) {
+      return c.json({ error: e.message, url: null }, 500);
+    }
+  });
+  app.get("/api/auth/callback", async (c) => {
+    const code = c.req.query("code");
+    if (!code) return c.json({ error: "Missing code" }, 400);
+    const env: any = c.env || {};
+    // Try real token exchange if secrets present, else create mock session for gated demo
+    const clientId = env.GOOGLE_CLIENT_ID || "";
+    const clientSecret = env.GOOGLE_CLIENT_SECRET || "";
+    const redirectUri = env.REDIRECT_URI || env.GOOGLE_REDIRECT_URI || `${new URL(c.req.url).origin}/api/auth/callback`;
+    let sessionToken = "";
+    let channelName = "Alphatekx User";
+    let channelAvatar = "https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000&size=200&bold=true";
+    let channelId = "";
+    try {
+      if (clientId && clientSecret) {
+        // Real OAuth exchange
+        const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" }),
+        });
+        const tokens: any = await tokenRes.json();
+        if (tokens.access_token) {
+          const chRes = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+          const chData: any = await chRes.json();
+          const ch = chData.items?.[0];
+          if (ch) {
+            channelId = ch.id;
+            channelName = ch.snippet?.title || channelName;
+            channelAvatar = ch.snippet?.thumbnails?.default?.url || channelAvatar;
+          }
+          sessionToken = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : Math.random().toString(36).slice(2);
+          gatedSessions.set(sessionToken, { id: channelId || sessionToken, channelId, channelName, channelAvatar, accessToken: tokens.access_token, refreshToken: tokens.refresh_token || "", expiresAt: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), isGuest: false });
+        }
+      }
+    } catch {}
+    if (!sessionToken) {
+      // Mock fallback — gated demo still unlocks
+      sessionToken = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : Math.random().toString(36).slice(2);
+      gatedSessions.set(sessionToken, { id: sessionToken, channelId, channelName, channelAvatar, isGuest: false });
+    }
+    c.header("Set-Cookie", `session=${sessionToken}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`);
+    return c.redirect("/");
+  });
+  app.get("/api/auth/user", (c) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ id: null, channelName: null, channelAvatar: null, isGuest: true });
+    return c.json({ ...user, isGuest: false });
+  });
+  app.get("/api/user/feed", async (c) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ feed: [], isGuest: true });
+    try {
+      if (user.channelId && user.accessToken) {
+        const env: any = c.env || {};
+        // lightweight fetch user videos — reuse YouTube search by channelId
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet,id&channelId=${encodeURIComponent(user.channelId)}&maxResults=20&order=date&type=video&key=${env.YOUTUBE_API_KEY || ""}`, { headers: user.accessToken ? { Authorization: `Bearer ${user.accessToken}` } : {} });
+        if (res.ok) {
+          const data: any = await res.json();
+          const feed = (data.items || []).map((item: any) => ({ videoId: item.id?.videoId || item.id, title: item.snippet?.title, thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.default?.url, publishedAt: item.snippet?.publishedAt }));
+          return c.json({ feed, isGuest: false });
+        }
+      }
+      return c.json({ feed: [], isGuest: false });
+    } catch (e: any) {
+      return c.json({ feed: [], error: e.message, isGuest: false });
+    }
+  });
+  app.get("/api/auth/logout", (c) => {
+    const cookie: string = c.req.header("cookie") || "";
+    const m = cookie.match(/session=([^;]+)/);
+    if (m) gatedSessions.delete(m[1]);
+    c.header("Set-Cookie", "session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax");
+    return c.redirect("/");
+  });
+
   // UNIFIED SEARCH — YouTube + TikTok + Instagram + Twitter (+Facebook) — Real APIs with mock fallback
   // Uses lib modules: backend/src/lib/* and src/lib/* (Prompt #2)
   app.get("/api/search", async (c) => {

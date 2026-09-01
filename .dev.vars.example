@@ -2,10 +2,14 @@ YOUTUBE_API_KEY=PASTE_HERE
 TIKHUB_API_KEY=PASTE_HERE
 INSTAGRAM_ACCESS_TOKEN=PASTE_HERE
 TWITTER_BEARER_TOKEN=PASTE_HERE
+GOOGLE_CLIENT_ID=PASTE_HERE
+GOOGLE_CLIENT_SECRET=PASTE_HERE
+REDIRECT_URI=http://localhost:8787/api/auth/callback
 # Get keys:
 # YOUTUBE_API_KEY at https://console.cloud.google.com/apis/credentials -> Create API Key -> Enable YouTube Data API v3
 # TIKHUB_API_KEY at https://tikhub.io (or TikTok API) -> Dashboard -> Copy token
 # INSTAGRAM_ACCESS_TOKEN at https://developers.facebook.com -> Instagram Graph API -> Generate token
 # TWITTER_BEARER_TOKEN at https://developer.twitter.com -> Project -> Keys and tokens -> Bearer token
-# Then run: bunx wrangler secret put YOUTUBE_API_KEY (repeat for TIKHUB_API_KEY, INSTAGRAM_ACCESS_TOKEN, TWITTER_BEARER_TOKEN)
+# Then run: bunx wrangler secret put YOUTUBE_API_KEY (repeat for TIKHUB_API_KEY, INSTAGRAM_ACCESS_TOKEN, TWITTER_BEARER_TOKEN, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET)
+# For OAuth redirect, also set REDIRECT_URI to https://your-domain.com/api/auth/callback
 # And for local dev: cp .dev.vars.example .dev.vars and paste real keys

@@ -14,6 +14,8 @@ import { translateVoice } from "./lib/voiceTranslator.js";
 import { calculateFees, createProduct, getProduct, purchaseProduct, getSalesForSeller, getSalesSummary } from "./lib/marketplace.js";
 import { processPayment, createCheckoutSession } from "./lib/stripe.js";
 import { fetchChannelInfo, fetchChannelVideos, CHANNEL_ID as OFFICIAL_CHANNEL_ID, CHANNEL_NAME as OFFICIAL_CHANNEL_NAME, CHANNEL_HANDLE as OFFICIAL_CHANNEL_HANDLE } from "./lib/channel.js";
+import { getAuthUrl, handleCallback } from "./lib/auth.js";
+import { fetchUserVideos } from "./lib/userVideos.js";
 
 let backendProducts = [
   { id: 1, name: 'AI Neural Net Model Pack', description: 'Pre-trained PyTorch checkpoint & CUDA optimized dataset', price: 9.99, badge: 'BESTSELLER', iconType: 'cpu', sellerEmail: 'dev@alphatekx.ai', fileUrl: 'https://github.com/alphatekx/model-pack.zip', salesCount: 342, category: 'app', tags: 'python,pytorch,ai', createdAt: Date.now() },
@@ -28,29 +30,61 @@ export function createApiApp(env = {}) {
 
   app.get("/api/health", (c) => c.json({ status: "ok", app: "Alphatekx Stream", unified: true }));
 
-  // Auth endpoints — Gated experience
-  import { getAuthUrl, handleCallback } from './lib/auth.js';
-  import { fetchUserVideos } from './lib/userVideos.js';
-
-  app.get("/api/auth/url", (c) => c.json({ url: getAuthUrl() }));
-  app.get("/api/auth/callback", async (c) => {
-    const code = c.req.query("code");
-    const sessionToken = await handleCallback(code);
-    c.header("Set-Cookie", `session=${sessionToken}; HttpOnly; Path=/; Max-Age=86400`);
-    return c.redirect("/");
-  });
-  app.get("/api/auth/user", (c) => {
+  // Auth endpoints — Gated experience (simple in-memory session store)
+  const sessions = new Map();
+  function getUserFromCookie(c) {
     const cookie = c.req.header("cookie") || "";
     const match = cookie.match(/session=([^;]+)/);
-    // Placeholder session lookup; return user if found
-    return c.json({ id: match ? match[1] : null, channelName: "Alphatekx User", isGuest: !match });
+    if (!match) return null;
+    const userId = match[1];
+    // Return user if session matches (placeholder — replace with D1 lookup)
+    return sessions.get(userId) || null;
+  }
+
+  app.get("/api/auth/url", (c) => {
+    try {
+      return c.json({ url: getAuthUrl() });
+    } catch (e) {
+      return c.json({ error: e.message, url: null }, 500);
+    }
+  });
+  app.get("/api/auth/callback", async (c) => {
+    const code = c.req.query("code");
+    if (!code) return c.json({ error: "Missing code" }, 400);
+    try {
+      const sessionToken = await handleCallback(code);
+      // store minimal user in session — handleCallback already persists via storeUser/storeSession placeholders
+      sessions.set(sessionToken, { id: sessionToken, channelId: sessionToken, channelName: "Alphatekx User", channelAvatar: `https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000`, isGuest: false });
+      c.header("Set-Cookie", `session=${sessionToken}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`);
+      return c.redirect("/");
+    } catch (e) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+  app.get("/api/auth/user", (c) => {
+    const user = getUserFromCookie(c);
+    if (!user) return c.json({ id: null, channelName: null, channelAvatar: null, isGuest: true });
+    return c.json({ ...user, isGuest: false });
   });
   app.get("/api/user/feed", async (c) => {
-    // Placeholder personalized feed using user videos
-    return c.json({ feed: [] });
+    const user = getUserFromCookie(c);
+    if (!user) return c.json({ feed: [], isGuest: true });
+    try {
+      // If user has tokens stored, fetch personalized feed via YouTube. Fallback to empty if no token.
+      if (user.channelId && user.accessToken) {
+        const feed = await fetchUserVideos(user.channelId, user.accessToken);
+        return c.json({ feed, isGuest: false });
+      }
+      return c.json({ feed: [], isGuest: false });
+    } catch (e) {
+      return c.json({ feed: [], error: e.message, isGuest: false });
+    }
   });
   app.get("/api/auth/logout", (c) => {
-    c.header("Set-Cookie", "session=; HttpOnly; Path=/; Max-Age=0");
+    const cookie = c.req.header("cookie") || "";
+    const match = cookie.match(/session=([^;]+)/);
+    if (match) sessions.delete(match[1]);
+    c.header("Set-Cookie", "session=; HttpOnly; Path=/; Max-Age=0; SameSite=Lax");
     return c.redirect("/");
   });
 

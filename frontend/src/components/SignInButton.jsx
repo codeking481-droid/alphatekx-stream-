@@ -1,5 +1,14 @@
 export const SignInButton = () => {
-  const handleSignIn = () => {
+  const handleSignIn = async () => {
+    try {
+      const res = await fetch('/api/auth/url');
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+    } catch {}
+    // fallback — direct hit (backend will redirect if configured as redirect)
     window.location.href = '/api/auth/url';
   };
 
