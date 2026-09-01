@@ -1,0 +1,80 @@
+// src/lib/twitter.ts — Twitter/X v2 API + mock fallback
+
+function toUnified(v: any) {
+  return {
+    source: "twitter",
+    platform: "twitter",
+    id: v.platformId || v.youtubeId,
+    youtubeId: v.youtubeId || v.platformId,
+    platformId: v.platformId || v.youtubeId,
+    title: v.title,
+    thumbnail: v.thumbnailUrl,
+    thumbnailUrl: v.thumbnailUrl,
+    channel: { name: v.channelName, id: v.handle || v.channelName },
+    channelName: v.channelName,
+    channelId: v.handle || v.channelName,
+    handle: v.handle,
+    views: v.viewsRaw ?? v.views,
+    viewsFormatted: v.views,
+    duration: v.duration,
+    category: v.category || "Tech",
+    platformMeta: { label: "Twitter", badge: "X", color: "#1DA1F2", bg: "rgba(29,161,242,0.9)" },
+  };
+}
+
+export function getMockTwitterCatalog() {
+  return [
+    { platform: "twitter", youtubeId: "tw_001", platformId: "TW001", title: "Twitter Video: Workers 2.0 launch thread — 100k rps on one shard", channelName: "@cloudflare", handle: "@cloudflare", thumbnailUrl: "https://images.unsplash.com/photo-1611605698335-8b1569810432?auto=format&fit=crop&w=600&q=80", views: "150K views", viewsRaw: 150000, duration: "1:32", category: "Cloudflare Workers" },
+    { platform: "twitter", youtubeId: "tw_002", platformId: "TW002", title: "Demo: realtime translation tweet-dubbed to Yoruba", channelName: "@naija_ai", handle: "@naija_ai", thumbnailUrl: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80", views: "88K views", viewsRaw: 88000, duration: "0:45", category: "Naija Dialects" },
+    { platform: "twitter", youtubeId: "tw_003", platformId: "TW003", title: "Thread: How attention is all you need (video)", channelName: "@ai_papers", handle: "@ai_papers", thumbnailUrl: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80", views: "210K views", viewsRaw: 210000, duration: "2:10", category: "AI Superpowers" },
+    { platform: "twitter", youtubeId: "tw_004", platformId: "TW004", title: "Naija Tech Twitter Spaces recap — funding round 🇳🇬", channelName: "@tech_naija", handle: "@tech_naija", thumbnailUrl: "https://images.unsplash.com/photo-1611162618071-b39a2ec055fb?auto=format&fit=crop&w=600&q=80", views: "95K views", viewsRaw: 95000, duration: "0:58", category: "Tech" },
+  ];
+}
+
+export async function searchTwitter(query: string, bearerToken?: string): Promise<{ videos: any[]; isMock: boolean; error?: string }> {
+  const catalog = getMockTwitterCatalog();
+  const qLower = (query || "").toLowerCase();
+  const filter = (arr: any[]) => arr.filter(v => !query || v.title.toLowerCase().includes(qLower) || v.channelName.toLowerCase().includes(qLower) || v.category.toLowerCase().includes(qLower));
+
+  if (!bearerToken) {
+    return { videos: filter(catalog).map(toUnified), isMock: true };
+  }
+
+  try {
+    // Twitter v2 recent search with media expansions. Query must include has:media or has:videos for video results
+    const q = query ? `${query} has:videos` : "AI has:videos";
+    const res = await fetch(`https://api.twitter.com/2/tweets/search/recent?query=${encodeURIComponent(q)}&max_results=12&expansions=author_id,attachments.media_keys&media.fields=url,preview_image_url,duration_ms,public_metrics&tweet.fields=public_metrics,created_at&user.fields=name,username`, {
+      headers: { Authorization: `Bearer ${bearerToken}` },
+    });
+    if (!res.ok) throw new Error(`Twitter ${res.status}`);
+    const data: any = await res.json();
+    const tweets = data.data || [];
+    const users = data.includes?.users || [];
+    const media = data.includes?.media || [];
+    const userMap = new Map(users.map((u: any) => [u.id, u]));
+    const mediaMap = new Map(media.map((m: any) => [m.media_key, m]));
+    if (!Array.isArray(tweets) || tweets.length === 0) throw new Error("empty twitter response");
+    const videos = tweets.map((tw: any, idx: number) => {
+      const author = userMap.get(tw.author_id) as any;
+      const mKey = tw.attachments?.media_keys?.[0];
+      const m = mKey ? mediaMap.get(mKey) as any : null;
+      const views = tw.public_metrics?.impression_count || tw.public_metrics?.retweet_count * 100 || 50000;
+      return toUnified({
+        platformId: tw.id,
+        youtubeId: `tw_${tw.id}`,
+        title: tw.text ? tw.text.slice(0, 100) : "Twitter Video",
+        channelName: author ? `@${author.username}` : "@twitter_creator",
+        handle: author ? `@${author.username}` : "@twitter_creator",
+        thumbnailUrl: m?.preview_image_url || m?.url || `https://images.unsplash.com/photo-1611605698335-8b1569810432?auto=format&fit=crop&w=600&q=80`,
+        views: views >= 1000000 ? `${(views/1000000).toFixed(1)}M views` : views >= 1000 ? `${Math.round(views/1000)}K views` : `${views} views`,
+        viewsRaw: views,
+        duration: m?.duration_ms ? `0:${String(Math.round(m.duration_ms/1000)%60).padStart(2,"0")}` : "0:45",
+        category: "Tech",
+      });
+    });
+    return { videos, isMock: false };
+  } catch (e: any) {
+    console.warn("[twitter] real fetch failed, falling back to mock:", e?.message || e);
+    return { videos: filter(catalog).map(toUnified), isMock: true, error: e.message };
+  }
+}

@@ -1,8 +1,25 @@
 import { DurableObject } from "cloudflare:workers";
 import { Hono } from "hono";
+import { searchYouTube as libSearchYouTube } from "./lib/youtube.js";
+import { searchTikTok as libSearchTikTok } from "./lib/tiktok.js";
+import { searchInstagram as libSearchInstagram } from "./lib/instagram.js";
+import { searchTwitter as libSearchTwitter } from "./lib/twitter.js";
+import { aggregateResults as libAggregate, getMockFacebookCatalog } from "./lib/aggregator.js";
+import { createClip as libCreateClip } from "./lib/clipMaker.js";
+import { enhanceThumbnail as libEnhanceThumbnail } from "./lib/thumbnailEnhancer.js";
+import { translateVoice as libTranslateVoice } from "./lib/voiceTranslator.js";
+import { calculateFees as libCalcFees, createProduct as libCreateProduct, getProduct as libGetProduct, purchaseProduct as libPurchaseProduct, getSalesForSeller as libGetSales, getSalesSummary as libSalesSummary } from "./lib/marketplace.js";
+import { processPayment as libStripePay, createCheckoutSession as libStripeCheckout } from "./lib/stripe.js";
+import { fetchChannelInfo as libFetchChannelInfo, fetchChannelVideos as libFetchChannelVideos, CHANNEL_ID as OFFICIAL_CHANNEL_ID, CHANNEL_NAME as OFFICIAL_CHANNEL_NAME, CHANNEL_HANDLE as OFFICIAL_CHANNEL_HANDLE } from "./lib/channel.js";
 
 interface Env {
   YOUTUBE_API_KEY?: string;
+  TIKHUB_API_KEY?: string;
+  TIKTOK_API_KEY?: string;
+  INSTAGRAM_ACCESS_TOKEN?: string;
+  TWITTER_BEARER_TOKEN?: string;
+  FACEBOOK_ACCESS_TOKEN?: string;
+  STRIPE_SECRET_KEY?: string;
 }
 
 function parseIsoDuration(iso?: string): string {
@@ -44,6 +61,9 @@ let inMemoryProducts = [
   { id: 4, name: 'TikTok & YouTube Unified Queue SDK', description: 'JavaScript library to sync queue states & embeds between YouTube & TikTok players.', price: 4.99, badge: 'PRO', iconType: 'layers', sellerEmail: 'sdk@alphatekx.ai', fileUrl: 'https://github.com/alphatekx/queue-sdk.zip', salesCount: 521, category: 'plugin', tags: 'queue,tiktok,youtube', relatedTopic: 'queue', createdAt: Date.now() }
 ];
 
+// PROMPT #6: Marketplace Sales store — tracks purchases with 20% fee
+export let inMemorySales: Array<any> = [];
+
 let inMemoryQueue = [
   { id: 1, userEmail: 'user@alphatekx.com', platform: 'youtube', videoId: 'dQw4w9WgXcQ', title: 'How to Build Neural Networks from Scratch | Full AI Tutorial', thumbnail: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80', duration: '22:45', position: 0, isPlayed: 0, createdAt: Date.now() },
   { id: 2, userEmail: 'user@alphatekx.com', platform: 'tiktok', videoId: '7123456789', title: 'Fastest way to deploy WebAssembly to Cloudflare Workers in 60s ⚡', thumbnail: 'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80', duration: '0:58', position: 1, isPlayed: 0, createdAt: Date.now() },
@@ -66,17 +86,18 @@ export const inMemoryCategories = [
 ];
 
 export let inMemoryProfile = {
-  id: "user_1",
-  name: "Alphatekx Dev",
-  handle: "@alphatekx_dev",
-  email: "user@alphatekx.com",
-  avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80",
+  id: "guest_1",
+  name: "Guest",
+  handle: "@guest",
+  email: "guest@alphatekx.stream",
+  avatar: "https://ui-avatars.com/api/?name=Guest&background=0B0215&color=FFD700&size=200&bold=true",
   banner: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80",
-  bio: "Building high-performance AI video infrastructure with Cloudflare Workers.",
-  subscribers: "1.2M",
-  subscribersCount: 1200000,
-  verified: true,
-  joinedAt: Date.now() - 1000 * 60 * 60 * 24 * 365,
+  bio: "Browsing as Guest — sign up coming soon. Your history is saved locally.",
+  subscribers: "0",
+  subscribersCount: 0,
+  verified: false,
+  joinedAt: Date.now(),
+  isGuest: true,
 };
 
 export const inMemoryChannels: Record<string, any> = {
@@ -139,6 +160,55 @@ export const inMemoryChannels: Record<string, any> = {
     verified: true,
     description: "Pidgin, Yoruba, Igbo & Hausa AI. Naija AI for global builders 🇳🇬.",
     joinedAt: "Aug 2022"
+  },
+  // PROMPT #7: Official ALPHATEKX channel — real YouTube connection
+  "UCGm89Z31SYxEU9PEQ-p3cNA": {
+    id: "UCGm89Z31SYxEU9PEQ-p3cNA",
+    name: "ALPHATEKX",
+    handle: "@risewithalphatekx",
+    avatar: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
+    banner: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80",
+    subscribers: "3,020",
+    subscribersCount: 3020,
+    verified: true,
+    description: "Official ALPHATEKX — AI avatars that beat HeyGen 10x, automation, Naija tech 🇳🇬 | Channel ID UCGm89Z31SYxEU9PEQ-p3cNA | 41 videos | alphatekx.name.ng | alphatekxcompany@gmail.com",
+    joinedAt: "2022",
+    email: "alphatekxcompany@gmail.com",
+    website: "https://alphatekx.name.ng",
+    url: "https://www.youtube.com/channel/UCGm89Z31SYxEU9PEQ-p3cNA",
+    videoCount: 41,
+  },
+  "alphatekx": {
+    id: "UCGm89Z31SYxEU9PEQ-p3cNA",
+    name: "ALPHATEKX",
+    handle: "@risewithalphatekx",
+    avatar: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
+    banner: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80",
+    subscribers: "3,020",
+    subscribersCount: 3020,
+    verified: true,
+    description: "Official ALPHATEKX — AI avatars that beat HeyGen 10x | 41 videos | @risewithalphatekx",
+    joinedAt: "2022",
+    email: "alphatekxcompany@gmail.com",
+    website: "https://alphatekx.name.ng",
+    url: "https://www.youtube.com/channel/UCGm89Z31SYxEU9PEQ-p3cNA",
+    videoCount: 41,
+  },
+  "risewithalphatekx": {
+    id: "UCGm89Z31SYxEU9PEQ-p3cNA",
+    name: "ALPHATEKX",
+    handle: "@risewithalphatekx",
+    avatar: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
+    banner: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80",
+    subscribers: "3,020",
+    subscribersCount: 3020,
+    verified: true,
+    description: "Official ALPHATEKX",
+    joinedAt: "2022",
+    email: "alphatekxcompany@gmail.com",
+    website: "https://alphatekx.name.ng",
+    url: "https://www.youtube.com/channel/UCGm89Z31SYxEU9PEQ-p3cNA",
+    videoCount: 41,
   }
 };
 
@@ -299,147 +369,83 @@ function createApiApp() {
 
   app.get("/api/health", (c) => c.json({ status: "ok", app: "Alphatekx Stream", scale: "1M+ Ready" }));
 
-  // REAL YouTube Data API v3 Search Endpoint — ALWAYS works, persists to history
+  // UNIFIED SEARCH — YouTube + TikTok + Instagram + Twitter (+Facebook) — Real APIs with mock fallback
+  // Uses lib modules: backend/src/lib/* and src/lib/* (Prompt #2)
   app.get("/api/search", async (c) => {
     const q = c.req.query("q") || "";
-    const apiKey = c.env?.YOUTUBE_API_KEY || "";
-
-    const mockCatalog = [
-      {
-        youtubeId: "dQw4w9WgXcQ",
-        title: "How to Build Neural Networks from Scratch | Full AI Tutorial 2024",
-        channelName: "CodeCraft Academy",
-        thumbnailUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80",
-        views: "340K views",
-        duration: "22:45"
-      },
-      {
-        youtubeId: "L_LUpnjgPso",
-        title: "Building Real-time AI Voice Agents with WebSockets & Edge GPUs",
-        channelName: "Edge AI Lab",
-        thumbnailUrl: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80",
-        views: "185K views",
-        duration: "15:10"
-      },
-      {
-        youtubeId: "M576WGiDBdQ",
-        title: "Cloudflare Workers & SQLite Durable Objects Masterclass",
-        channelName: "Serverless Pro",
-        thumbnailUrl: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80",
-        views: "92K views",
-        duration: "18:30"
-      },
-      {
-        youtubeId: "fJ9rUzIMcZQ",
-        title: "Sub-100ms LLM Streaming Inference on Edge GPUs",
-        channelName: "AI Hardware Hub",
-        thumbnailUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80",
-        views: "410K views",
-        duration: "32:15"
-      },
-      {
-        youtubeId: "3JZ_D3ELwOQ",
-        title: "Naija Pidgin AI Voice Synthesizer & Subtitle Engine",
-        channelName: "Naija Tech Hub",
-        thumbnailUrl: "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?auto=format&fit=crop&w=600&q=80",
-        views: "512K views",
-        duration: "12:04"
-      }
-    ];
-
-    // Helper: return mocks but NEVER vanish — if filter yields 0, return full catalog so user never sees empty
-    const getMockFallback = (query: string) => {
-      const qLower = query.toLowerCase();
-      let filtered = mockCatalog.filter(item =>
-        !query ||
-        item.title.toLowerCase().includes(qLower) ||
-        item.channelName.toLowerCase().includes(qLower)
-      );
-      // FIX: "burna boy" / "wizkid" previously returned [] — now returns full catalog instead of empty
-      if (filtered.length === 0) filtered = mockCatalog;
-      return filtered;
-    };
-
-    if (!apiKey) {
-      console.warn("[search] YOUTUBE_API_KEY missing — serving UNIFIED mock catalog for q:", q);
-      const fallback = getMockFallback(q);
-      // persist mocks too so history never vanishes
-      pushToSearchHistory(fallback, q);
-      const unified = aggregateSearch(q, fallback);
-      return c.json({ videos: unified, isMock: true, unified: true });
-    }
-
+    const env = c.env as Env;
     try {
-      const searchRes = await fetch(
-        `https://www.googleapis.com/youtube/v3/search?part=snippet&maxResults=12&type=video&q=${encodeURIComponent(q || "AI programming")}&key=${apiKey}`
-      );
+      const [yt, tt, ig, tw] = await Promise.all([
+        libSearchYouTube(q, env.YOUTUBE_API_KEY),
+        libSearchTikTok(q, env.TIKHUB_API_KEY || env.TIKTOK_API_KEY),
+        libSearchInstagram(q, env.INSTAGRAM_ACCESS_TOKEN),
+        libSearchTwitter(q, env.TWITTER_BEARER_TOKEN),
+      ]);
+      const fbCatalog = getMockFacebookCatalog();
+      const qLower = q.toLowerCase();
+      const fbFiltered = fbCatalog.filter((v: any) => !q || v.title.toLowerCase().includes(qLower) || v.channelName.toLowerCase().includes(qLower));
 
-      if (!searchRes.ok) {
-        console.error("[search] YouTube search failed", searchRes.status, await searchRes.text().catch(() => ""), "q:", q);
-        const fallback = getMockFallback(q);
-        pushToSearchHistory(fallback, q);
-        const unified = aggregateSearch(q, fallback);
-        return c.json({ videos: unified, isMock: true, unified: true, status: searchRes.status });
+      const sources = {
+        youtube: yt.videos,
+        tiktok: tt.videos,
+        instagram: ig.videos,
+        twitter: tw.videos,
+        facebook: fbFiltered,
+      };
+
+      let combined = libAggregate(q, sources as any);
+
+      // Inject uploads (preserve existing behavior — searchable uploads appear in unified feed)
+      const uploadExtra = inMemoryUploads.filter(u => !q || u.title.toLowerCase().includes(qLower) || u.channelName.toLowerCase().includes(qLower)).map(u => ({
+        source: u.platform || "youtube",
+        platform: u.platform || "youtube",
+        id: u.youtubeId || u.id,
+        youtubeId: u.youtubeId || u.id,
+        platformId: u.youtubeId || u.id,
+        title: u.title,
+        thumbnail: u.thumbnailUrl,
+        thumbnailUrl: u.thumbnailUrl,
+        channel: { name: u.channelName, id: u.channelId },
+        channelName: u.channelName,
+        channelId: u.channelId,
+        views: u.views,
+        viewsFormatted: u.views,
+        duration: u.duration,
+        category: u.category,
+        platformMeta: platformMeta[u.platform || "youtube"] || platformMeta.youtube,
+      }));
+      for (const u of uploadExtra) {
+        if (!combined.find((c: any) => (c.youtubeId || c.id) === (u.youtubeId || u.id))) combined.splice(2, 0, u as any);
       }
 
-      const searchData = (await searchRes.json()) as any;
-      const items = searchData.items || [];
-      const videoIds = items.map((it: any) => it.id?.videoId).filter(Boolean);
+      // Persist to history (newest first, deduped, cap 100)
+      if (combined.length > 0) pushToSearchHistory(combined, q);
 
-      if (videoIds.length === 0) {
-        console.warn("[search] YouTube returned 0 items for q:", q);
-        return c.json({ videos: [], isMock: false });
-      }
-
-      let videoDetailsMap: Record<string, { duration?: string; views?: string }> = {};
-      try {
-        const detailsRes = await fetch(
-          `https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${videoIds.join(",")}&key=${apiKey}`
-        );
-        if (detailsRes.ok) {
-          const detailsData = (await detailsRes.json()) as any;
-          (detailsData.items || []).forEach((vItem: any) => {
-            videoDetailsMap[vItem.id] = {
-              duration: parseIsoDuration(vItem.contentDetails?.duration),
-              views: formatViews(vItem.statistics?.viewCount)
-            };
-          });
-        } else {
-          console.warn("[search] YouTube details fetch not ok", detailsRes.status);
-        }
-      } catch (e) {
-        console.warn("Failed to fetch YouTube details:", e);
-      }
-
-      const videos = items.map((item: any) => {
-        const vid = item.id?.videoId || "";
-        const details = videoDetailsMap[vid] || {};
-        return {
-          youtubeId: vid,
-          title: item.snippet?.title || "YouTube Video",
-          channelName: item.snippet?.channelTitle || "YouTube Creator",
-          thumbnailUrl:
-            item.snippet?.thumbnails?.high?.url ||
-            item.snippet?.thumbnails?.medium?.url ||
-            item.snippet?.thumbnails?.default?.url ||
-            `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`,
-          views: details.views || "100K views",
-          duration: details.duration || "15:00",
-          platform: "youtube",
-          platformMeta: platformMeta.youtube
-        };
+      const isMock = yt.isMock && tt.isMock && ig.isMock && tw.isMock;
+      return c.json({
+        videos: combined,
+        unified: true,
+        isMock,
+        meta: {
+          youtube: { count: yt.videos.length, isMock: yt.isMock },
+          tiktok: { count: tt.videos.length, isMock: tt.isMock },
+          instagram: { count: ig.videos.length, isMock: ig.isMock },
+          twitter: { count: tw.videos.length, isMock: tw.isMock },
+          facebook: { count: fbFiltered.length, isMock: true },
+        },
+        errors: {
+          youtube: (yt as any).error,
+          tiktok: (tt as any).error,
+          instagram: (ig as any).error,
+          twitter: (tw as any).error,
+        },
       });
-
-      // auto-persist real results newest-first, deduped
-      pushToSearchHistory(videos, q);
-
-      const unified = aggregateSearch(q, videos);
-      return c.json({ videos: unified, isMock: false, unified: true });
     } catch (err: any) {
-      console.error("[search] exception for q:", q, err?.message || err);
-      const fallback = getMockFallback(q);
-      pushToSearchHistory(fallback, q);
+      console.error("[unified search] exception q:", q, err?.message || err);
+      // fallback to legacy aggregateSearch with mock catalog
+      const fallback = (await libSearchYouTube(q, undefined)).videos;
       const unified = aggregateSearch(q, fallback);
+      if (unified.length > 0) pushToSearchHistory(unified, q);
       return c.json({ videos: unified, isMock: true, unified: true, error: err.message });
     }
   });
@@ -486,33 +492,47 @@ function createApiApp() {
     return c.json({ success: true, history: [] });
   });
 
-  // === UNIFIED AGGREGATOR PER-PLATFORM ENDPOINTS ===
+  // === UNIFIED AGGREGATOR PER-PLATFORM ENDPOINTS — Real APIs via lib modules (Prompt #2)
   // GET /api/search/youtube?q=  ...  /tiktok /instagram /twitter /facebook
   const platformSearch = (platform: string) => async (c: any) => {
     const q = c.req.query("q") || "";
     const qLower = q.toLowerCase();
-    // youtube goes through real aggregator fallback (already unified) then filter to youtube only
+    const env = c.env as Env;
     if (platform === "youtube") {
-      // reuse unified but filter
-      const mockCatalog = [
-        { youtubeId: "dQw4w9WgXcQ", title: "How to Build Neural Networks from Scratch | Full AI Tutorial 2024", channelName: "CodeCraft Academy", thumbnailUrl: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80", views: "340K views", duration: "22:45", platform: "youtube", platformMeta: platformMeta.youtube },
-        { youtubeId: "L_LUpnjgPso", title: "Building Real-time AI Voice Agents with WebSockets & Edge GPUs", channelName: "Edge AI Lab", thumbnailUrl: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80", views: "185K views", duration: "15:10", platform: "youtube", platformMeta: platformMeta.youtube },
-        { youtubeId: "M576WGiDBdQ", title: "Cloudflare Workers & SQLite Durable Objects Masterclass", channelName: "Serverless Pro", thumbnailUrl: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80", views: "92K views", duration: "18:30", platform: "youtube", platformMeta: platformMeta.youtube },
-        { youtubeId: "fJ9rUzIMcZQ", title: "Sub-100ms LLM Streaming Inference on Edge GPUs", channelName: "AI Hardware Hub", thumbnailUrl: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80", views: "410K views", duration: "32:15", platform: "youtube", platformMeta: platformMeta.youtube },
-        { youtubeId: "3JZ_D3ELwOQ", title: "Naija Pidgin AI Voice Synthesizer & Subtitle Engine", channelName: "Naija Tech Hub", thumbnailUrl: "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?auto=format&fit=crop&w=600&q=80", views: "512K views", duration: "12:04", platform: "youtube", platformMeta: platformMeta.youtube },
-      ];
-      let vids = mockCatalog.filter(v => !q || v.title.toLowerCase().includes(qLower) || v.channelName.toLowerCase().includes(qLower));
-      if (vids.length===0) vids = mockCatalog;
-      // include uploads that are youtube platform
-      const uploads = inMemoryUploads.filter(u => (u.platform||"youtube")==="youtube" && (!q || u.title.toLowerCase().includes(qLower))).map(u=>({ ...u, platform:"youtube", platformMeta: platformMeta.youtube }));
-      return c.json({ videos: [...vids, ...uploads], platform, count: vids.length + uploads.length });
+      const r = await libSearchYouTube(q, env.YOUTUBE_API_KEY);
+      let vids = r.videos;
+      // include uploads that are youtube platform (preserve existing searchable uploads)
+      const uploads = inMemoryUploads.filter(u => (u.platform||"youtube")==="youtube" && (!q || u.title.toLowerCase().includes(qLower))).map(u=>({
+        source: "youtube", platform:"youtube", id: u.youtubeId || u.id, youtubeId: u.youtubeId || u.id, platformId: u.youtubeId || u.id,
+        title: u.title, thumbnail: u.thumbnailUrl, thumbnailUrl: u.thumbnailUrl,
+        channel: { name: u.channelName, id: u.channelId }, channelName: u.channelName, channelId: u.channelId,
+        views: u.views, viewsFormatted: u.views, duration: u.duration, category: u.category, platformMeta: platformMeta.youtube
+      }));
+      const combined = [...vids, ...uploads];
+      return c.json({ videos: combined, platform, count: combined.length, isMock: r.isMock, error: (r as any).error });
     }
+    if (platform === "tiktok") {
+      const r = await libSearchTikTok(q, env.TIKHUB_API_KEY || env.TIKTOK_API_KEY);
+      return c.json({ videos: r.videos, platform, count: r.videos.length, isMock: r.isMock, error: (r as any).error });
+    }
+    if (platform === "instagram") {
+      const r = await libSearchInstagram(q, env.INSTAGRAM_ACCESS_TOKEN);
+      return c.json({ videos: r.videos, platform, count: r.videos.length, isMock: r.isMock, error: (r as any).error });
+    }
+    if (platform === "twitter") {
+      const r = await libSearchTwitter(q, env.TWITTER_BEARER_TOKEN);
+      return c.json({ videos: r.videos, platform, count: r.videos.length, isMock: r.isMock, error: (r as any).error });
+    }
+    if (platform === "facebook") {
+      const vids = getMockFacebookCatalog().filter((v: any) => !q || v.title.toLowerCase().includes(qLower) || v.channelName.toLowerCase().includes(qLower));
+      return c.json({ videos: vids, platform, count: vids.length, isMock: true });
+    }
+    // fallback: legacy catalog
     const catalogs = makePlatformCatalogs() as any;
     let vids = (catalogs[platform] || []) as any[];
     vids = vids.filter(v => !q || v.title.toLowerCase().includes(qLower) || v.channelName.toLowerCase().includes(qLower) || v.category.toLowerCase().includes(qLower));
-    // tag meta
-    vids = vids.map(v=> ({ ...v, platformMeta: platformMeta[platform] }));
-    return c.json({ videos: vids, platform, count: vids.length });
+    vids = vids.map(v=> ({ ...v, platformMeta: (platformMeta as any)[platform] }));
+    return c.json({ videos: vids, platform, count: vids.length, isMock: true });
   };
   app.get("/api/search/youtube", platformSearch("youtube"));
   app.get("/api/search/tiktok", platformSearch("tiktok"));
@@ -639,6 +659,61 @@ function createApiApp() {
       downloadUrl: `https://alphatekx.ai/downloads/product-${productId}.zip`,
       message: "Payment processed via Stripe Test Mode! Download ready."
     });
+  });
+
+  // === PROMPT #6: Marketplace Spec Endpoints (20% fee, Stripe) ===
+  app.get("/api/marketplace/products", (c) => {
+    const category = c.req.query("category");
+    let products = inMemoryProducts;
+    if (category && category !== "all" && category !== "All") {
+      products = products.filter(p => p.category === category);
+    }
+    // Include fee breakdown for each product
+    const withFees = products.map(p => {
+      const fees = libCalcFees(p.price);
+      return { ...p, platformFee: p.platformFee ?? fees.platformFee, sellerRevenue: p.sellerRevenue ?? fees.sellerRevenue, feeRate: 0.20 };
+    });
+    return c.json({ products: withFees, count: withFees.length });
+  });
+
+  app.post("/api/marketplace/products", async (c) => {
+    try {
+      const body = await c.req.json<any>();
+      const product = libCreateProduct(inMemoryProducts, body);
+      return c.json({ success: true, product, message: "Product listed successfully!" }, 201);
+    } catch (e: any) {
+      return c.json({ success: false, error: e.message }, 400);
+    }
+  });
+
+  app.get("/api/marketplace/products/:id", (c) => {
+    const id = c.req.param("id");
+    const product = libGetProduct(inMemoryProducts, id);
+    if (!product) return c.json({ success: false, error: "Product not found" }, 404);
+    const fees = libCalcFees(product.price);
+    return c.json({ product: { ...product, platformFee: product.platformFee ?? fees.platformFee, sellerRevenue: product.sellerRevenue ?? fees.sellerRevenue, feeRate: 0.20 } });
+  });
+
+  app.post("/api/marketplace/purchase", async (c) => {
+    try {
+      const body = await c.req.json<{ productId: number | string; buyerEmail?: string }>();
+      const buyerEmail = body.buyerEmail || "buyer@alphatekx.ai";
+      // Stripe mock processing
+      const product = libGetProduct(inMemoryProducts, body.productId);
+      if (!product) return c.json({ success: false, error: "Product not found" }, 404);
+      await libStripePay({ product, buyerEmail });
+      const result = libPurchaseProduct(inMemoryProducts, inMemorySales, body.productId, buyerEmail);
+      return c.json({ ...result, stripe: { testMode: true, card: "4242 •••• •••• 4242" } });
+    } catch (e: any) {
+      return c.json({ success: false, error: e.message }, 400);
+    }
+  });
+
+  app.get("/api/marketplace/sales", (c) => {
+    const sellerEmail = c.req.query("sellerEmail") || c.req.query("seller") || "";
+    const sales = sellerEmail ? libGetSales(inMemorySales, sellerEmail) : inMemorySales;
+    const summary = libSalesSummary(inMemorySales, sellerEmail || undefined);
+    return c.json({ sales, summary, count: sales.length });
   });
 
   // Unified Queue
@@ -864,23 +939,165 @@ function createApiApp() {
     }
   });
 
-  // === NEW: Channel ===
-  app.get("/api/channel/:id", (c) => {
+  // === PROMPT #7: Real YouTube Channel — ALPHATEKX @risewithalphatekx (UCGm89Z31SYxEU9PEQ-p3cNA) ===
+  // Primary endpoints per spec: GET /api/channel and /api/channel/videos (official channel, real-time via YouTube API)
+  app.get("/api/channel", async (c) => {
+    const apiKey = (c.env as Env)?.YOUTUBE_API_KEY || "";
+    const info = await libFetchChannelInfo(apiKey);
+    // Also sync to inMemoryChannels for consistency
+    const channelId = (info as any).id || OFFICIAL_CHANNEL_ID;
+    // Build channel shell compatible with frontend Channel component
+    const channel = {
+      id: channelId,
+      name: (info as any).snippet?.title || OFFICIAL_CHANNEL_NAME,
+      handle: (info as any).snippet?.customUrl || OFFICIAL_CHANNEL_HANDLE,
+      avatar: (info as any).snippet?.thumbnails?.high?.url || (info as any).snippet?.thumbnails?.default?.url || `https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg`,
+      banner: `https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80`,
+      subscribers: (info as any).statistics?.subscriberCount ? `${Number((info as any).statistics.subscriberCount).toLocaleString()}` : "3,020",
+      subscribersCount: Number((info as any).statistics?.subscriberCount || 3020),
+      verified: true,
+      description: (info as any).snippet?.description || `Official ${OFFICIAL_CHANNEL_NAME} channel — AI avatars, automation, Naija tech 🇳🇬 | ${OFFICIAL_CHANNEL_HANDLE} | alphatekx.name.ng`,
+      joinedAt: (info as any).snippet?.publishedAt ? new Date((info as any).snippet.publishedAt).getFullYear().toString() : "2022",
+      email: "alphatekxcompany@gmail.com",
+      website: "https://alphatekx.name.ng",
+      url: `https://www.youtube.com/channel/${OFFICIAL_CHANNEL_ID}`,
+      raw: info,
+    };
+    return c.json({ channel, info, statistics: (info as any).statistics, snippet: (info as any).snippet });
+  });
+
+  app.get("/api/channel/videos", async (c) => {
+    const apiKey = (c.env as Env)?.YOUTUBE_API_KEY || "";
+    const max = Number(c.req.query("max") || "50");
+    const videos = await libFetchChannelVideos(apiKey, Math.min(max, 50));
+    return c.json({ videos, count: videos.length, channelId: OFFICIAL_CHANNEL_ID, channelHandle: OFFICIAL_CHANNEL_HANDLE });
+  });
+
+  // Real video stats — no mock, real views/likes
+  app.get("/api/video/:id", async (c) => {
     const id = c.req.param("id");
+    if (!id || id.startsWith("mock")) return c.json({ error: "Mock ID, no real stats" }, 400);
+    const apiKey = (c.env as Env)?.YOUTUBE_API_KEY || "";
+    if (!apiKey) return c.json({ error: "No API key" }, 400);
+    try {
+      const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${encodeURIComponent(id)}&key=${apiKey}`);
+      if (!res.ok) throw new Error(`YouTube ${res.status}`);
+      const data: any = await res.json();
+      if (!data.items || data.items.length === 0) throw new Error("Video not found");
+      const v = data.items[0];
+      return c.json({
+        video: {
+          id: v.id,
+          title: v.snippet.title,
+          channel: v.snippet.channelTitle,
+          channelId: v.snippet.channelId,
+          thumbnail: v.snippet.thumbnails?.high?.url || v.snippet.thumbnails?.medium?.url,
+          views: v.statistics.viewCount,
+          viewsFormatted: Number(v.statistics.viewCount).toLocaleString() + " views",
+          likes: v.statistics.likeCount,
+          likeCount: Number(v.statistics.likeCount || 0),
+          comments: v.statistics.commentCount,
+          duration: v.contentDetails.duration,
+          publishedAt: v.snippet.publishedAt,
+          statistics: v.statistics,
+          snippet: v.snippet,
+          contentDetails: v.contentDetails,
+        }
+      });
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  // === NEW: Channel — real YouTube for any UC id (no mock), falls back to inMemory
+  app.get("/api/channel/:id", async (c) => {
+    const id = c.req.param("id");
+    const apiKey = (c.env as Env)?.YOUTUBE_API_KEY || "";
+    // If id looks like real YouTube channel ID (UC... 24 chars), try real YouTube API first
+    if (apiKey && /^UC[a-zA-Z0-9_-]{22}$/.test(id)) {
+      try {
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet,statistics,contentDetails&id=${encodeURIComponent(id)}&key=${apiKey}`);
+        if (res.ok) {
+          const data: any = await res.json();
+          if (data.items && data.items[0]) {
+            const info = data.items[0];
+            const channel = {
+              id: info.id,
+              name: info.snippet.title,
+              handle: info.snippet.customUrl || `@${info.snippet.title.toLowerCase().replace(/\s+/g, "")}`,
+              avatar: info.snippet.thumbnails?.high?.url || info.snippet.thumbnails?.default?.url || `https://ui-avatars.com/api/?name=${encodeURIComponent(info.snippet.title)}&background=0B0215&color=FFD700`,
+              banner: `https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80`,
+              subscribers: Number(info.statistics.subscriberCount).toLocaleString(),
+              subscribersCount: Number(info.statistics.subscriberCount),
+              verified: true,
+              description: info.snippet.description?.slice(0, 200) || `Channel ${info.snippet.title}`,
+              joinedAt: new Date(info.snippet.publishedAt).getFullYear().toString(),
+              videoCount: Number(info.statistics.videoCount),
+              viewCount: info.statistics.viewCount,
+              email: "",
+              website: "",
+              url: `https://www.youtube.com/channel/${info.id}`,
+              raw: info,
+            };
+            // Fetch uploads playlist for real videos
+            const uploadsPlaylistId = "UU" + info.id.slice(2);
+            let uploads: any[] = [];
+            try {
+              const plRes = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${uploadsPlaylistId}&maxResults=30&key=${apiKey}`);
+              if (plRes.ok) {
+                const plData: any = await plRes.json();
+                uploads = (plData.items || []).map((it: any) => ({
+                  id: it.contentDetails.videoId,
+                  youtubeId: it.contentDetails.videoId,
+                  title: it.snippet.title,
+                  thumbnailUrl: it.snippet.thumbnails?.high?.url || `https://i.ytimg.com/vi/${it.contentDetails.videoId}/hqdefault.jpg`,
+                  channelId: info.id,
+                  channelName: info.snippet.title,
+                  views: "0 views",
+                  duration: "5:00",
+                  category: "Tech",
+                  publishedAt: it.snippet.publishedAt,
+                }));
+                // Enrich with real views/durations
+                const vIds = uploads.map((u: any) => u.youtubeId).join(",");
+                if (vIds) {
+                  try {
+                    const detRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=contentDetails,statistics&id=${vIds}&key=${apiKey}`);
+                    if (detRes.ok) {
+                      const detData: any = await detRes.json();
+                      const map: Record<string, any> = {};
+                      for (const v of detData.items || []) map[v.id] = v;
+                      uploads = uploads.map((u: any) => {
+                        const det = map[u.youtubeId];
+                        if (det) {
+                          return { ...u, views: det.statistics?.viewCount ? `${(Number(det.statistics.viewCount)/1000).toFixed(0)}K views` : u.views, duration: det.contentDetails?.duration ? det.contentDetails.duration.replace("PT","").toLowerCase() : u.duration };
+                        }
+                        return u;
+                      });
+                    }
+                  } catch {}
+                }
+              }
+            } catch {}
+            return c.json({ channel, uploads, uploadsCount: uploads.length, subscriberCount: channel.subscribers, subscriberCountRaw: channel.subscribersCount, real: true });
+          }
+        }
+      } catch {}
+    }
+    // Fallback to inMemory for mock handles like codecraft, or if real fetch failed
     const channel = resolveChannelById(id);
-    // Collect uploads for this channel: exact channelId match or channelName match
     const uploads = inMemoryUploads.filter(u => 
       u.channelId === channel.id || 
       slugifyChannel(u.channelName) === channel.id ||
       u.channelName.toLowerCase() === channel.name.toLowerCase()
     );
-    // also include catalog search fallback: synthesize uploads from static catalog if empty
     return c.json({ 
       channel,
       uploads,
       uploadsCount: uploads.length,
       subscriberCount: channel.subscribers,
-      subscriberCountRaw: channel.subscribersCount
+      subscriberCountRaw: channel.subscribersCount,
+      real: false
     });
   });
 
@@ -959,6 +1176,63 @@ function createApiApp() {
       category: u.category,
       channelId: u.channelId
     })) });
+  });
+
+  // === PROMPT #5: AI FEATURES — Clip Maker, Thumbnail Enhancer, Voice Translator (Pro paywall) ===
+  function isProRequest(c: any, body?: any) {
+    const h = (c.req.header("x-pro") || c.req.header("X-Pro") || c.req.query("pro") || "") as string;
+    if (h === "true" || h === "1" || h === "pro") return true;
+    if (body && (body.pro === true || body.tier === "pro" || body.isPro === true)) return true;
+    // also allow if isProUser simulated via env var BYPASS (for tests)
+    return false;
+  }
+
+  app.post("/api/clips/create", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch {}
+    if (!isProRequest(c, body)) {
+      return c.json({ success: false, error: "Pro required", message: "AI Clip Maker is Pro-only. Upgrade to Pro to generate viral clips.", upgradeUrl: "/pricing", paywall: true }, 402);
+    }
+    const { videoUrl, videoId, prompt } = body;
+    if (!videoUrl && !videoId) return c.json({ success: false, error: "videoUrl or videoId required" }, 400);
+    try {
+      const result = await libCreateClip({ videoUrl, videoId, prompt, pro: true });
+      return c.json(result);
+    } catch (e: any) {
+      return c.json({ success: false, error: e.message }, 400);
+    }
+  });
+
+  app.post("/api/thumbnail/enhance", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch {}
+    if (!isProRequest(c, body)) {
+      return c.json({ success: false, error: "Pro required", message: "Thumbnail Enhancer is Pro-only. Upgrade to Pro for 4K neon glow.", upgradeUrl: "/pricing", paywall: true }, 402);
+    }
+    const { thumbnailUrl, imageBase64, style } = body;
+    if (!thumbnailUrl && !imageBase64) return c.json({ success: false, error: "thumbnailUrl or imageBase64 required" }, 400);
+    try {
+      const result = await libEnhanceThumbnail({ thumbnailUrl, imageBase64, style, pro: true });
+      return c.json(result);
+    } catch (e: any) {
+      return c.json({ success: false, error: e.message }, 400);
+    }
+  });
+
+  app.post("/api/voice/translate", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch {}
+    if (!isProRequest(c, body)) {
+      return c.json({ success: false, error: "Pro required", message: "Voice Translator is Pro-only. Upgrade to Pro for Pidgin/Yoruba/Igbo/Hausa.", upgradeUrl: "/pricing", paywall: true }, 402);
+    }
+    const { videoUrl, videoId, targetLang, sourceLang } = body;
+    if (!videoUrl && !videoId) return c.json({ success: false, error: "videoUrl or videoId required" }, 400);
+    try {
+      const result = await libTranslateVoice({ videoUrl, videoId, targetLang, sourceLang, pro: true });
+      return c.json(result);
+    } catch (e: any) {
+      return c.json({ success: false, error: e.message }, 400);
+    }
   });
 
   return app;

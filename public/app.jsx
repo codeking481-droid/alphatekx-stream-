@@ -139,7 +139,7 @@ const PlatformBadge = ({ platform = "youtube", size = "xs" }) => {
   const border = platform==="tiktok" ? "border border-white/40" : "";
   return <span className={`${cls} font-bold rounded-full ${border}`} style={{ background: s.bg, color: s.text }}>{s.label}</span>;
 };
-const VideoCard = ({ video, onPlay, onSave, isSaved }) => {
+const VideoCard = ({ video, onPlay, onSave, isSaved, onAi }) => {
   const v = normalizeVideo(video);
   const platform = video.platform || v.platform || "youtube";
   return (
@@ -148,28 +148,33 @@ const VideoCard = ({ video, onPlay, onSave, isSaved }) => {
         <img src={v.img || v.thumbnailUrl} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
         <span className="absolute bottom-2 right-2 bg-black/80 text-[10px] font-mono px-1.5 py-0.5 rounded text-white">{v.duration}</span>
         <span className="absolute top-2 left-2"><PlatformBadge platform={platform} /></span>
+        {onAi && (
+          <button onClick={(e)=>{e.stopPropagation(); onAi(v);}} className="absolute bottom-2 left-2 w-7 h-7 rounded-full bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black font-black text-[11px] flex items-center justify-center border border-white/30 shadow-md hover:scale-110 transition-transform" title="AI Help — real-time">A</button>
+        )}
         {onSave && (
-          <button onClick={(e)=>{e.stopPropagation(); onSave(video);}} className={`absolute top-2 right-2 w-7 h-7 rounded-full flex items-center justify-center text-xs ${isSaved ? "bg-[#FFD700] text-black" : "bg-black/70 text-white hover:bg-black/90"} border border-white/20`}>
+          <button onClick={(e)=>{e.stopPropagation(); onSave(video);}} className={`absolute top-2 right-2 w-9 h-9 min-w-[36px] min-h-[36px] rounded-full flex items-center justify-center text-sm font-bold ${isSaved ? "bg-[#FFD700] text-black" : "bg-black/70 text-white hover:bg-black/90"} border border-white/20`}>
             {isSaved ? "✓" : "+"}
           </button>
         )}
       </div>
-      <div className="p-3 space-y-1 flex-1">
-        <h3 className="font-bold text-sm text-white group-hover:text-[#00D9FF] line-clamp-2">{v.title}</h3>
+      <div className="p-3 sm:p-4 space-y-1.5 flex-1 min-w-0">
+        <h3 className="font-bold text-[13px] sm:text-sm leading-snug text-white group-hover:text-[#FFD700] line-clamp-2 min-w-0 break-words">{v.title}</h3>
         <p className="text-xs text-gray-400 truncate">{v.channel || v.channelName}</p>
-        <p className="text-[11px] text-gray-500">{v.views} • {v.timeAgo}</p>
+        <p className="text-xs text-gray-500">{v.views} • {v.timeAgo}</p>
       </div>
     </div>
   );
 };
-const VideoPlayer = ({ video }) => {
+const VideoPlayer = ({ video, autoplay = false }) => {
   const v = video ? normalizeVideo(video) : null;
   const platform = video?.platform || "youtube";
   if (!v) return null;
+  const isDefault = v.youtubeId === DEFAULT_VIDEO.youtubeId || v.featured || autoplay;
+  const autoplayParams = isDefault ? "&autoplay=1&mute=1&playsinline=1" : "";
   if (platform === "youtube") {
     return (
       <div className="relative aspect-video w-full bg-black rounded-2xl overflow-hidden border border-[#272727] shadow-2xl">
-        <iframe src={`https://www.youtube-nocookie.com/embed/${v.youtubeId}?enablejsapi=1&modestbranding=1&rel=0`} title={v.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+        <iframe src={`https://www.youtube-nocookie.com/embed/${v.youtubeId}?enablejsapi=1&modestbranding=1&rel=0${autoplayParams}`} title={v.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
       </div>
     );
   }
@@ -198,25 +203,55 @@ const SearchBar = ({ value, onChange, onSubmit, placeholder }) => (
   </form>
 );
 
+// --- PROMPT #3: DEFAULT VIDEO (YOUR VIDEO) — plays first, helps grow YouTube channel ---
+const DEFAULT_VIDEO = {
+  id: "jvXEkm27XOE",
+  youtubeId: "jvXEkm27XOE",
+  title: "This AI Avatar BEATS HeyGen 10 TIMES! 🤯 #viral #trending #viralvideo #aivideo",
+  channel: "ALPHATEKX",
+  channelName: "ALPHATEKX",
+  channelId: "UCGm89Z31SYxEU9PEQ-p3cNA",
+  handle: "@risewithalphatekx",
+  subscribers: "3,020",
+  views: "Featured • Alphatekx Stream",
+  timeAgo: "Featured",
+  duration: "2:15",
+  tag: "Featured",
+  avatar: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
+  img: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
+  thumbnail: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
+  thumbnailUrl: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
+  description: "Featured Alphatekx video — auto-plays first for every visitor. Your view counts toward YouTube growth! 🚀🇳🇬",
+  platform: "youtube",
+  platformMeta: { label: "YouTube", badge: "YT", color: "#FF0000", bg: "rgba(255,0,0,0.9)" },
+  featured: true,
+};
+// PROMPT #7: Official ALPHATEKX channel
+const OFFICIAL_CHANNEL_ID = "UCGm89Z31SYxEU9PEQ-p3cNA";
+const OFFICIAL_CHANNEL_HANDLE = "@risewithalphatekx";
+const OFFICIAL_CHANNEL_NAME = "ALPHATEKX";
+
 // --- Helper to normalize video objects from API or mock ---
 function normalizeVideo(v) {
   return {
-    id: v.youtubeId || v.id || "dQw4w9WgXcQ",
-    youtubeId: v.youtubeId || v.id || "dQw4w9WgXcQ",
+    id: v.youtubeId || v.id || DEFAULT_VIDEO.id,
+    youtubeId: v.youtubeId || v.id || DEFAULT_VIDEO.id,
     title: v.title || "Untitled Video",
-    channel: v.channelName || v.channel || "YouTube Creator",
-    channelName: v.channelName || v.channel || "YouTube Creator",
+    channel: v.channelName || v.channel?.name || v.channel || "YouTube Creator",
+    channelName: v.channelName || v.channel?.name || v.channel || "YouTube Creator",
+    channelId: v.channelId || v.channel?.id || v.channelId || (v.channelName ? "" : "") || "",
     subscribers: v.subscribers || "1.2M",
-    views: v.views || "100K views",
+    views: v.views || v.viewsFormatted || "100K views",
     timeAgo: v.timeAgo || "Recently uploaded",
     duration: v.duration || "15:00",
     tag: v.tag || "YouTube Search",
-    avatar: v.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
-    img: v.thumbnailUrl || v.img || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80",
-    thumbnailUrl: v.thumbnailUrl || v.img || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80",
+    avatar: v.avatar || v.channel?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
+    img: v.thumbnailUrl || v.img || v.thumbnail || "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
+    thumbnailUrl: v.thumbnailUrl || v.img || v.thumbnail || "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
     description: v.description || `Watch ${v.title} on Alphatekx Stream.`,
-    platform: v.platform || "youtube",
-    platformMeta: v.platformMeta || null
+    platform: v.platform || v.source || "youtube",
+    platformMeta: v.platformMeta || null,
+    featured: v.featured || false,
   };
 }
 
@@ -226,6 +261,7 @@ function App() {
   const [activeTab, setActiveTab] = useState("watch"); // watch, home, shorts, teacher, memory, chat, community, marketplace, sell, studio, pricing, profile
   const [sidebarOpen, setSidebarOpen] = useState(true); // Desktop sidebar toggle
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false); // Mobile drawer slide-over toggle
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false); // REMOVED — popup off
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -240,9 +276,31 @@ function App() {
   });
   const [searchTab, setSearchTab] = useState("results"); // "results" | "history"
   const [searchIsMock, setSearchIsMock] = useState(null);
+  const [historyView, setHistoryView] = useState("watched"); // watched | searched for dedicated History page
+  // Watched History — real, for all you have watched (Guest local + server)
+  const [watchedHistory, setWatchedHistory] = useState(() => {
+    try {
+      const raw = localStorage.getItem("alphatekx_watched_history");
+      return raw ? JSON.parse(raw) : [];
+    } catch { return []; }
+  });
+  const pushWatched = (video) => {
+    if (!video) return;
+    const norm = normalizeVideo(video);
+    const entry = { ...norm, watchedAt: Date.now(), watchedAtStr: new Date().toLocaleString() };
+    setWatchedHistory(prev => {
+      const filtered = prev.filter(p => (p.youtubeId||p.id) !== (entry.youtubeId||entry.id));
+      const next = [entry, ...filtered].slice(0,100);
+      try { localStorage.setItem("alphatekx_watched_history", JSON.stringify(next)); } catch {}
+      // also fire to server for real-time sync
+      fetch("/api/history/save", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ videoId: entry.youtubeId, title: entry.title }) }).catch(()=>{});
+      return next;
+    });
+  };
 
   // === NEW: Channel / Upload / Profile / Categories (preserve design) ===
-  const [activeChannelId, setActiveChannelId] = useState("codecraft");
+  // PROMPT #7: Official ALPHATEKX channel as default
+  const [activeChannelId, setActiveChannelId] = useState("UCGm89Z31SYxEU9PEQ-p3cNA");
   const [channelData, setChannelData] = useState(null);
   const [channelUploads, setChannelUploads] = useState([]);
   const [isChannelLoading, setIsChannelLoading] = useState(false);
@@ -270,6 +328,9 @@ function App() {
   useEffect(() => {
     try { localStorage.setItem("alphatekx_search_history", JSON.stringify(searchHistory.slice(0,100))); } catch {}
   }, [searchHistory]);
+  useEffect(() => {
+    try { localStorage.setItem("alphatekx_watched_history", JSON.stringify(watchedHistory.slice(0,100))); } catch {}
+  }, [watchedHistory]);
 
   // Load history from server on mount — merge with localStorage (server newest first)
   useEffect(() => {
@@ -326,18 +387,40 @@ function App() {
     }).catch(()=>{});
   }, []);
   useEffect(()=>{ try{ localStorage.setItem("alphatekx_watch_later", JSON.stringify(watchLater)); }catch{} }, [watchLater]);
-  // Fetch channel when activeChannelId changes or when entering channel tab
+  // Fetch channel when activeChannelId changes or when entering channel tab — PROMPT #7 real-time for ALPHATEKX
   useEffect(() => {
     if (activeTab !== "channel") return;
     setIsChannelLoading(true);
-    fetch(`/api/channel/${encodeURIComponent(activeChannelId)}`).then(r=>r.ok?r.json():null).then(d=>{
-      if(d && d.channel){ setChannelData(d.channel); setChannelUploads(Array.isArray(d.uploads)?d.uploads:[]); }
+    const isOfficial = activeChannelId === OFFICIAL_CHANNEL_ID || activeChannelId.toLowerCase() === "alphatekx" || activeChannelId.toLowerCase() === "risewithalphatekx" || activeChannelId.toLowerCase().includes("ucgm89z31syxeu9peq");
+    const channelFetch = fetch(`/api/channel/${encodeURIComponent(activeChannelId)}`).then(r=>r.ok?r.json():null);
+    const videosFetch = isOfficial ? fetch(`/api/channel/videos`).then(r=>r.ok?r.json():null).catch(()=>null) : Promise.resolve(null);
+    Promise.all([channelFetch, videosFetch]).then(([d, vData]) => {
+      if(d && d.channel){
+        setChannelData(d.channel);
+        let uploads = Array.isArray(d.uploads)?d.uploads:[];
+        if(vData && Array.isArray(vData.videos) && vData.videos.length>0){
+          const seen = new Set(uploads.map(u=>u.youtubeId||u.id));
+          const official = vData.videos.filter(v=>!seen.has(v.youtubeId||v.id)).map(v=>({...v, channelId: OFFICIAL_CHANNEL_ID, channelName: OFFICIAL_CHANNEL_NAME}));
+          uploads = [...official, ...uploads];
+        }
+        setChannelUploads(uploads);
+      } else if(vData && Array.isArray(vData.videos)){
+        // fallback if channel fetch failed but videos succeeded (official)
+        fetch(`/api/channel`).then(r=>r.ok?r.json():null).then(cd=>{ if(cd && cd.channel) setChannelData(cd.channel); });
+        setChannelUploads(vData.videos.map(v=>({...v, channelId: OFFICIAL_CHANNEL_ID, channelName: OFFICIAL_CHANNEL_NAME})));
+      }
       setIsChannelLoading(false);
     }).catch(()=> setIsChannelLoading(false));
   }, [activeTab, activeChannelId]);
   const navigateToChannel = (channelId) => {
-    const cid = slugify(channelId) || "codecraft";
-    setActiveChannelId(cid);
+    let cid = channelId || "codecraft";
+    if (/^UC[a-zA-Z0-9_-]{22}$/.test(cid)) {
+      setActiveChannelId(cid);
+    } else {
+      cid = slugify(cid) || "codecraft";
+      if (cid === "risewithalphatekx" || cid === "alphatekx" || cid === "alphatekx-dev") cid = OFFICIAL_CHANNEL_ID;
+      setActiveChannelId(cid);
+    }
     setActiveTab("channel");
     setChannelSubscribed(false);
     if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
@@ -408,9 +491,23 @@ function App() {
     showToast("Removed from Watch Later");
   };
 
-  // YouTube UX Features (Theater mode, Mini-player, Voice modal, Share modal)
+  // PROMPT #4: Comfortable Video Player — theatre + idle hide
   const [theaterMode, setTheaterMode] = useState(false);
-  const [miniPlayerActive, setMiniPlayerActive] = useState(false);
+  const [playerIdle, setPlayerIdle] = useState(false);
+  // PROMPT #7+8: Shorts — best absolute, simple, easy volume
+  const [shortsIndex, setShortsIndex] = useState(0);
+  const [shortsMuted, setShortsMuted] = useState(true);
+  const [shortsPlaying, setShortsPlaying] = useState(true);
+  const [shortsLiked, setShortsLiked] = useState({});
+  const [shortsVideos, setShortsVideos] = useState([
+    { id: "jvXEkm27XOE", youtubeId: "jvXEkm27XOE", title: "This AI Avatar BEATS HeyGen 10 TIMES! 🤯 #viral #trending", channel: "ALPHATEKX", handle: "@risewithalphatekx", avatar: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg", subscribers: "3,020", subscribersCount: 3020, likes: "24K", comments: "342", shares: "1.2K", views: "15K" },
+    { id: "dQw4w9WgXcQ", youtubeId: "dQw4w9WgXcQ", title: "How Attention Works in 30s! 🧠 #AI #Shorts", channel: "CodeCraft", handle: "@codecraft", avatar: "https://images.unsplash.com/photos/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80", subscribers: "1.8M", subscribersCount: 1800000, likes: "45.2K", comments: "892", shares: "2.1K", views: "340K" },
+    { id: "L_LUpnjgPso", youtubeId: "L_LUpnjgPso", title: "AI Voice Agents in 15s ⚡ Edge GPU Magic", channel: "Edge AI Lab", handle: "@edgeailab", avatar: "https://images.unsplash.com/photos/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80", subscribers: "890K", subscribersCount: 890000, likes: "18K", comments: "412", shares: "890", views: "185K" },
+    { id: "M576WGiDBdQ", youtubeId: "M576WGiDBdQ", title: "Cloudflare Workers Tip: 60s Deploy 🚀", channel: "Serverless Pro", handle: "@serverlesspro", avatar: "https://images.unsplash.com/photos/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80", subscribers: "456K", subscribersCount: 456000, likes: "12K", comments: "210", shares: "560", views: "92K" },
+    { id: "fJ9rUzIMcZQ", youtubeId: "fJ9rUzIMcZQ", title: "Naija AI in Pidgin — try it! 🇳🇬 #Shorts", channel: "Naija Tech Hub", handle: "@naijatech", avatar: "https://images.unsplash.com/photos/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80", subscribers: "230K", subscribersCount: 230000, likes: "31K", comments: "523", shares: "1.5K", views: "512K" },
+  ]);
+  const currentShort = shortsVideos[shortsIndex] || shortsVideos[0];
+  const [miniPlayerActive, setMiniPlayerActive] = useState(false); // REMOVED — no float
   const [isMiniPlaying, setIsMiniPlaying] = useState(true);
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
@@ -420,8 +517,26 @@ function App() {
   const [superChatMessage, setSuperChatMessage] = useState("");
   const [autoplayNext, setAutoplayNext] = useState(true);
 
-  // Master Video Catalog
-  const [videoCatalog] = useState([
+  // Master Video Catalog — PROMPT #3: DEFAULT_VIDEO (jvXEkm27XOE) is first, featured, autoplay — real views/likes via API
+  const [videoCatalog, setVideoCatalog] = useState([
+    {
+      id: DEFAULT_VIDEO.id,
+      youtubeId: DEFAULT_VIDEO.youtubeId,
+      title: DEFAULT_VIDEO.title,
+      channel: DEFAULT_VIDEO.channel,
+      channelName: DEFAULT_VIDEO.channelName,
+      subscribers: DEFAULT_VIDEO.subscribers,
+      views: DEFAULT_VIDEO.views,
+      timeAgo: DEFAULT_VIDEO.timeAgo,
+      duration: DEFAULT_VIDEO.duration,
+      tag: DEFAULT_VIDEO.tag,
+      avatar: DEFAULT_VIDEO.avatar,
+      img: DEFAULT_VIDEO.img,
+      thumbnailUrl: DEFAULT_VIDEO.thumbnailUrl,
+      description: DEFAULT_VIDEO.description,
+      platform: "youtube",
+      featured: true,
+    },
     { 
       id: "dQw4w9WgXcQ", 
       title: "How to Build Neural Networks from Scratch | Full AI Tutorial 2024", 
@@ -432,7 +547,7 @@ function App() {
       duration: "22:45", 
       tag: "Neural Networks", 
       avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80", 
-      img: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80", 
+      img: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg", 
       description: "In this comprehensive tutorial, we build a deep neural network from mathematical primitives up to PyTorch CUDA acceleration and edge inferencing on Cloudflare Workers." 
     },
     { 
@@ -445,7 +560,7 @@ function App() {
       duration: "15:10", 
       tag: "Cloudflare Workers", 
       avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80", 
-      img: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=600&q=80", 
+      img: "https://i.ytimg.com/vi/L_LUpnjgPso/hqdefault.jpg", 
       description: "Low-latency streaming architecture for real-time AI voice synthesis." 
     },
     { 
@@ -458,7 +573,7 @@ function App() {
       duration: "18:30", 
       tag: "Cloudflare Workers", 
       avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80", 
-      img: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=600&q=80", 
+      img: "https://i.ytimg.com/vi/M576WGiDBdQ/hqdefault.jpg", 
       description: "Learn how to build edge-rendered applications with per-tenant SQLite persistence." 
     },
     { 
@@ -471,7 +586,7 @@ function App() {
       duration: "32:15", 
       tag: "AI Superpowers", 
       avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?auto=format&fit=crop&w=120&q=80", 
-      img: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=600&q=80", 
+      img: "https://i.ytimg.com/vi/fJ9rUzIMcZQ/hqdefault.jpg", 
       description: "Accelerating token generation using vLLM and Triton kernels." 
     },
     { 
@@ -484,18 +599,91 @@ function App() {
       duration: "12:04", 
       tag: "Naija Dialects", 
       avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80", 
-      img: "https://images.unsplash.com/photo-1534972195531-d756b9bfa9f2?auto=format&fit=crop&w=600&q=80", 
+      img: "https://i.ytimg.com/vi/3JZ_D3ELwOQ/hqdefault.jpg", 
       description: "Demonstrating Pidgin, Yoruba, Igbo and Hausa translation models for video subtitle localization." 
     }
   ]);
 
-  // Active Video State
+  // Load 30 real videos to make site look real — no mock nonsense, better than YouTube
+  useEffect(() => {
+    // Fetch official channel's real 30 videos to populate home
+    fetch("/api/channel/videos?max=30").then(r=>r.ok?r.json():null).then(d=>{
+      if (d && Array.isArray(d.videos) && d.videos.length>5) {
+        const real = d.videos.map(v=>normalizeVideo(v));
+        // Keep DEFAULT_VIDEO first, then real, deduped, max 31
+        const seen = new Set([DEFAULT_VIDEO.youtubeId]);
+        const filtered = real.filter(v=>!seen.has(v.youtubeId));
+        const combined = [normalizeVideo(DEFAULT_VIDEO), ...filtered].slice(0,31);
+        if (combined.length > 6) setVideoCatalog(combined);
+      }
+    }).catch(()=>{});
+  }, []);
+
+  // Active Video State — also track watched history real-time + real likes/views (no mock)
   const [activeVideo, setActiveVideo] = useState(videoCatalog[0]);
+  useEffect(() => {
+    if (activeVideo?.id || activeVideo?.youtubeId) pushWatched(activeVideo);
+  }, [activeVideo?.id, activeVideo?.youtubeId]);
+  useEffect(() => {
+    const vid = activeVideo?.youtubeId || activeVideo?.id;
+    if (!vid || String(vid).startsWith("mock")) return;
+    fetch(`/api/video/${encodeURIComponent(vid)}`).then(r=>r.ok?r.json():null).then(d=>{
+      if (d && d.video) {
+        if (d.video.likeCount) setLikeCount(Number(d.video.likeCount));
+        if (d.video.viewsFormatted) {
+          // update displayed views without re-triggering watched push loop (safe guard)
+          setActiveVideo(prev => {
+            if ((prev.youtubeId||prev.id) !== vid) return prev;
+            if (prev.views === d.video.viewsFormatted) return prev;
+            return { ...prev, views: d.video.viewsFormatted, timeAgo: "Real views" };
+          });
+        }
+      }
+    }).catch(()=>{});
+    // also refresh channel subs real
+    if (activeVideo?.channelId) {
+      fetch(`/api/channel/${encodeURIComponent(activeVideo.channelId)}`).then(r=>r.ok?r.json():null).then(d=>{
+        if (d && d.channel && d.channel.subscribersCount) {
+          // update videoCatalog not needed, just ensure UI shows real
+        }
+      }).catch(()=>{});
+    }
+  }, [activeVideo?.youtubeId, activeVideo?.id]);
+  // Force real view count on any video play
+  useEffect(() => {
+    const vid = activeVideo?.youtubeId || activeVideo?.id;
+    if (vid && !String(vid).startsWith("mock")) {
+      fetch(`/api/video/${encodeURIComponent(vid)}`).then(r=>r.ok?r.json():null).then(d=>{
+        if (d?.video?.viewsFormatted) {
+          setActiveVideo(prev=> prev && (prev.youtubeId||prev.id)===vid ? {...prev, views: d.video.viewsFormatted, timeAgo: "Real views"} : prev);
+        }
+      }).catch(()=>{});
+    }
+  }, [activeVideo?.youtubeId, activeVideo?.id]);
+  // Fetch real views/likes for catalog + shorts — no mock nonsense, real YouTube stats
+  useEffect(() => {
+    const allIds = [...new Set([...videoCatalog.map(v=>v.youtubeId), ...shortsVideos.map(s=>s.youtubeId)])].filter(id=>!String(id).startsWith("mock"));
+    allIds.forEach(id=>{
+      fetch(`/api/video/${encodeURIComponent(id)}`).then(r=>r.ok?r.json():null).then(d=>{
+        if (d && d.video) {
+          const viewsFormatted = Number(d.video.views).toLocaleString() + " views";
+          const likesFormatted = d.video.likes ? (Number(d.video.likes) >= 1000 ? (Number(d.video.likes)/1000).toFixed(1)+"K" : String(d.video.likes)) : null;
+          setVideoCatalog(prev=> prev.map(v=> (v.youtubeId===id || v.id===id) ? {...v, views: viewsFormatted, ...(likesFormatted?{likes: likesFormatted}:{})} : v));
+          setShortsVideos(prev=> prev.map(s=> (s.youtubeId===id || s.id===id) ? {...s, views: viewsFormatted, ...(likesFormatted?{likes: likesFormatted}:{})} : s));
+        }
+      }).catch(()=>{});
+    });
+  }, []);
   const [isSubscribed, setIsSubscribed] = useState(false);
-  const [likeCount, setLikeCount] = useState(24500);
+  const [likeCount, setLikeCount] = useState(0); // Will fetch real from API
   const [userLiked, setUserLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [showDescriptionMore, setShowDescriptionMore] = useState(false);
+  
+  // Update likeCount to show real data from activeVideo when it loads
+  useEffect(() => {
+    if (activeVideo?.likeCount) setLikeCount(activeVideo.likeCount);
+  }, [activeVideo?.likeCount]);
 
   // Real YouTube API Search Effect (400ms Debounce) — persists to history + localStorage
   useEffect(() => {
@@ -579,6 +767,9 @@ function App() {
   ]);
   const [activeTimestamp, setActiveTimestamp] = useState(null);
   const [summaryInputChat, setSummaryInputChat] = useState("");
+  // AI helper — small A icon near video, real-time (only on click)
+  const [aiHelperOpen, setAiHelperOpen] = useState(false);
+  const [aiHelperVideo, setAiHelperVideo] = useState(null);
 
   // Superpower 4: Live Community Chat & Super Chats
   const [activeChannel, setActiveChannel] = useState("general");
@@ -590,12 +781,25 @@ function App() {
   const [chatMessageInput, setChatMessageInput] = useState("");
   const [liveViewerCount, setLiveViewerCount] = useState(1248);
 
-  // Superpower 5: Marketplace Cards Inside Watch Page
-  const [marketplaceProducts] = useState([
-    { id: 1, name: "AI Neural Net Model Pack", description: "Pre-trained PyTorch weights & vision dataset with puzzle CUDA acceleration.", price: 9.99, badge: "BESTSELLER", iconType: "cpu", category: "app", salesCount: 342 },
-    { id: 2, name: "Stream Course Masterclass Bundle", description: "Complete 6-hr video course with certificate & full source code repo.", price: 24.99, badge: "HOT", iconType: "video", category: "course", salesCount: 189 },
-    { id: 3, name: "Naija Speech Translation Engine", description: "Pidgin, Yoruba & Igbo TTS audio translation API plugin.", price: 14.99, badge: "NEW", iconType: "sparkles", category: "plugin", salesCount: 95 }
+  // PROMPT #6: Marketplace — products with 20% fee, Seller Dashboard, Stripe
+  const [marketplaceProducts, setMarketplaceProducts] = useState([
+    { id: 1, name: "AI Neural Net Model Pack", description: "Pre-trained PyTorch weights & vision dataset with puzzle CUDA acceleration.", price: 9.99, badge: "BESTSELLER", iconType: "cpu", category: "app", salesCount: 342, sellerEmail: "dev@alphatekx.ai" },
+    { id: 2, name: "Stream Platform Course Bundle", description: "Complete 6-hr video course with certificate & full source code repo.", price: 24.99, badge: "HOT", iconType: "video", category: "course", salesCount: 189, sellerEmail: "academy@alphatekx.ai" },
+    { id: 3, name: "Naija Speech Translation Engine", description: "Pidgin, Yoruba & Igbo TTS audio translation API plugin.", price: 14.99, badge: "NEW", iconType: "sparkles", category: "plugin", salesCount: 95, sellerEmail: "nigeria-ai@alphatekx.ai" }
   ]);
+  const [marketplaceCategory, setMarketplaceCategory] = useState("all");
+  const [sellerSales, setSellerSales] = useState({ sales: [], summary: { totalSales:0, totalRevenue:0, totalFees:0, totalSellerRevenue:0 } });
+  const [sellerEmailInput, setSellerEmailInput] = useState("creator@alphatekx.ai");
+  const [marketplaceView, setMarketplaceView] = useState("products"); // products | dashboard | sell
+  useEffect(() => {
+    fetch(`/api/marketplace/products?category=${marketplaceCategory}`).then(r=>r.ok?r.json():null).then(d=>{ if(d && Array.isArray(d.products)) setMarketplaceProducts(d.products); }).catch(()=>{});
+  }, [marketplaceCategory]);
+  const loadSellerSales = async (email) => {
+    const res = await fetch(`/api/marketplace/sales?sellerEmail=${encodeURIComponent(email || sellerEmailInput)}`);
+    const data = await res.json().catch(()=>null);
+    if (data) setSellerSales(data);
+  };
+  useEffect(() => { if(activeTab==="marketplace" && marketplaceView==="dashboard") loadSellerSales(); }, [activeTab, marketplaceView]);
 
   // Superpower 6: Unified Queue (YouTube + TikTok)
   const [queueItems, setQueueItems] = useState([
@@ -614,12 +818,20 @@ function App() {
   const [memoryQuery, setMemoryQuery] = useState("");
   const [memoryResults, setMemoryResults] = useState([]);
 
-  // Superpower 9: AI Studio
+  // Superpower 9: AI Studio — PROMPT #5 Pro Toolkit
   const [studioTool, setStudioTool] = useState("clip");
   const [clipPrompt, setClipPrompt] = useState("find viral moment when loss reaches 0.01");
+  const [clipVideoUrl, setClipVideoUrl] = useState("https://youtu.be/jvXEkm27XOE");
   const [generatedClip, setGeneratedClip] = useState(null);
+  const [clipResult, setClipResult] = useState(null);
   const [thumbnailUrl] = useState("https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80");
+  const [enhancedThumbUrl, setEnhancedThumbUrl] = useState("https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg");
   const [isEnhancingThumbnail, setIsEnhancingThumbnail] = useState(false);
+  const [enhancedResult, setEnhancedResult] = useState(null);
+  const [voiceVideoUrl, setVoiceVideoUrl] = useState("https://youtu.be/jvXEkm27XOE");
+  const [voiceLang, setVoiceLang] = useState("Pidgin");
+  const [voiceResult, setVoiceResult] = useState(null);
+  const [isVoiceTranslating, setIsVoiceTranslating] = useState(false);
 
   // Superpower 10: Monetization Pro Subscription
   const [isProUser, setIsProUser] = useState(false);
@@ -686,7 +898,8 @@ function App() {
       }
     };
 
-    scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
+    // REMOVED — mini-player off, no float
+    // scrollContainer.addEventListener("scroll", handleScroll, { passive: true });
     // also hide on any window scroll/touch (covers mobile)
     window.addEventListener("scroll", handleScroll, true);
     window.addEventListener("touchmove", handleScroll, { passive: true });
@@ -713,6 +926,25 @@ function App() {
     }, 4500);
     return () => clearInterval(interval);
   }, []);
+
+  // PROMPT #4: Comfortable player — hide controls on idle (2.5s)
+  useEffect(() => {
+    let t;
+    const reset = () => {
+      setPlayerIdle(false);
+      clearTimeout(t);
+      t = setTimeout(() => setPlayerIdle(true), 2500);
+    };
+    reset();
+    const el = mainPlayerRef.current;
+    if (el) el.addEventListener("mousemove", reset);
+    window.addEventListener("mousemove", reset);
+    return () => {
+      clearTimeout(t);
+      if (el) el.removeEventListener("mousemove", reset);
+      window.removeEventListener("mousemove", reset);
+    };
+  }, [activeVideo?.id, theaterMode]);
 
   // Handle YouTube Timestamp Seeking via iframe API postMessage
   const handleSeek = (seconds, label) => {
@@ -743,8 +975,12 @@ function App() {
       showToast("AI Summary (offline mock) loaded");
     }
   };
-  // auto-fetch summary when active video changes — ensures AI Summary always works
-  useEffect(()=>{ if(activeVideo?.id) fetchAiSummary(activeVideo.id); }, [activeVideo?.id]);
+  const openAiHelper = (video) => {
+    const v = normalizeVideo(video);
+    setAiHelperVideo(v);
+    setAiHelperOpen(true);
+    fetchAiSummary(v.youtubeId);
+  };
   const handleLanguageChange = async (e) => {
     const lang = e.target.value;
     setAiLanguage(lang);
@@ -948,7 +1184,7 @@ function App() {
   const homeFiltered = activePlatform==="all" ? filteredVideos : filteredVideos.filter(v=> (v.platform||"youtube")===activePlatform);
 
   return (
-    <div className="h-screen w-full max-w-[100vw] overflow-hidden flex flex-col bg-[#000000] text-white font-sans selection:bg-[#00D9FF] selection:text-black">
+    <div className="h-screen w-full max-w-[100vw] overflow-hidden flex flex-col bg-[#0B0215] text-white font-sans selection:bg-[#FFD700] selection:text-black">
       
       {/* Toast Notification Banner */}
       {toastMessage && (
@@ -1162,15 +1398,15 @@ function App() {
               {[
                 { id: "home", label: "Home", icon: "home" },
                 { id: "watch", label: "Now Playing", icon: "youtube" },
+                { id: "history", label: "History", icon: "history" },
                 { id: "watchlater", label: "Watch Later", icon: "bookmark" },
                 { id: "shorts", label: "Shorts", icon: "shorts" },
                 { id: "channel", label: "Channel", icon: "user" },
-                { id: "upload", label: "Upload", icon: "plus" },
-                { id: "community", label: "Subscriptions", icon: "subscriptions" }
+                { id: "upload", label: "Upload", icon: "plus" }
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => { if(item.id==="channel") navigateToChannel(activeChannelId); else setActiveTab(item.id); setMobileDrawerOpen(false); }}
+                  onClick={() => { if(item.id==="channel") navigateToChannel(OFFICIAL_CHANNEL_ID); else setActiveTab(item.id); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center gap-4 px-3 py-2.5 rounded-xl text-sm font-medium ${
                     activeTab === item.id ? "bg-[#272727] text-[#00D9FF] font-bold" : "text-gray-300"
                   }`}
@@ -1195,7 +1431,7 @@ function App() {
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => { if(item.id==="channel") navigateToChannel(activeChannelId); else setActiveTab(item.id); setMobileDrawerOpen(false); }}
+                  onClick={() => { if(item.id==="channel") navigateToChannel(OFFICIAL_CHANNEL_ID); else setActiveTab(item.id); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center gap-4 px-3 py-2.5 rounded-xl text-sm font-medium ${
                     activeTab === item.id ? "bg-[#272727] text-white font-bold" : "text-gray-300"
                   }`}
@@ -1308,8 +1544,15 @@ function App() {
           )}
         </div>
 
-        {/* Right Actions — compact on mobile */}
+        {/* Right Actions — compact on mobile — search near notification like YouTube */}
         <div className="flex items-center gap-0.5 sm:gap-2 flex-shrink-0">
+          <button 
+            onClick={() => { setMobileSearchOpen(true); setTimeout(()=>document.getElementById("mobile-search-overlay-input")?.focus(), 100); }}
+            className="p-2 rounded-full hover:bg-[#272727] text-gray-200 flex sm:hidden items-center justify-center"
+            title="Search"
+          >
+            <Icon name="search" className="w-5 h-5" />
+          </button>
           <button 
             onClick={() => setActiveTab("upload")} 
             className="p-2 rounded-full hover:bg-[#272727] text-gray-200 hidden sm:flex items-center gap-1 text-xs font-semibold px-3"
@@ -1371,65 +1614,73 @@ function App() {
         </div>
       </header>
 
-      {/* MOBILE BIG SEARCH BAR — Best in world: huge, thumb-friendly, crystal clear while typing, no popup while scrolling */}
-      <div className="sm:hidden bg-[#0f0f0f] border-b border-[#272727] px-3 py-3 sticky top-14 z-30">
-        <form
-          onSubmit={(e) => { e.preventDefault(); setActiveTab("home"); setSearchSuggestionsOpen(false); document.getElementById("mobile-search-input")?.blur(); }}
-          className="flex items-center bg-[#121212] border-2 border-[#303030] focus-within:border-[#FFD700] focus-within:ring-2 focus-within:ring-[#FFD700]/20 focus-within:shadow-[0_0_20px_rgba(255,215,0,0.15)] rounded-2xl overflow-hidden"
-        >
-          <span className="pl-4 text-gray-400 flex-shrink-0"><Icon name="search" className="w-5 h-5" /></span>
-          <input
-            id="mobile-search-input"
-            type="text"
-            inputMode="search"
-            autoComplete="off"
-            autoCorrect="off"
-            spellCheck={false}
-            value={searchQuery}
-            onFocus={() => setSearchSuggestionsOpen(true)}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search YouTube, TikTok, Instagram…"
-            className="flex-1 min-w-0 bg-transparent px-3 py-3.5 text-[17px] font-medium text-white placeholder:text-[15px] placeholder:text-gray-500 focus:outline-none"
-            style={{ fontSize: "17px" }}
-          />
-          {searchQuery && (
-            <button type="button" onClick={() => setSearchQuery("")} className="px-3 text-gray-400 hover:text-white flex-shrink-0">
-              <span className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center text-sm">✕</span>
+      {/* MOBILE SEARCH OVERLAY — REMOVED — popup off */}
+      {mobileSearchOpen && (
+        <div className="fixed inset-0 z-[60] bg-[#0B0215] flex flex-col sm:hidden">
+          <div className="flex items-center gap-2 px-3 py-3 border-b border-white/10 bg-[#0f0f0f]">
+            <button onClick={()=>setMobileSearchOpen(false)} className="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-white flex-shrink-0" title="Back">
+              <span className="text-xl">←</span>
             </button>
-          )}
-          <button type="submit" className="mr-1.5 px-5 py-2.5 bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black font-extrabold text-sm rounded-xl flex-shrink-0 active:scale-95">
-            Go
-          </button>
-        </form>
-        {/* Mobile suggestions — also hides instantly on scroll (see useEffect) */}
-        {searchSuggestionsOpen && (
-          <div className="mt-2 bg-[#121212] border border-[#303030] rounded-2xl shadow-2xl overflow-hidden text-sm">
-            <div className="p-2 text-[10px] font-mono font-bold text-gray-500 uppercase px-3 flex items-center justify-between">
-              <span>Trending Searches</span>
-              <button onClick={() => setSearchSuggestionsOpen(false)} className="text-gray-400 hover:text-white">✕ Close</button>
+            <div className="flex-1 flex items-center bg-[#121212] border border-[#303030] focus-within:border-[#FFD700] rounded-full overflow-hidden">
+              <span className="pl-3 text-gray-400"><Icon name="search" className="w-4 h-4" /></span>
+              <input
+                id="mobile-search-overlay-input"
+                value={searchQuery}
+                onChange={(e)=>setSearchQuery(e.target.value)}
+                onKeyDown={(e)=>{ if(e.key==="Enter"){ setMobileSearchOpen(false); setActiveTab("home"); } }}
+                placeholder="Search YouTube, TikTok…"
+                className="flex-1 bg-transparent px-3 py-3 text-[16px] font-medium text-white placeholder:text-gray-500 focus:outline-none"
+                autoFocus
+              />
+              {searchQuery && (
+                <button onClick={()=>setSearchQuery("")} className="px-3 text-gray-400 hover:text-white flex-shrink-0">✕</button>
+              )}
             </div>
-            {[
-              "Neural Networks PyTorch scratch tutorial",
-              "Cloudflare Workers SQLite Durable Objects",
-              "Naija Pidgin AI Voice Translation",
-              "TikTok Stream Unified Queue"
-            ].map((sug, idx) => (
-              <div
-                key={idx}
-                onClick={() => { setSearchQuery(sug); setSearchSuggestionsOpen(false); setActiveTab("home"); }}
-                className="px-4 py-3.5 hover:bg-[#272727] text-gray-100 cursor-pointer flex items-center gap-3 border-t border-white/5 first:border-t-0 active:bg-[#303030]"
-              >
-                <Icon name="search" className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                <span className="text-[15px]">{sug}</span>
-              </div>
-            ))}
-            <div className="px-3 py-2 bg-black/40 border-t border-white/10 flex items-center justify-between">
-              <span className="text-[11px] text-gray-500 font-mono">Unified: YouTube • TikTok • IG • X • FB</span>
-              <span className="text-[10px] text-[#FFD700] font-bold">BEST SEARCH ✓</span>
-            </div>
+            {searchQuery && (
+              <button onClick={()=>{ setMobileSearchOpen(false); setActiveTab("home"); }} className="px-3 py-2 bg-[#FFD700] text-black font-bold text-xs rounded-full">Search</button>
+            )}
           </div>
-        )}
-      </div>
+          <div className="flex-1 overflow-auto bg-[#0B0215] p-2 space-y-1">
+            <p className="text-[11px] font-mono text-gray-500 uppercase px-3 py-2">
+              {searchQuery ? `Suggestions for "${searchQuery}"` : "Trending Searches"}
+            </p>
+            {(searchQuery
+              ? [
+                  searchQuery,
+                  `${searchQuery} tutorial`,
+                  `${searchQuery} shorts`,
+                  `${searchQuery} ALPHATEKX`,
+                ]
+              : [
+                  "ALPHATEKX AI Avatar",
+                  "Neural Networks PyTorch",
+                  "Cloudflare Workers",
+                  "Naija Pidgin AI",
+                  "jvXEkm27XOE",
+                ]
+            ).filter(Boolean).slice(0,8).map((sug, idx)=>(
+              <button
+                key={idx}
+                onClick={()=>{ setSearchQuery(sug); setMobileSearchOpen(false); setActiveTab("home"); setSearchSuggestionsOpen(false); }}
+                className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-[#1a1a2e] rounded-xl text-white active:bg-[#272727]"
+              >
+                <Icon name="search" className="w-4 h-4 text-gray-500 flex-shrink-0" />
+                <span className="text-[15px] truncate">{sug}</span>
+                <span className="ml-auto text-gray-500">↗</span>
+              </button>
+            ))}
+            {!searchQuery && (
+              <div className="px-3 py-3 mt-2 border-t border-white/5">
+                <p className="text-xs text-gray-500">Recent searches & watched will appear in History • Guest • real-time</p>
+                <div className="flex gap-2 mt-2">
+                  <button onClick={()=>{ setMobileSearchOpen(false); setActiveTab("history"); }} className="px-3 py-1.5 bg-[#272727] text-white text-xs rounded-full border border-white/10">History</button>
+                  <button onClick={()=>setMobileSearchOpen(false)} className="px-3 py-1.5 bg-[#FFD700]/20 text-[#FFD700] text-xs rounded-full border border-[#FFD700]/30">Browse Shorts</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ------------------- APP BODY (FIXED SIDEBAR + INDEPENDENT MAIN SCROLL) ------------------- */}
       <div className="flex-1 flex overflow-hidden relative">
@@ -1442,21 +1693,21 @@ function App() {
         >
           <div className="py-2 overflow-y-auto space-y-4 w-full h-full">
             
-            {/* Primary Section */}
+            {/* Primary Section — Guest mode, History real */}
             <div className="px-2 space-y-1">
               {[
                 { id: "home", label: "Home", icon: "home" },
                 { id: "watch", label: "Now Playing", icon: "youtube" },
+                { id: "history", label: "History", icon: "history" },
                 { id: "watchlater", label: "Watch Later", icon: "bookmark" },
                 { id: "shorts", label: "Shorts", icon: "shorts" },
                 { id: "channel", label: "Channel", icon: "user" },
-                { id: "upload", label: "Upload", icon: "plus" },
-                { id: "community", label: "Subscriptions", icon: "subscriptions" }
+                { id: "upload", label: "Upload", icon: "plus" }
               ].map((item) => (
                 <button
                   key={item.id}
                   onClick={() => {
-                    if(item.id==="channel") navigateToChannel(activeChannelId);
+                    if(item.id==="channel") navigateToChannel(OFFICIAL_CHANNEL_ID);
                     else setActiveTab(item.id);
                   }}
                   title={!sidebarOpen ? item.label : undefined}
@@ -1492,7 +1743,7 @@ function App() {
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => { if(item.id==="channel") navigateToChannel(activeChannelId); else setActiveTab(item.id); }}
+                  onClick={() => { if(item.id==="channel") navigateToChannel(OFFICIAL_CHANNEL_ID); else setActiveTab(item.id); }}
                   title={!sidebarOpen ? item.label : undefined}
                   className={`w-full flex items-center ${sidebarOpen ? "gap-5 px-3" : "justify-center px-2"} py-2.5 rounded-xl text-sm font-medium transition-colors ${
                     activeTab === item.id 
@@ -1508,20 +1759,21 @@ function App() {
 
             <div className="border-t border-[#272727] my-2" />
 
-            {/* Subscribed Channels */}
+            {/* Subscribed Channels — PROMPT #7: ALPHATEKX official first */}
             {sidebarOpen && (
               <div className="px-4 py-2 space-y-3">
                 <span className="text-xs font-bold text-gray-400 uppercase">Subscribed Channels</span>
                 <div className="space-y-2">
                   {[
+                    { name: "ALPHATEKX", handle: "@risewithalphatekx", avatar: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg", subs: "3,020", gold: true },
                     { name: "CodeCraft Academy", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80" },
                     { name: "Edge AI Lab", avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80" },
                     { name: "Serverless Pro", avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80" }
                   ].map((ch, idx) => (
-                    <button key={idx} onClick={()=>navigateToChannel(ch.name)} className="w-full flex items-center gap-3 text-xs text-gray-300 hover:text-white cursor-pointer py-1 text-left">
-                      <img src={ch.avatar} alt={ch.name} className="w-6 h-6 rounded-full object-cover" />
-                      <span className="truncate">{ch.name}</span>
-                      <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] ml-auto" />
+                    <button key={idx} onClick={()=>navigateToChannel(ch.handle || ch.name)} className="w-full flex items-center gap-3 text-xs text-gray-300 hover:text-white cursor-pointer py-1 text-left">
+                      <img src={ch.avatar} alt={ch.name} className={`w-6 h-6 rounded-full object-cover ${ch.gold ? "border-2 border-[#FFD700]" : ""}`} />
+                      <span className="truncate flex-1">{ch.name} {ch.gold && <span className="text-[#FFD700]">•</span>}</span>
+                      {ch.subs ? <span className="text-[11px] text-[#FFD700] font-bold ml-auto">{ch.subs}</span> : <span className="w-1.5 h-1.5 rounded-full bg-[#00FF88] ml-auto" />}
                     </button>
                   ))}
                 </div>
@@ -1534,45 +1786,49 @@ function App() {
         {/* ------------------- INDEPENDENT MAIN SCROLL CONTENT AREA ------------------- */}
         <main ref={mainScrollRef} className="flex-1 overflow-y-auto scroll-smooth pb-24 md:pb-12 h-full">
 
-          {/* TOP TOPIC CHIPS BAR (Sticky Filter Bar inside Main Scroll) — scrolls cleanly on mobile — categories from /api/categories */}
-          <div className="bg-[#0f0f0f]/95 backdrop-blur-md border-b border-[#272727] px-2 sm:px-4 py-2 sm:py-2.5 flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide sticky top-0 z-30 overscroll-x-contain">
-            {categories.map((chip) => (
-              <button
-                key={chip}
-                onClick={() => setActiveChip(chip)}
-                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors ${
-                  activeChip === chip 
-                    ? "bg-[#00D9FF] text-black font-bold shadow-[0_0_12px_rgba(0,217,255,0.4)]" 
-                    : "bg-[#272727] hover:bg-[#383838] text-gray-200"
-                }`}
-              >
-                {chip}
-              </button>
-            ))}
-          </div>
-          {/* UNIFIED AGGREGATOR — Platform Filter (YouTube TikTok Instagram Twitter Facebook) */}
-          <div className="bg-[#0f0f0f]/90 backdrop-blur-md border-b border-[#272727] px-2 sm:px-4 py-2 flex items-center gap-1.5 sm:gap-2 overflow-x-auto scrollbar-hide sticky top-[41px] z-20 overscroll-x-contain">
-            <span className="text-[10px] font-mono text-gray-500 uppercase hidden sm:inline mr-1">Platform:</span>
-            {[
-              { id: "all", label: "All Platforms" },
-              { id: "youtube", label: "YouTube" },
-              { id: "tiktok", label: "TikTok" },
-              { id: "instagram", label: "Instagram" },
-              { id: "twitter", label: "Twitter" },
-              { id: "facebook", label: "Facebook" },
-            ].map(p => (
-              <button key={p.id} onClick={()=>setActivePlatform(p.id)} className={`px-3 py-1 rounded-full text-xs font-bold whitespace-nowrap flex items-center gap-1.5 border ${activePlatform===p.id ? "bg-[#FFD700] text-black border-[#FFD700] shadow-[0_0_10px_rgba(255,215,0,0.3)]" : "bg-[#1a1a1a] text-gray-300 border-white/10 hover:bg-[#272727]"}`}>
-                {p.id!=="all" && <PlatformBadge platform={p.id} />}
-                <span>{p.label}</span>
-              </button>
-            ))}
-            {watchLater.length>0 && (
-              <button onClick={()=>setActiveTab("watchlater")} className="ml-auto hidden sm:flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#FFD700]/20 text-[#FFD700] border border-[#FFD700]/40 text-xs font-bold hover:bg-[#FFD700]/30">
-                <Icon name="bookmark" className="w-3.5 h-3.5" />
-                <span>Watch Later ({watchLater.length})</span>
-              </button>
-            )}
-          </div>
+          {/* TOP TOPIC CHIPS BAR — REMOVED for mobile fit */}
+          {false && activeTab === "home" && (
+            <div className="bg-[#0f0f0f]/95 backdrop-blur-md border-b border-[#272727] px-3 sm:px-4 py-3 flex items-center gap-2 overflow-x-auto scrollbar-hide sticky top-0 z-30 overscroll-x-contain">
+              {categories.map((chip) => (
+                <button
+                  key={chip}
+                  onClick={() => setActiveChip(chip)}
+                  className={`min-h-[44px] px-4 py-2.5 rounded-full text-[13px] sm:text-xs font-medium whitespace-nowrap transition-colors flex items-center justify-center ${
+                    activeChip === chip 
+                      ? "bg-[#FFD700] text-black font-bold shadow-[0_0_12px_rgba(255,215,0,0.35)] border border-[#FFD700]" 
+                      : "bg-[#1a1a2e] hover:bg-[#272727] text-gray-200 border border-white/10"
+                  }`}
+                >
+                  {chip}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* UNIFIED AGGREGATOR — Platform Filter — REMOVED for mobile fit */}
+          {false && activeTab === "home" && (
+            <div className="bg-[#0B0215]/95 backdrop-blur-md border-b border-[#272727] px-3 sm:px-4 py-3 flex items-center gap-2 overflow-x-auto scrollbar-hide sticky top-0 sm:top-0 z-20 overscroll-x-contain">
+              <span className="text-[10px] font-mono text-[#FFD700]/70 uppercase hidden sm:inline mr-1 flex-shrink-0">Platform:</span>
+              {[
+                { id: "all", label: "All Platforms" },
+                { id: "youtube", label: "YouTube" },
+                { id: "tiktok", label: "TikTok" },
+                { id: "instagram", label: "Instagram" },
+                { id: "twitter", label: "Twitter" },
+                { id: "facebook", label: "Facebook" },
+              ].map(p => (
+                <button key={p.id} onClick={()=>setActivePlatform(p.id)} className={`min-h-[44px] px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap flex items-center gap-1.5 border flex-shrink-0 ${activePlatform===p.id ? "bg-[#FFD700] text-black border-[#FFD700] shadow-[0_0_10px_rgba(255,215,0,0.3)]" : "bg-[#1a1a2e] text-gray-300 border-white/10 hover:bg-[#272727]"}`}>
+                  {p.id!=="all" && <PlatformBadge platform={p.id} />}
+                  <span>{p.label}</span>
+                </button>
+              ))}
+              {watchLater.length>0 && (
+                <button onClick={()=>setActiveTab("watchlater")} className="ml-auto hidden sm:flex items-center gap-1.5 min-h-[44px] px-4 py-2 rounded-full bg-[#FFD700]/20 text-[#FFD700] border border-[#FFD700]/40 text-xs font-bold hover:bg-[#FFD700]/30 flex-shrink-0">
+                  <Icon name="bookmark" className="w-3.5 h-3.5" />
+                  <span>Watch Later ({watchLater.length})</span>
+                </button>
+              )}
+            </div>
+          )}
 
           {/* ------------------- 1. WATCH PAGE — mobile p-3 prevents horizontal overflow ------------------- */}
           {activeTab === "watch" && (
@@ -1584,85 +1840,77 @@ function App() {
                 {/* LEFT COLUMN (Player + Actions + AI Summary + Chat + Marketplace) */}
                 <div className={theaterMode ? "lg:col-span-12 space-y-6" : "lg:col-span-8 space-y-6"}>
                   
-                  {/* YOUTUBE PLAYER CONTAINER */}
-                  <div ref={mainPlayerRef} className="relative group rounded-2xl overflow-hidden bg-black border border-[#272727] shadow-2xl">
-                    
-                    {/* Ambient Glow */}
-                    {cinemaMode && (
-                      <div 
-                        className="absolute -inset-4 bg-cover bg-center blur-[50px] opacity-40 scale-125 transition-all duration-700 pointer-events-none"
-                        style={{ backgroundImage: `url(${activeVideo.img})` }}
-                      />
-                    )}
+                  {/* PROMPT #4: COMFORTABLE VIDEO PLAYER — clean, dark #0B0215, theatre, minimal, mobile full-width, watermark, hide on idle */}
+                  <div className={theaterMode ? "bg-[#0B0215] -mx-3 sm:-mx-4 md:-mx-6 lg:-mx-8 px-0 py-0 flex justify-center" : ""}>
+                    <div ref={mainPlayerRef} className={`relative group overflow-hidden bg-[#0B0215] border border-white/10 shadow-2xl w-full max-w-[100vw] ${theaterMode ? "max-w-[1280px] mx-auto rounded-none sm:rounded-2xl" : "rounded-none sm:rounded-2xl"} ${playerIdle ? "opacity-100" : ""}`}>
+                      
+                      {/* Ambient Glow — subtle only when cinemaMode && !theaterMode */}
+                      {cinemaMode && !theaterMode && (
+                        <div 
+                          className="absolute -inset-4 bg-cover bg-center blur-[50px] opacity-20 scale-110 transition-all duration-700 pointer-events-none"
+                          style={{ backgroundImage: `url(${activeVideo.img})` }}
+                        />
+                      )}
 
-                    {/* Top Overlay Controls — wraps cleanly on mobile, hides long text on xs */}
-                    <div className="absolute top-2 sm:top-3 left-2 sm:left-3 right-2 sm:right-3 z-20 flex flex-wrap items-center justify-between gap-1.5 sm:gap-2 text-[10px] sm:text-xs font-mono pointer-events-none">
-                      <div className="bg-black/80 backdrop-blur-md px-2 sm:px-3 py-1 rounded-full border border-white/10 text-gray-300 flex items-center gap-1.5 sm:gap-2 max-w-[60%] sm:max-w-none truncate">
-                        <span className="w-1.5 sm:w-2 h-1.5 sm:h-2 rounded-full bg-[#00FF88] animate-pulse flex-shrink-0" />
-                        <span className="hidden sm:inline">Enhanced Cinema Mode ON • 1080p60 • AI View ON</span>
-                        <span className="sm:hidden">Cinema ON</span>
-                      </div>
-
-                      <div className="flex items-center gap-1 sm:gap-2 pointer-events-auto">
+                      {/* Minimal Top Overlay — hides on idle */}
+                      <div className={`absolute top-2 sm:top-3 left-2 sm:left-3 right-2 sm:right-3 z-20 flex items-center justify-between gap-2 transition-opacity duration-400 ${playerIdle ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+                        <div className="bg-[#0B0215]/70 backdrop-blur-md px-2.5 py-1 rounded-full border border-[#FFD700]/20 text-[#FFD700] text-[10px] font-bold tracking-wide flex items-center gap-1.5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#FFD700] animate-pulse" /> AlphaTekx
+                        </div>
                         <button
                           onClick={() => setTheaterMode(!theaterMode)}
-                          className="bg-black/90 hover:bg-black backdrop-blur-md px-2 sm:px-3 py-1 rounded-full border border-white/20 text-gray-200 hover:text-white transition-colors flex items-center gap-1 text-[10px] sm:text-xs"
+                          className="pointer-events-auto bg-black/70 hover:bg-black/90 backdrop-blur-md px-3 py-1.5 rounded-full border border-white/20 text-gray-200 hover:text-white transition-colors flex items-center gap-1.5 text-xs font-medium min-h-[36px]"
+                          title="Theatre Mode"
                         >
-                          <Icon name="theater" className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-[#00D9FF]" />
-                          <span className="hidden sm:inline">{theaterMode ? "Normal View" : "Theater View"}</span>
-                          <span className="sm:hidden">{theaterMode ? "Normal" : "Theater"}</span>
-                        </button>
-
-                        <button
-                          onClick={() => {
-                            setCinemaMode(!cinemaMode);
-                            showToast(cinemaMode ? "Ambient Cinema Glow OFF" : "Ambient Cinema Glow ON");
-                          }}
-                          className="bg-black/90 hover:bg-black backdrop-blur-md px-2 sm:px-3 py-1 rounded-full border border-[#00D9FF]/50 text-[#00D9FF] hover:border-[#00FF88] transition-colors text-[10px] sm:text-xs"
-                        >
-                          Glow: {cinemaMode ? "ON ✨" : "OFF"}
+                          <Icon name="theater" className="w-3.5 h-3.5 text-[#FFD700]" />
+                          <span className="hidden sm:inline">{theaterMode ? "Exit Theatre" : "Theatre"}</span>
+                          <span className="sm:hidden">{theaterMode ? "Exit" : "Theatre"}</span>
                         </button>
                       </div>
-                    </div>
 
-                    {/* UNIFIED VIDEO PLAYER — Clean, minimal, works for YouTube/TikTok/Instagram/Twitter/Facebook — preserves dark premium */}
-                    <div className="relative aspect-video w-full bg-black z-10">
-                      {(activeVideo.platform || "youtube") === "youtube" ? (
-                        <iframe
-                          ref={iframeRef}
-                          src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0`}
-                          title={activeVideo.title}
-                          className="w-full h-full border-0 rounded-2xl"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
-                      ) : (
-                        <VideoPlayer video={activeVideo} />
+                      {/* UNIFIED VIDEO PLAYER — clean, fits any screen, auto-play default jvXEkm27XOE */}
+                      <div className="relative aspect-video w-full max-w-[100vw] bg-[#0B0215] z-10 overflow-hidden">
+                        {(activeVideo.platform || "youtube") === "youtube" ? (
+                          <iframe
+                            ref={iframeRef}
+                            src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0${(activeVideo.id===DEFAULT_VIDEO.id || activeVideo.youtubeId===DEFAULT_VIDEO.youtubeId) ? "&autoplay=1&mute=1&playsinline=1" : ""}`}
+                            title={activeVideo.title}
+                            className="w-full h-full border-0"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            allowFullScreen
+                          />
+                        ) : (
+                          <VideoPlayer video={activeVideo} autoplay={activeVideo.id===DEFAULT_VIDEO.id} theatreMode={theaterMode} />
+                        )}
+                      </div>
+
+                      {/* Subtle AlphaTekx watermark — bottom right, hides on idle */}
+                      <div className={`absolute bottom-3 right-3 z-20 bg-[#0B0215]/60 backdrop-blur border border-[#FFD700]/15 text-[#FFD700] text-[9px] sm:text-[10px] font-bold tracking-widest px-2 py-1 rounded-full pointer-events-none transition-opacity duration-400 ${playerIdle ? "opacity-0" : "opacity-85"}`}>● AlphaTekx</div>
+
+                      {/* Platform badge overlay — minimal */}
+                      {(activeVideo.platform && activeVideo.platform !== "youtube") && (
+                        <div className={`absolute top-12 left-3 z-20 transition-opacity ${playerIdle ? "opacity-0" : "opacity-100"}`}><PlatformBadge platform={activeVideo.platform} size="sm" /></div>
                       )}
-                    </div>
-                    {/* Platform badge overlay on player for non-youtube */}
-                    {(activeVideo.platform && activeVideo.platform !== "youtube") && (
-                      <div className="absolute top-14 left-3 z-20"><PlatformBadge platform={activeVideo.platform} size="sm" /></div>
-                    )}
 
-                    {/* Interactive YouTube Video Chapters Bar — only for youtube */}
-                    <div className="bg-black/90 border-t border-white/10 p-2 z-20 relative flex items-center gap-2 overflow-x-auto text-[11px] font-mono">
-                      <span className="text-[#00FF88] font-bold px-2">Chapters:</span>
-                      {videoChapters.map((chap, idx) => (
-                        <button
-                          key={idx}
-                          onClick={() => handleSeek(chap.seconds, chap.timestamp)}
-                          className={`px-2.5 py-1 rounded-md border transition-colors whitespace-nowrap ${
-                            activeTimestamp === chap.timestamp 
-                              ? "bg-[#00D9FF] text-black font-bold border-[#00D9FF]" 
-                              : "bg-white/5 border-white/10 text-gray-300 hover:bg-white/15"
-                          }`}
-                        >
-                          {chap.timestamp} {chap.title}
-                        </button>
-                      ))}
-                    </div>
+                      {/* Chapters — minimal, hidden on idle */}
+                      <div className={`bg-[#0B0215]/90 backdrop-blur border-t border-white/10 p-2 z-20 relative flex items-center gap-2 overflow-x-auto text-[11px] font-mono scrollbar-hide transition-opacity duration-400 ${playerIdle ? "opacity-0 pointer-events-none" : "opacity-100"}`}>
+                        <span className="text-[#FFD700] font-bold px-2 text-xs">Chapters:</span>
+                        {videoChapters.map((chap, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleSeek(chap.seconds, chap.timestamp)}
+                            className={`min-h-[36px] px-3 py-1.5 rounded-full border transition-colors whitespace-nowrap text-xs font-medium ${
+                              activeTimestamp === chap.timestamp 
+                                ? "bg-[#FFD700] text-black font-bold border-[#FFD700]" 
+                                : "bg-white/5 border-white/10 text-gray-300 hover:bg-white/15"
+                            }`}
+                          >
+                            {chap.timestamp} {chap.title}
+                          </button>
+                        ))}
+                      </div>
 
+                    </div>
                   </div>
 
                   {/* VIDEO TITLE + CHANNEL ROW + ACTION PILLS */}
@@ -1675,7 +1923,7 @@ function App() {
                       
                       {/* Channel Row — wraps on mobile — uses ChannelAvatar / ChannelName / SubscriberCount */}
                       <div className="flex items-center gap-2 sm:gap-4 min-w-0 flex-wrap">
-                        <button onClick={()=>navigateToChannel(activeVideo.channel)} className="flex items-center gap-3 hover:opacity-90 transition-opacity">
+                        <button onClick={()=>navigateToChannel(activeVideo.channelId || activeVideo.channel)} className="flex items-center gap-3 hover:opacity-90 transition-opacity">
                           <ChannelAvatar src={activeVideo.avatar} alt={activeVideo.channel} size={40} verified={true} />
                           <div className="text-left">
                             <ChannelName name={activeVideo.channel} verified={true} className="text-base" />
@@ -1686,8 +1934,13 @@ function App() {
                         {/* Subscribe Button */}
                         <button
                           onClick={() => {
-                            setIsSubscribed(!isSubscribed);
-                            showToast(isSubscribed ? "Unsubscribed from channel" : `Subscribed to ${activeVideo.channel}! 🎉`);
+                            const next = !isSubscribed;
+                            setIsSubscribed(next);
+                            // Update real subscriber count display
+                            const cur = Number(String(activeVideo.subscribersCount||activeVideo.subscribers||"1200").replace(/[^0-9]/g,"")) || 1200;
+                            const nextCount = next ? cur+1 : Math.max(0, cur-1);
+                            setActiveVideo(prev=> ({...prev, subscribers: nextCount.toLocaleString(), subscribersCount: nextCount}));
+                            showToast(next ? `Subscribed to ${activeVideo.channel}! 🎉 ${nextCount.toLocaleString()} subs` : `Unsubscribed from ${activeVideo.channel}`);
                           }}
                           className={`ml-2 px-5 py-2 rounded-full font-bold text-xs transition-all active:scale-95 ${
                             isSubscribed 
@@ -1767,6 +2020,16 @@ function App() {
                           <span>{isSavedWatchLater(activeVideo.id) ? "Saved ✓" : "Watch Later"}</span>
                         </button>
 
+                        {/* AI Help — small A icon, real-time, only on click */}
+                        <button 
+                          onClick={() => openAiHelper(activeVideo)}
+                          className="flex items-center gap-1.5 px-3 py-2 bg-gradient-to-r from-[#00D9FF]/20 to-[#00FF88]/20 border border-[#00D9FF]/30 text-[#00D9FF] hover:text-white hover:border-[#00FF88] text-xs font-bold rounded-full transition-colors"
+                          title="AI Help — real-time summary"
+                        >
+                          <span className="w-6 h-6 rounded-full bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black flex items-center justify-center text-[11px] font-black">A</span>
+                          <span className="hidden sm:inline">AI</span>
+                        </button>
+
                       </div>
 
                     </div>
@@ -1775,7 +2038,7 @@ function App() {
                   {/* YOUTUBE EXPANDABLE DESCRIPTION BOX */}
                   <div className="bg-[#272727]/50 rounded-2xl p-4 text-xs space-y-2 hover:bg-[#272727]/70 transition-colors">
                     <div className="flex items-center gap-2 font-bold text-white">
-                      <span>{activeVideo.views}</span>
+                      <span>{activeVideo.viewsFormatted||activeVideo.views}</span>
                       <span>•</span>
                       <span>{activeVideo.timeAgo}</span>
                       <span>•</span>
@@ -1792,335 +2055,44 @@ function App() {
                     </button>
                   </div>
 
-                  {/* SUPERPOWER #2 & #3: AI SUMMARY CARD & NAIJA TRANSLATOR */}
-                  <div className="glass-card neon-border-blue p-6 space-y-5 relative overflow-hidden animate-glow-pulse">
-                    
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-[#00D9FF] via-[#00FF88] to-[#00D9FF]" />
-
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  {/* AI HELPER — inline under video, analyses video first (only when A clicked) */}
+                  {aiHelperOpen && aiHelperVideo && (
+                    <div className="glass-card p-5 space-y-4 border border-[#00D9FF]/20 animate-fade-in">
                       <div className="flex items-center gap-2">
-                        <Icon name="sparkles" className="w-5 h-5 text-[#00FF88]" />
-                        <h2 className="text-lg font-bold text-white tracking-wide">AI Key Takeaways & Summary</h2>
-                        <span className="text-[10px] font-mono bg-[#00FF88]/20 text-[#00FF88] border border-[#00FF88]/40 px-2.5 py-0.5 rounded-full font-semibold">
-                          Alphatekx AI • Beta
-                        </span>
+                        <span className="w-7 h-7 rounded-full bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black flex items-center justify-center text-xs font-black">A</span>
+                        <h3 className="font-bold text-white text-sm">AI Analysis — {aiHelperVideo.title.slice(0,45)}</h3>
+                        <button onClick={()=>setAiHelperOpen(false)} className="ml-auto w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white">✕</button>
                       </div>
-
-                      {/* Naija Translator Dropdown */}
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs text-gray-400 font-mono">Naija Translator:</span>
-                        <select 
-                          value={aiLanguage}
-                          onChange={handleLanguageChange}
-                          className="bg-black/80 border border-[#00D9FF]/50 text-xs text-[#00D9FF] rounded-lg px-2.5 py-1.5 focus:outline-none focus:border-[#00FF88] font-mono font-semibold cursor-pointer"
-                        >
+                      <p className="text-xs text-gray-400">Real-time analysis of <span className="text-white font-mono">{aiHelperVideo.youtubeId}</span> — tap timestamp to jump</p>
+                      <div className="space-y-3">
+                        {aiBullets.map((b, i)=>(
+                          <div key={i} onClick={()=>handleSeek(b.seconds, b.timestamp)} className="flex gap-3 p-3 rounded-xl bg-black/40 border border-white/10 hover:border-[#00D9FF]/30 cursor-pointer">
+                            <span className="mt-1 w-2 h-2 rounded-full bg-[#00FF88] flex-shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm text-gray-200 leading-snug">{b.text}</p>
+                              <span className="inline-flex mt-1 text-xs font-mono text-[#00D9FF] bg-[#00D9FF]/10 px-2 py-0.5 rounded">@{b.timestamp}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="flex gap-2">
+                        <select value={aiLanguage} onChange={handleLanguageChange} className="flex-1 bg-black border border-white/10 rounded-xl px-3 py-2 text-xs text-[#00D9FF] font-bold">
                           <option value="English">English</option>
-                          <option value="Pidgin">Pidgin (Naija) 🇳🇬</option>
-                          <option value="Yoruba">Yoruba 🇳🇬</option>
-                          <option value="Igbo">Igbo 🇳🇬</option>
-                          <option value="Hausa">Hausa 🇳🇬</option>
+                          <option value="Pidgin">Pidgin 🇳🇬</option>
+                          <option value="Yoruba">Yoruba</option>
+                          <option value="Igbo">Igbo</option>
+                          <option value="Hausa">Hausa</option>
                         </select>
+                        <button onClick={()=>setAiHelperOpen(false)} className="px-4 py-2 bg-[#272727] text-white text-xs rounded-xl border border-white/10">Close</button>
                       </div>
                     </div>
-
-                    {/* 3 Clickable Bullets with Timestamps */}
-                    <div className="space-y-3 font-sans">
-                      {aiBullets.map((bullet, idx) => (
-                        <div 
-                          key={idx} 
-                          className={`flex items-start gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
-                            activeTimestamp === bullet.timestamp 
-                              ? "bg-[#00D9FF]/15 border-[#00D9FF] text-white" 
-                              : "bg-black/40 border-white/5 hover:border-white/20 text-gray-200"
-                          }`}
-                          onClick={() => handleSeek(bullet.seconds, bullet.timestamp)}
-                        >
-                          <span className="mt-0.5 w-2 h-2 rounded-full bg-[#00FF88] flex-shrink-0" />
-                          <div className="flex-1 text-sm leading-relaxed">
-                            <span>{bullet.text} </span>
-                            <span className="inline-flex items-center gap-1 font-mono text-xs font-bold text-[#00D9FF] bg-[#00D9FF]/10 px-2 py-0.5 rounded-md hover:underline ml-1">
-                              @ {bullet.timestamp}
-                            </span>
-                            {bullet.link && (
-                              <a 
-                                href={bullet.link} 
-                                target="_blank" 
-                                rel="noreferrer"
-                                onClick={(e) => e.stopPropagation()} 
-                                className="ml-2 inline-flex items-center gap-1 text-xs font-mono text-[#00FF88] bg-[#00FF88]/10 px-2.5 py-0.5 rounded-full hover:bg-[#00FF88]/20 border border-[#00FF88]/30"
-                              >
-                                <span>GitHub Code</span>
-                                <Icon name="external" className="w-3 h-3" />
-                              </a>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Quick Post to Community Chat */}
-                    <form 
-                      onSubmit={(e) => { e.preventDefault(); handleSendCommunityMessage(summaryInputChat, "AI Summary Note"); }}
-                      className="flex items-center gap-2 pt-2 border-t border-white/10"
-                    >
-                      <input
-                        type="text"
-                        value={summaryInputChat}
-                        onChange={(e) => setSummaryInputChat(e.target.value)}
-                        placeholder="Ask AI or join the live community chat..."
-                        className="flex-1 bg-black/60 border border-white/10 rounded-xl px-4 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#00D9FF]"
-                      />
-                      <button
-                        type="submit"
-                        className="px-4 py-2 bg-[#00D9FF] text-black text-xs font-bold rounded-xl hover:bg-[#00FF88] transition-colors"
-                      >
-                        Post Chat
-                      </button>
-                    </form>
-                  </div>
-
-                  {/* SUPERPOWER #4: COMMUNITY LIVE CHAT & SUPER CHATS */}
-                  <div className="glass-card p-6 space-y-4">
-                    <div className="flex items-center justify-between border-b border-white/10 pb-4">
-                      <div className="flex items-center gap-3">
-                        <div className="p-2 bg-purple-500/20 text-purple-400 rounded-xl">
-                          <Icon name="chat" className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h2 className="text-lg font-bold text-white">Community Chat</h2>
-                            <span className="text-xs font-bold text-red-500 bg-red-500/10 border border-red-500/30 px-2 py-0.5 rounded-full flex items-center gap-1">
-                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-ping" />
-                              • {liveViewerCount} live
-                            </span>
-                          </div>
-                          <p className="text-xs text-gray-400">Live discussion tied to timestamped video moments</p>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => setSuperChatModalOpen(true)}
-                          className="px-3 py-1.5 bg-yellow-400 text-black font-extrabold text-xs rounded-xl hover:bg-yellow-300 flex items-center gap-1 shadow-lg"
-                        >
-                          <Icon name="crown" className="w-3.5 h-3.5" />
-                          <span>Super Chat</span>
-                        </button>
-
-                        {/* Room Selector Pills */}
-                        <div className="flex items-center gap-1 bg-black/60 p-1 rounded-xl border border-white/10 text-xs hidden sm:flex">
-                          {["general", "builders", "marketplace", "help"].map((ch) => (
-                            <button
-                              key={ch}
-                              onClick={() => setActiveChannel(ch)}
-                              className={`px-3 py-1 rounded-lg font-mono transition-colors ${activeChannel === ch ? "bg-[#00D9FF] text-black font-bold" : "text-gray-400 hover:text-white"}`}
-                            >
-                              #{ch}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Chat Messages */}
-                    <div className="space-y-3 max-h-72 overflow-y-auto pr-2">
-                      {communityMessages.map((msg) => (
-                        <div 
-                          key={msg.id} 
-                          className={`flex items-start gap-3 p-3 rounded-xl border ${
-                            msg.isSuperChat 
-                              ? "bg-gradient-to-r from-yellow-950/40 to-yellow-900/20 border-yellow-400/60 shadow-[0_0_15px_rgba(250,204,21,0.2)]" 
-                              : "bg-black/30 border-white/5"
-                          }`}
-                        >
-                          <div className={`w-8 h-8 rounded-full ${msg.avatarColor} text-black font-bold flex items-center justify-center text-xs flex-shrink-0`}>
-                            {msg.avatarInitials}
-                          </div>
-                          <div className="flex-1 text-xs space-y-1">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <span className="font-bold text-white">{msg.userName}</span>
-                                {msg.isSuperChat && (
-                                  <span className="bg-yellow-400 text-black font-extrabold px-2 py-0.5 rounded text-[10px] font-mono">
-                                    {msg.superAmount} SUPER CHAT
-                                  </span>
-                                )}
-                                <span className="text-[10px] text-gray-500">{msg.timeAgo}</span>
-                              </div>
-                              {msg.timestampInVideo && (
-                                <button 
-                                  onClick={() => handleSeek(135, msg.timestampInVideo)}
-                                  className="text-[10px] font-mono text-[#00D9FF] bg-[#00D9FF]/10 px-2 py-0.5 rounded border border-[#00D9FF]/30 hover:bg-[#00D9FF]/20"
-                                >
-                                  at {msg.timestampInVideo}
-                                </button>
-                              )}
-                            </div>
-                            <p className="text-gray-300 leading-normal">{msg.message}</p>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Chat Input */}
-                    <form 
-                      onSubmit={(e) => { e.preventDefault(); handleSendCommunityMessage(chatMessageInput); }}
-                      className="flex items-center gap-2 pt-2"
-                    >
-                      <input
-                        type="text"
-                        value={chatMessageInput}
-                        onChange={(e) => setChatMessageInput(e.target.value)}
-                        placeholder="Type a message into #community live chat..."
-                        className="flex-1 bg-black/60 border border-white/10 rounded-xl px-4 py-2.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#00FF88]"
-                      />
-                      <button
-                        type="submit"
-                        className="px-5 py-2.5 bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black text-xs font-extrabold rounded-xl hover:opacity-90 transition-transform active:scale-95"
-                      >
-                        Send
-                      </button>
-                    </form>
-                  </div>
-
-                  {/* SUPERPOWER #5: MARKETPLACE CARDS */}
-                  <div className="glass-card p-6 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <div className="p-2 bg-[#00FF88]/20 text-[#00FF88] rounded-xl">
-                          <Icon name="shopping-bag" className="w-5 h-5" />
-                        </div>
-                        <div>
-                          <h2 className="text-lg font-bold text-white">Marketplace Tools & Assets</h2>
-                          <p className="text-xs text-gray-400">Related developer tools for this video topic</p>
-                        </div>
-                      </div>
-                      <button 
-                        onClick={() => setActiveTab("marketplace")} 
-                        className="text-xs font-bold text-[#00D9FF] hover:underline flex items-center gap-1"
-                      >
-                        <span>Recommended for you →</span>
-                      </button>
-                    </div>
-
-                    {/* Product Cards Grid */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-                      {marketplaceProducts.map((product) => (
-                        <div 
-                          key={product.id} 
-                          className="bg-black/50 border border-white/10 rounded-2xl p-4 flex flex-col justify-between hover:border-[#00D9FF] transition-all group"
-                        >
-                          <div className="space-y-2">
-                            <div className="flex items-center justify-between">
-                              <span className="text-[10px] font-mono font-bold bg-[#00D9FF]/20 text-[#00D9FF] px-2 py-0.5 rounded">
-                                {product.badge}
-                              </span>
-                              <span className="text-xs font-bold text-[#00FF88]">${product.price}</span>
-                            </div>
-                            <h3 className="font-bold text-sm text-white group-hover:text-[#00D9FF] transition-colors">{product.name}</h3>
-                            <p className="text-xs text-gray-400 line-clamp-2">{product.description}</p>
-                          </div>
-
-                          <div className="mt-4 pt-3 border-t border-white/10 flex items-center justify-between">
-                            <span className="text-[10px] text-gray-500 font-mono">{product.salesCount} sales</span>
-                            <button
-                              onClick={() => setCheckoutProduct(product)}
-                              className="px-4 py-1.5 bg-[#00FF88] hover:bg-[#00c468] text-black font-extrabold text-xs rounded-lg transition-transform active:scale-95"
-                            >
-                              Buy ${product.price}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                  )}
 
                 </div>
 
-                {/* RIGHT COLUMN (Queue + Up Next Recommended) */}
-                <div className={theaterMode ? "lg:col-span-12 space-y-8" : "lg:col-span-4 space-y-8"}>
+                {/* RIGHT COLUMN — Up Next only (queue removed from scroll per request) */}
+                <div className={theaterMode ? "hidden" : "lg:col-span-4 space-y-8"}>
                   
-                  {/* SUPERPOWER #6: UNIFIED QUEUE (YouTube + TikTok) */}
-                  <div className="glass-card p-5 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Icon name="queue" className="w-5 h-5 text-[#00D9FF]" />
-                        <h2 className="font-bold text-base text-white">Unified Queue</h2>
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] text-gray-400 font-mono flex items-center gap-1 cursor-pointer">
-                          <span>Autoplay</span>
-                          <input 
-                            type="checkbox" 
-                            checked={autoplayNext} 
-                            onChange={(e) => setAutoplayNext(e.target.checked)} 
-                            className="accent-[#00D9FF] rounded"
-                          />
-                        </label>
-                        <span className="text-xs text-gray-400 font-mono">{queueItems.length} items</span>
-                      </div>
-                    </div>
-
-                    {/* Queue Items */}
-                    <div className="space-y-3">
-                      {queueItems.map((item, index) => (
-                        <div 
-                          key={item.id} 
-                          className="flex items-center gap-3 p-2 rounded-xl bg-black/40 border border-white/5 hover:border-white/20 transition-all group"
-                        >
-                          <span className="text-xs font-mono text-gray-500">{index + 1}</span>
-                          
-                          <div className="relative w-20 h-12 rounded-lg overflow-hidden flex-shrink-0 bg-gray-900">
-                            <img src={item.thumbnail} alt={item.title} className="w-full h-full object-cover" />
-                            <span className="absolute bottom-1 right-1 bg-black/80 text-[9px] font-mono px-1 rounded text-white">
-                              {item.duration}
-                            </span>
-                            <div className="absolute top-1 left-1 bg-black/80 rounded p-0.5">
-                              {item.platform === "tiktok" ? (
-                                <Icon name="tiktok" className="w-3 h-3 text-pink-500" />
-                              ) : (
-                                <Icon name="youtube" className="w-3 h-3 text-red-500" />
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="flex-1 min-w-0">
-                            <h4 className="text-xs font-semibold text-white truncate group-hover:text-[#00D9FF]">
-                              {item.title}
-                            </h4>
-                            <span className="text-[10px] text-gray-400 uppercase font-mono">{item.platform}</span>
-                          </div>
-
-                          <button 
-                            onClick={() => setQueueItems(prev => prev.filter(q => q.id !== item.id))}
-                            className="text-gray-500 hover:text-red-400 p-1"
-                          >
-                            <Icon name="trash" className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-
-                    {/* Add URL to Queue */}
-                    <div className="space-y-2 pt-2 border-t border-white/10">
-                      <input
-                        type="text"
-                        value={newQueueUrl}
-                        onChange={(e) => setNewQueueUrl(e.target.value)}
-                        placeholder="Paste YouTube or TikTok link..."
-                        className="w-full bg-black/60 border border-white/10 rounded-xl px-3 py-2 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-[#00D9FF]"
-                      />
-                      <button
-                        onClick={handleAddQueueItem}
-                        className="w-full py-2 bg-white/10 hover:bg-white/20 text-white text-xs font-bold rounded-xl border border-white/10 transition-colors flex items-center justify-center gap-2"
-                      >
-                        <Icon name="plus" className="w-4 h-4 text-[#00FF88]" />
-                        <span>Add to Unified Queue</span>
-                      </button>
-                    </div>
-                  </div>
-
                   {/* YOUTUBE UP NEXT RECOMMENDED videos */}
                   <div className="space-y-4">
                     <h3 className="font-bold text-base text-white flex items-center gap-2">
@@ -2164,11 +2136,11 @@ function App() {
             </div>
           )}
 
-          {/* ------------------- 2. HOME / DISCOVER FEED — mobile p-3 prevents overflow ------------------- */}
+          {/* ------------------- 2. HOME / DISCOVER FEED — CLEAN mobile-first: generous spacing, 2 cols on mobile ------------------- */}
           {activeTab === "home" && (
-            <div className="max-w-[1600px] mx-auto p-3 sm:p-4 md:p-6 space-y-6 overflow-x-hidden">
+            <div className="max-w-[1600px] mx-auto p-4 sm:p-5 md:p-6 space-y-6 overflow-x-hidden">
               {isSearching ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
                     <div key={n} className="glass-card overflow-hidden animate-pulse p-0 flex flex-col justify-between">
                       <div className="aspect-video w-full bg-[#1a1a24]" />
@@ -2208,7 +2180,7 @@ function App() {
                   <div className="flex items-center gap-1.5 sm:gap-2 border-b border-[#272727] pb-2 overflow-x-auto scrollbar-hide flex-nowrap">
                     <button
                       onClick={()=>setSearchTab("results")}
-                      className={`px-4 py-2 rounded-full text-xs font-bold transition-colors ${searchTab==="results" ? "bg-[#00D9FF] text-black" : "bg-[#272727] text-gray-300 hover:bg-[#383838]"}`}
+                      className={`min-h-[44px] px-5 py-2.5 rounded-full text-xs font-bold transition-colors flex items-center ${searchTab==="results" ? "bg-[#FFD700] text-black" : "bg-[#272727] text-gray-300 hover:bg-[#383838]"}`}
                     >
                       Search Results {searchResults.length>0 && `(${searchResults.length})`}
                     </button>
@@ -2223,7 +2195,7 @@ function App() {
                           }
                         }).catch(()=>{});
                       }}
-                      className={`px-4 py-2 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 ${searchTab==="history" ? "bg-[#00FF88] text-black" : "bg-[#272727] text-gray-300 hover:bg-[#383838]"}`}
+                      className={`min-h-[44px] px-5 py-2.5 rounded-full text-xs font-bold transition-colors flex items-center gap-1.5 ${searchTab==="history" ? "bg-[#00FF88] text-black" : "bg-[#272727] text-gray-300 hover:bg-[#383838]"}`}
                     >
                       <Icon name="history" className="w-3.5 h-3.5" />
                       Search History {searchHistory.length>0 && `(${searchHistory.length})`}
@@ -2265,7 +2237,7 @@ function App() {
                     searchHistory.length>0 ? (
                       <div className="space-y-3">
                         <p className="text-[11px] text-gray-500 font-mono flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#00FF88]"></span> Persisted in localStorage "alphatekx_search_history" + server — never vanishes on refresh</p>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                           {searchHistory.map((vid)=>(
                             <div
                               key={`hist-${vid.youtubeId||vid.id}-${vid.searchedAt||""}`}
@@ -2300,90 +2272,216 @@ function App() {
                     )
                   ) : (
                     searchFiltered.length>0 ? (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
                         {searchFiltered.map((vid) => (
-                          <VideoCard key={vid.id || vid.youtubeId} video={vid} onPlay={(norm)=>{ setActiveVideo({...norm, platform: vid.platform || "youtube"}); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing: ${norm.title}`); }} onSave={toggleWatchLater} isSaved={isSavedWatchLater(vid.youtubeId||vid.id)} />
+                          <VideoCard key={vid.id || vid.youtubeId} video={vid} onPlay={(norm)=>{ setActiveVideo({...norm, platform: vid.platform || "youtube"}); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing: ${norm.title}`); }} onSave={toggleWatchLater} isSaved={isSavedWatchLater(vid.youtubeId||vid.id)} onAi={openAiHelper} />
                         ))}
                       </div>
                     ) : (
                       <div className="glass-card p-8 text-center space-y-3">
                         <p className="text-sm text-gray-300">No {activePlatform} videos for "{searchQuery}".</p>
-                        <button onClick={()=>setActivePlatform("all")} className="px-4 py-2 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Show All Platforms</button>
-                        <button onClick={() => setSearchQuery("")} className="ml-2 px-4 py-2 bg-[#00D9FF] text-black font-bold text-xs rounded-xl">Clear Search</button>
+                        <button onClick={()=>setActivePlatform("all")} className="min-h-[44px] px-5 py-2.5 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Show All Platforms</button>
+                        <button onClick={() => setSearchQuery("")} className="ml-2 min-h-[44px] px-5 py-2.5 bg-[#00D9FF] text-black font-bold text-xs rounded-xl">Clear Search</button>
                       </div>
                     )
                   )}
                 </div>
               ) : (
-                homeFiltered.length>0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-                  {homeFiltered.map((vid) => (
-                    <VideoCard key={vid.id} video={{...vid, platform: vid.platform||"youtube"}} onPlay={(norm)=>{ setActiveVideo({...norm, platform: vid.platform||"youtube"}); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} onSave={toggleWatchLater} isSaved={isSavedWatchLater(vid.id)} />
-                  ))}
-                </div>
-                ) : (
-                  <div className="glass-card p-8 text-center space-y-2">
-                    <p className="text-sm text-gray-300">No {activePlatform} videos in this category.</p>
-                    <button onClick={()=>setActivePlatform("all")} className="px-4 py-2 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Show All</button>
+                <div className="space-y-6">
+                  {/* Featured Hero — DEFAULT_VIDEO jvXEkm27XOE — auto-play muted */}
+                  <div className="glass-card overflow-hidden border-[#FFD700]/30 p-3 sm:p-4 space-y-4">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black text-[10px] font-extrabold px-2.5 py-1 rounded-full">FEATURED</span>
+                      <span className="text-xs text-gray-400">Your video is first for every visitor • auto-play muted</span>
+                      <a href="https://youtu.be/jvXEkm27XOE" target="_blank" rel="noreferrer" className="ml-auto text-[10px] text-[#FFD700] font-bold hover:underline">youtu.be/jvXEkm27XOE ↗</a>
+                    </div>
+                    <VideoPlayer video={DEFAULT_VIDEO} autoplay />
+                    <div className="space-y-1">
+                      <h3 className="font-bold text-sm sm:text-base text-white line-clamp-2">{DEFAULT_VIDEO.title}</h3>
+                      <p className="text-xs text-gray-400">{DEFAULT_VIDEO.channelName} • {DEFAULT_VIDEO.handle} • Featured • auto-play</p>
+                      <div className="flex gap-2 pt-1">
+                        <button onClick={()=>{ setActiveVideo(DEFAULT_VIDEO); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} className="min-h-[44px] px-5 py-2.5 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Watch Now</button>
+                        <a href="https://youtu.be/jvXEkm27XOE" target="_blank" rel="noreferrer" className="min-h-[44px] px-5 py-2.5 bg-[#272727] text-white font-bold text-xs rounded-xl flex items-center">Open on YouTube ↗</a>
+                      </div>
+                    </div>
                   </div>
-                )
+                  {/* Shorts Shelf — best placement, horizontal scroll, even better than YouTube */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-extrabold text-white flex items-center gap-2"><span className="bg-[#FF0000] text-white text-[10px] px-2 py-1 rounded font-bold">Shorts</span> Trending Shorts</h3>
+                      <button onClick={()=>setActiveTab("shorts")} className="text-xs font-bold text-[#FFD700] hover:underline min-h-[44px] px-3 flex items-center">View all →</button>
+                    </div>
+                    <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2 snap-x snap-mandatory">
+                      {shortsVideos.map((s, idx)=>(
+                        <div key={s.id} onClick={()=>{ setShortsIndex(idx); setShortsMuted(false); setActiveTab("shorts"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing Short: ${s.title}`); }} className="flex-shrink-0 w-[140px] sm:w-[160px] cursor-pointer snap-start group">
+                          <div className="aspect-[9/16] rounded-xl overflow-hidden bg-black border border-white/10 relative group-hover:border-[#FF0000]/40 transition-colors">
+                            <img src={`https://img.youtube.com/vi/${s.youtubeId}/hqdefault.jpg`} alt={s.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+                            <span className="absolute top-2 left-2 bg-[#FF0000] text-white text-[9px] font-bold px-1.5 py-0.5 rounded">SHORT</span>
+                            <div className="absolute bottom-2 left-2 right-2">
+                              <p className="text-[11px] font-bold text-white line-clamp-2 leading-tight">{s.title}</p>
+                              <p className="text-[10px] text-white/70">{s.views}</p>
+                            </div>
+                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/30 transition-opacity">
+                              <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center text-black">▶</div>
+                            </div>
+                          </div>
+                          <p className="text-xs font-bold text-white line-clamp-2 mt-1.5 leading-tight">{s.title}</p>
+                          <p className="text-[11px] text-gray-500">{s.handle} • {s.likes} likes</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  {homeFiltered.length>0 ? (
+                  <>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+                    {homeFiltered.map((vid) => (
+                      <VideoCard key={vid.id} video={{...vid, platform: vid.platform||"youtube"}} onPlay={(norm)=>{ setActiveVideo({...norm, platform: vid.platform||"youtube"}); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} onSave={toggleWatchLater} isSaved={isSavedWatchLater(vid.id)} onAi={openAiHelper} />
+                    ))}
+                  </div>
+                  {marketplaceProducts.length>0 && (
+                    <div className="space-y-3 pt-4 border-t border-white/10">
+                      <h3 className="font-bold text-white flex items-center gap-2">🛒 Real Products <span className="text-xs text-gray-400 font-normal">• {marketplaceProducts.length} • Alphatekx 20% fee</span> <button onClick={()=>setActiveTab("marketplace")} className="ml-auto text-xs text-[#FFD700] hover:underline">Marketplace →</button></h3>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {marketplaceProducts.slice(0,3).map(p=>{
+                          const fee = +(p.price*0.20).toFixed(2);
+                          const gets = +(p.price*0.80).toFixed(2);
+                          return (
+                            <div key={p.id} className="glass-card p-4 flex flex-col gap-3 border border-white/10 hover:border-[#FFD700]/20">
+                              <div className="flex items-center justify-between"><span className="text-[10px] font-bold bg-[#FFD700]/20 text-[#FFD700] px-2 py-1 rounded-full">{p.badge}</span><span className="text-xs font-bold text-white">${p.price}</span></div>
+                              <h4 className="font-bold text-sm text-white line-clamp-2">{p.name}</h4>
+                              <p className="text-xs text-gray-400 line-clamp-2">{p.description}</p>
+                              <p className="text-[11px] text-gray-500">Seller ${gets} • Fee ${fee} (20%) • {p.salesCount} sales</p>
+                              <button onClick={async()=>{ const res=await fetch("/api/marketplace/purchase",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:p.id})}); const d=await res.json(); if(d.success) showToast(`Bought ${p.name} — Seller $${d.fees.sellerRevenue}`); else showToast(d.error); }} className="w-full min-h-[44px] bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black font-bold text-xs rounded-xl">Buy via Stripe</button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  </>
+                  ) : (
+                    <div className="glass-card p-8 text-center space-y-2">
+                      <p className="text-sm text-gray-300">No {activePlatform} videos in this category.</p>
+                      <button onClick={()=>setActivePlatform("all")} className="min-h-[44px] px-4 py-2.5 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Show All</button>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
 
-          {/* ------------------- 3. YOUTUBE SHORTS ------------------- */}
+          {/* ------------------- 3. YOUTUBE SHORTS — BEST ABSOLUTE, SIMPLE LIKE YOUTUBE, EASY VOLUME ------------------- */}
           {activeTab === "shorts" && (
-            <div className="max-w-md mx-auto p-4 flex flex-col items-center justify-center min-h-[80vh]">
-              <div className="relative w-full aspect-[9/16] rounded-3xl overflow-hidden bg-black border border-white/20 shadow-2xl flex flex-col justify-between p-6">
-                
-                <img 
-                  src="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80" 
-                  alt="Short background" 
-                  className="absolute inset-0 w-full h-full object-cover opacity-60 pointer-events-none"
+            <div className="w-full max-w-[420px] mx-auto flex flex-col items-center justify-start min-h-[calc(100vh-56px)] sm:min-h-[calc(100vh-56px)] bg-[#0B0215] sm:bg-transparent p-0 sm:p-4">
+              {/* Shorts header — minimal, hand swipe only (no buttons) */}
+              <div className="w-full flex items-center justify-between px-3 py-2 sm:px-0 sm:py-3">
+                <div className="flex items-center gap-2">
+                  <span className="bg-[#FF0000] text-white px-2.5 py-1 rounded-full text-[11px] font-extrabold">Shorts</span>
+                  <span className="text-xs text-gray-400">hand swipe • {shortsIndex+1}/{shortsVideos.length}</span>
+                </div>
+                <span className="text-xs text-gray-500 hidden sm:inline">Tap for sound • swipe up/down</span>
+              </div>
+
+              {/* Vertical Short Player — full-screen feel, easy volume */}
+              <div
+                className="relative w-full aspect-[9/16] max-h-[calc(100vh-140px)] sm:max-h-[calc(100vh-180px)] bg-black sm:rounded-2xl overflow-hidden border-0 sm:border border-white/10 shadow-2xl group"
+                onTouchStart={e=>{ const y=e.touches[0].clientY; e.currentTarget.dataset.startY=y; }}
+                onTouchEnd={e=>{ const start=Number(e.currentTarget.dataset.startY||0); const end=e.changedTouches[0].clientY; const diff=start-end; if(Math.abs(diff)>50){ if(diff>0 && shortsIndex < shortsVideos.length-1){ setShortsIndex(i=>i+1); } else if(diff<0 && shortsIndex>0){ setShortsIndex(i=>i-1); } } }}
+                onClick={()=> setShortsMuted(m=>!m)}
+              >
+                {/* YouTube Short iframe — clean, no controls, loop */}
+                <iframe
+                  key={currentShort.youtubeId + shortsMuted + shortsIndex}
+                  src={`https://www.youtube-nocookie.com/embed/${currentShort.youtubeId}?autoplay=1&mute=${shortsMuted?1:0}&controls=0&rel=0&playsinline=1&loop=1&playlist=${currentShort.youtubeId}&modestbranding=1&enablejsapi=1`}
+                  title={currentShort.title}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+                {/* Hand swipe overlay — captures swipe over iframe, easy */}
+                <div
+                  className="absolute inset-0 z-10 touch-manipulation"
+                  onTouchStart={e=>{ const y=e.touches[0].clientY; e.currentTarget.dataset.startY=String(y); }}
+                  onTouchEnd={e=>{ const start=Number(e.currentTarget.dataset.startY||0); const end=e.changedTouches[0].clientY; const diff=start-end; if(Math.abs(diff)>50){ if(diff>0 && shortsIndex < shortsVideos.length-1){ setShortsIndex(i=>i+1); } else if(diff<0 && shortsIndex>0){ setShortsIndex(i=>i-1); } } }}
+                  onClick={()=> setShortsMuted(m=>!m)}
+                  style={{touchAction: "pan-y"}}
                 />
 
-                <div className="relative z-10 flex items-center justify-between text-xs font-bold">
-                  <span className="bg-[#00D9FF] text-black px-3 py-1 rounded-full font-mono">YouTube Shorts</span>
-                  <button onClick={() => showToast("Switched to next YouTube Short!")} className="bg-black/80 text-white px-3 py-1 rounded-full border border-white/20">
-                    Next Short ⬇
-                  </button>
+                {/* Top gradient */}
+                <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
+                {/* Bottom gradient */}
+                <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black via-black/40 to-transparent pointer-events-none" />
+
+                {/* EASY VOLUME — big, thumb-friendly, bottom center (YouTube simple) */}
+                <button
+                  onClick={(e)=>{ e.stopPropagation(); setShortsMuted(m=>!m); showToast(shortsMuted ? "🔊 Sound on" : "🔇 Muted"); }}
+                  className="absolute bottom-20 sm:bottom-24 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-5 py-3 rounded-full bg-black/75 backdrop-blur-md border border-white/20 text-white hover:bg-black/90 transition-all active:scale-95 shadow-xl min-h-[48px] min-w-[140px] justify-center"
+                  title="Tap to toggle sound"
+                >
+                  <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${shortsMuted ? "bg-white/20" : "bg-[#FFD700] text-black"}`}>
+                    {shortsMuted ? "🔇" : "🔊"}
+                  </span>
+                  <span className="text-xs font-bold">{shortsMuted ? "Tap for sound" : "Sound on"}</span>
+                </button>
+
+                {/* Right actions — large, easy, YouTube-like */}
+                <div className="absolute right-2 sm:right-3 bottom-28 sm:bottom-32 z-20 flex flex-col items-center gap-3 sm:gap-4">
+                  {[
+                    { icon:"like", label: currentShort.likes, active: shortsLiked[currentShort.id], color:"text-[#FFD700]", action:()=>{ setShortsLiked(s=>({...s, [currentShort.id]:!s[currentShort.id]})); showToast(shortsLiked[currentShort.id] ? "Unliked" : "Liked ❤️"); } },
+                    { icon:"chat", label: currentShort.comments, action:()=>showToast("Comments • 342 replies") },
+                    { icon:"share", label: "Share", action:()=>{ navigator.clipboard?.writeText(`https://youtu.be/${currentShort.youtubeId}`); showToast("Link copied! Share your Short"); } },
+                    { icon:"bookmark", label: "Save", action:()=>{ toggleWatchLater({youtubeId: currentShort.youtubeId, title: currentShort.title, channelName: currentShort.channel, thumbnailUrl:`https://img.youtube.com/vi/${currentShort.youtubeId}/hqdefault.jpg`, platform:"youtube"}); showToast("Saved to Watch Later"); } },
+                  ].map((btn, i)=>(
+                    <button key={i} onClick={(e)=>{ e.stopPropagation(); btn.action(); }} className="flex flex-col items-center gap-1 group/btn">
+                      <div className="w-12 h-12 rounded-full bg-black/60 backdrop-blur border border-white/10 flex items-center justify-center group-active/btn:scale-90 transition-transform hover:bg-black/80 shadow-lg">
+                        <Icon name={btn.icon} className={`w-6 h-6 ${btn.active ? btn.color : "text-white"}`} />
+                      </div>
+                      <span className="text-[11px] font-bold text-white drop-shadow">{btn.label}</span>
+                    </button>
+                  ))}
                 </div>
 
-                <div className="relative z-10 space-y-3 pr-12">
+                {/* Bottom info — channel + title, simple */}
+                <div className="absolute bottom-0 left-0 right-14 sm:right-16 p-3 sm:p-4 z-20 space-y-2">
                   <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-white">@CodeCraft</span>
-                    <button className="bg-[#00D9FF] text-black text-[10px] font-extrabold px-3 py-1 rounded-full">
+                    <img src={currentShort.avatar} alt={currentShort.channel} className="w-8 h-8 rounded-full border-2 border-white object-cover" />
+                    <span className="font-bold text-sm text-white drop-shadow">{currentShort.handle}</span>
+                    <button
+                      onClick={(e)=>{ 
+                        e.stopPropagation();
+                        const cur = Number(String(currentShort.subscribersCount||currentShort.subscribers||"1200").replace(/[^0-9]/g,"")) || 1200;
+                        const nextCount = cur+1;
+                         const prev = shortsVideos[shortsIndex];
+                         if (prev) {
+                           setShortsVideos(s=> s.map(sh=> (sh.youtubeId===currentShort.youtubeId || sh.id===currentShort.id) ? {...sh, subscribers: nextCount.toLocaleString(), subscribersCount: nextCount} : sh));
+                         }
+                        showToast(`Subscribed to ${currentShort.channel}! 🎉 ${nextCount.toLocaleString()} subs`);
+                      }}
+                      className="ml-1 px-3 py-1 bg-white text-black text-xs font-extrabold rounded-full hover:bg-gray-100">
                       Subscribe
                     </button>
                   </div>
-                  <p className="text-xs text-gray-200 leading-snug">How Attention Mechanisms Work in 30 Seconds! 🧠 #AI #Shorts</p>
-                  <p className="text-[10px] text-gray-400 font-mono">🎵 Original Sound - CodeCraft Academy</p>
+                  <p className="text-sm text-white leading-snug line-clamp-2 drop-shadow">{currentShort.title}</p>
+                  <p className="text-xs text-gray-300">🎵 Original sound • {currentShort.views} • {currentShort.subscribers && <span>{currentShort.subscribers} subs • </span>}Tap video to {shortsMuted ? "unmute" : "mute"}</p>
                 </div>
 
-                <div className="absolute right-4 bottom-12 z-10 flex flex-col items-center gap-5 text-xs text-white">
-                  <button className="flex flex-col items-center gap-1">
-                    <div className="p-3 bg-black/60 hover:bg-black/90 rounded-full border border-white/10">
-                      <Icon name="like" className="w-5 h-5 text-[#00D9FF]" />
-                    </div>
-                    <span>45.2K</span>
-                  </button>
-
-                  <button className="flex flex-col items-center gap-1">
-                    <div className="p-3 bg-black/60 hover:bg-black/90 rounded-full border border-white/10">
-                      <Icon name="chat" className="w-5 h-5 text-white" />
-                    </div>
-                    <span>892</span>
-                  </button>
-
-                  <button className="flex flex-col items-center gap-1">
-                    <div className="p-3 bg-black/60 hover:bg-black/90 rounded-full border border-white/10">
-                      <Icon name="share" className="w-5 h-5 text-white" />
-                    </div>
-                    <span>Share</span>
-                  </button>
+                {/* Progress dots */}
+                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex gap-1">
+                  {shortsVideos.map((_, i)=>(
+                    <div key={i} className={`h-1 rounded-full transition-all ${i===shortsIndex ? "w-6 bg-[#FFD700]" : "w-1.5 bg-white/40"}`} />
+                  ))}
                 </div>
 
+                {/* Tap to play/pause hint */}
+                {!shortsPlaying && (
+                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20" onClick={(e)=>{ e.stopPropagation(); setShortsPlaying(true); }}>
+                    <div className="w-16 h-16 rounded-full bg-black/70 border-2 border-white flex items-center justify-center text-white text-2xl">▶</div>
+                  </div>
+                )}
               </div>
+
+              <p className="w-full text-center text-xs text-gray-500 py-3">Hand swipe up/down — Shorts like YouTube</p>
             </div>
           )}
 
@@ -2552,31 +2650,66 @@ function App() {
 
                 {studioTool === "clip" && (
                   <div className="space-y-4">
-                    <p className="text-xs text-gray-300">AI automatically detects the most viral 30-60 second moment from transcript and generates a YouTube Short clip.</p>
+                    <p className="text-xs text-gray-300">AI finds viral moments & creates clips — Pro only.</p>
+                    {!isProUser && (
+                      <div className="bg-[#FFD700]/10 border border-[#FFD700]/30 rounded-xl p-3 text-xs text-[#FFD700] flex items-center justify-between">
+                        <span>🔒 Clip Maker is Pro-only</span>
+                        <button onClick={()=>setActiveTab("pricing")} className="px-3 py-1 bg-[#FFD700] text-black font-bold rounded-full text-[11px]">Upgrade</button>
+                      </div>
+                    )}
+                    <input
+                      type="text"
+                      value={clipVideoUrl}
+                      onChange={(e) => setClipVideoUrl(e.target.value)}
+                      placeholder="https://youtu.be/jvXEkm27XOE"
+                      className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-xs text-white"
+                    />
                     <input
                       type="text"
                       value={clipPrompt}
                       onChange={(e) => setClipPrompt(e.target.value)}
-                      placeholder="Describe viral moment prompt..."
+                      placeholder="find viral moment when..."
                       className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-xs text-white"
                     />
                     <button
-                      onClick={() => {
-                        setGeneratedClip({ title: "Viral Neural Net Loss Curve Moment", start: "12:15", end: "12:55" });
-                        showToast("Short Clip Generated! Ready for YouTube Shorts.");
+                      onClick={async () => {
+                        if (!isProUser) { showToast("🔒 Clip Maker is Pro-only — upgrade to continue"); setActiveTab("pricing"); return; }
+                        setGeneratedClip(null); setClipResult(null);
+                        try {
+                          const res = await fetch("/api/clips/create", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "x-pro": "true" },
+                            body: JSON.stringify({ videoUrl: clipVideoUrl, prompt: clipPrompt, pro: true })
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.message || data.error);
+                          setClipResult(data);
+                          setGeneratedClip(data.clips[0]);
+                          showToast(`Generated ${data.clips.length} viral clips! ✂️`);
+                        } catch (e) { showToast(e.message); }
                       }}
-                      className="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow-lg"
+                      className={`px-6 py-3 font-bold text-xs rounded-xl shadow-lg min-h-[44px] ${isProUser ? "bg-purple-600 hover:bg-purple-500 text-white" : "bg-[#272727] text-gray-400 border border-[#FFD700]/20"}`}
                     >
-                      Create Short Clip
+                      {isProUser ? "Generate Viral Clips ✂️" : "Unlock with Pro 🔒"}
                     </button>
-
-                    {generatedClip && (
+                    {clipResult && (
+                      <div className="space-y-2">
+                        {clipResult.clips.map(c => (
+                          <div key={c.id} className="p-3 rounded-xl bg-purple-950/30 border border-purple-500/40 flex gap-3">
+                            <img src={c.thumbnail} alt={c.title} className="w-20 h-14 object-cover rounded-lg" />
+                            <div className="flex-1">
+                              <p className="text-xs font-bold text-white">{c.title}</p>
+                              <p className="text-[11px] text-gray-400">{c.start} → {c.end} • {c.duration} • Score {c.viralityScore}</p>
+                              <p className="text-[11px] text-gray-500">{c.reason}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {generatedClip && !clipResult && (
                       <div className="p-4 rounded-xl bg-purple-950/30 border border-purple-500/40 text-xs space-y-2">
                         <span className="font-bold text-purple-300">Clip Ready: {generatedClip.title}</span>
                         <p className="text-gray-400">Timeline: {generatedClip.start} - {generatedClip.end}</p>
-                        <button onClick={() => showToast("Exporting Short MP4...")} className="px-4 py-2 bg-purple-500 text-black font-bold rounded-lg">
-                          Export Video Short ⚡
-                        </button>
                       </div>
                     )}
                   </div>
@@ -2584,40 +2717,91 @@ function App() {
 
                 {studioTool === "thumbnail" && (
                   <div className="space-y-4">
-                    <p className="text-xs text-gray-300">Enhance low-res YouTube thumbnails into crisp 4K visual assets with neon glow borders.</p>
+                    <p className="text-xs text-gray-300">Enhance thumbnails to 4K neon glow — Pro only.</p>
+                    {!isProUser && (
+                      <div className="bg-[#FFD700]/10 border border-[#FFD700]/30 rounded-xl p-3 text-xs text-[#FFD700] flex items-center justify-between">
+                        <span>🔒 Thumbnail Enhancer is Pro-only</span>
+                        <button onClick={()=>setActiveTab("pricing")} className="px-3 py-1 bg-[#FFD700] text-black font-bold rounded-full text-[11px]">Upgrade</button>
+                      </div>
+                    )}
+                    <input value={enhancedThumbUrl} onChange={e=>setEnhancedThumbUrl(e.target.value)} placeholder="https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-xs text-white" />
                     <div className="relative aspect-video max-w-md rounded-xl overflow-hidden border border-white/20">
-                      <img src={thumbnailUrl} alt="Thumbnail preview" className="w-full h-full object-cover" />
+                      <img src={enhancedResult ? enhancedResult.preview.after : enhancedThumbUrl} alt="Thumbnail preview" className="w-full h-full object-cover" />
                       {isEnhancingThumbnail && (
-                        <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-xs text-[#00FF88] font-mono">
-                          Enhancing to 4K crisp neon...
-                        </div>
+                        <div className="absolute inset-0 bg-black/70 flex items-center justify-center text-xs text-[#00FF88] font-mono">Enhancing to 4K crisp neon...</div>
                       )}
                     </div>
                     <button
-                      onClick={() => {
+                      onClick={async () => {
+                        if (!isProUser) { showToast("🔒 Thumbnail Enhancer is Pro-only"); setActiveTab("pricing"); return; }
                         setIsEnhancingThumbnail(true);
-                        setTimeout(() => {
-                          setIsEnhancingThumbnail(false);
-                          showToast("Thumbnail Upgraded to 4K Crisp Neon!");
-                        }, 1200);
+                        try {
+                          const res = await fetch("/api/thumbnail/enhance", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "x-pro": "true" },
+                            body: JSON.stringify({ thumbnailUrl: enhancedThumbUrl, style: "neon", pro: true })
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.message || data.error);
+                          setEnhancedResult(data);
+                          showToast("Thumbnail Upgraded to 4K Neon! ✨");
+                        } catch (e) { showToast(e.message); }
+                        setIsEnhancingThumbnail(false);
                       }}
-                      className="px-6 py-3 bg-[#00D9FF] text-black font-bold text-xs rounded-xl"
+                      className={`px-6 py-3 font-bold text-xs rounded-xl min-h-[44px] ${isProUser ? "bg-[#00D9FF] text-black" : "bg-[#272727] text-gray-400 border border-[#FFD700]/20"}`}
                     >
-                      Enhance Thumbnail to 4K
+                      {isProUser ? "Enhance to 4K ✨" : "Unlock with Pro 🔒"}
                     </button>
+                    {enhancedResult && (
+                      <div className="grid grid-cols-2 gap-3 text-xs">
+                        <div><p className="text-gray-500 mb-1">Before</p><img src={enhancedResult.preview.before} alt="before" className="w-full rounded-xl border border-white/10" /></div>
+                        <div><p className="text-[#FFD700] mb-1">After • 4K Neon</p><img src={enhancedResult.preview.after} alt="after" className="w-full rounded-xl border border-[#FFD700]/30" /></div>
+                      </div>
+                    )}
                   </div>
                 )}
 
                 {studioTool === "voice" && (
                   <div className="space-y-4">
-                    <p className="text-xs text-gray-300">Translate video audio into Pidgin, Yoruba, Igbo & Hausa synthetic TTS voices.</p>
-                    <div className="flex gap-2">
-                      {["Pidgin Audio", "Yoruba Audio", "Igbo Audio", "Hausa Audio"].map((v) => (
-                        <button key={v} onClick={() => showToast(`Playing synthesized ${v}...`)} className="px-4 py-2 bg-white/10 hover:bg-[#00FF88] hover:text-black text-xs font-bold rounded-xl border border-white/10">
-                          {v} 🔊
-                        </button>
-                      ))}
-                    </div>
+                    <p className="text-xs text-gray-300">Translate audio to Pidgin/Yoruba/Igbo/Hausa — Pro only.</p>
+                    {!isProUser && (
+                      <div className="bg-[#FFD700]/10 border border-[#FFD700]/30 rounded-xl p-3 text-xs text-[#FFD700] flex items-center justify-between">
+                        <span>🔒 Voice Translator is Pro-only</span>
+                        <button onClick={()=>setActiveTab("pricing")} className="px-3 py-1 bg-[#FFD700] text-black font-bold rounded-full text-[11px]">Upgrade</button>
+                      </div>
+                    )}
+                    <input value={voiceVideoUrl} onChange={e=>setVoiceVideoUrl(e.target.value)} placeholder="https://youtu.be/jvXEkm27XOE" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-xs text-white" />
+                    <select value={voiceLang} onChange={e=>setVoiceLang(e.target.value)} className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-xs text-white">
+                      {["Pidgin","Yoruba","Igbo","Hausa","English"].map(l=><option key={l} value={l}>{l}</option>)}
+                    </select>
+                    <button
+                      onClick={async () => {
+                        if (!isProUser) { showToast("🔒 Voice Translator is Pro-only"); setActiveTab("pricing"); return; }
+                        setIsVoiceTranslating(true);
+                        try {
+                          const res = await fetch("/api/voice/translate", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json", "x-pro": "true" },
+                            body: JSON.stringify({ videoUrl: voiceVideoUrl, targetLang: voiceLang, pro: true })
+                          });
+                          const data = await res.json();
+                          if (!res.ok) throw new Error(data.message || data.error);
+                          setVoiceResult(data);
+                          showToast(`Translated to ${data.targetLang}! 🌍`);
+                        } catch (e) { showToast(e.message); }
+                        setIsVoiceTranslating(false);
+                      }}
+                      className={`px-6 py-3 font-bold text-xs rounded-xl min-h-[44px] ${isProUser ? "bg-gradient-to-r from-[#A855F7] to-[#FFD700] text-black" : "bg-[#272727] text-gray-400 border border-[#FFD700]/20"}`}
+                    >
+                      {isVoiceTranslating ? "Translating..." : isProUser ? `Translate to ${voiceLang} 🌍` : "Unlock with Pro 🔒"}
+                    </button>
+                    {voiceResult && (
+                      <div className="bg-black/40 border border-white/10 rounded-xl p-3 space-y-2">
+                        <p className="text-xs text-[#FFD700] font-bold">{voiceResult.targetLang} Translation</p>
+                        <p className="text-sm text-white">{voiceResult.translatedText}</p>
+                        <audio controls src={voiceResult.audioUrl} className="w-full" />
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
@@ -2691,73 +2875,184 @@ function App() {
             </div>
           )}
 
-          {/* ------------------- MARKETPLACE CATALOG ------------------- */}
+          {/* ------------------- MARKETPLACE — PROMPT #6 (20% fee, Stripe, Seller Dashboard) ------------------- */}
           {activeTab === "marketplace" && (
             <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl font-bold text-white">Developer & AI Marketplace</h1>
-                  <p className="text-xs text-gray-400">Buy and sell pre-trained models, code packages, and course bundles.</p>
+                  <h1 className="text-2xl font-extrabold text-white">Marketplace</h1>
+                  <p className="text-xs text-gray-400">Apps, courses, video assets — Alphatekx 20% fee • Seller keeps 80% • Stripe 4242 test</p>
                 </div>
-                <button 
-                  onClick={() => setActiveTab("sell")} 
-                  className="px-5 py-2.5 bg-[#00FF88] text-black font-extrabold text-xs rounded-xl hover:bg-[#00c468]"
-                >
-                  + List Product for Sale (80% Royalty)
-                </button>
+                <div className="flex gap-2">
+                  <button onClick={() => setActiveTab("sell")} className="min-h-[44px] px-5 py-2.5 bg-[#00FF88] text-black font-extrabold text-xs rounded-xl hover:bg-[#00c468]">+ List Product (80%)</button>
+                  <button onClick={() => { setMarketplaceView(marketplaceView==="dashboard"?"products":"dashboard"); if(marketplaceView!=="dashboard") loadSellerSales(); }} className="min-h-[44px] px-5 py-2.5 bg-[#272727] text-white font-bold text-xs rounded-xl border border-white/10">
+                    {marketplaceView==="dashboard" ? "Products" : "Seller Dashboard"}
+                  </button>
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {marketplaceProducts.map((product) => (
-                  <div key={product.id} className="glass-card p-6 flex flex-col justify-between space-y-4">
-                    <div className="space-y-3">
-                      <span className="text-xs font-mono font-bold text-[#00D9FF] bg-[#00D9FF]/10 px-2.5 py-1 rounded">
-                        {product.badge}
-                      </span>
-                      <h3 className="font-bold text-base text-white">{product.name}</h3>
-                      <p className="text-xs text-gray-400">{product.description}</p>
-                    </div>
-                    <div className="flex items-center justify-between pt-4 border-t border-white/10">
-                      <span className="text-lg font-bold text-[#00FF88]">${product.price}</span>
-                      <button
-                        onClick={() => setCheckoutProduct(product)}
-                        className="px-5 py-2 bg-[#00D9FF] text-black font-bold text-xs rounded-xl"
-                      >
-                        Buy Now
-                      </button>
-                    </div>
-                  </div>
+              {/* Category filter */}
+              <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                {["all","app","course","plugin"].map(c => (
+                  <button key={c} onClick={()=>setMarketplaceCategory(c)} className={`min-h-[44px] px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap ${marketplaceCategory===c ? "bg-[#FFD700] text-black" : "bg-[#272727] text-gray-300 border border-white/10"}`}>{c}</button>
                 ))}
               </div>
+
+              {marketplaceView === "dashboard" ? (
+                <div className="space-y-4">
+                  <div className="flex gap-2">
+                    <input value={sellerEmailInput} onChange={e=>setSellerEmailInput(e.target.value)} placeholder="seller email" className="flex-1 bg-black/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white" />
+                    <button onClick={()=>loadSellerSales()} className="min-h-[44px] px-5 py-2.5 bg-[#00D9FF] text-black font-bold text-xs rounded-xl">Load Sales</button>
+                  </div>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="glass-card p-4 text-center"><p className="text-2xl font-extrabold text-white">{sellerSales.summary.totalSales}</p><p className="text-xs text-gray-400">Total Sales</p></div>
+                    <div className="glass-card p-4 text-center"><p className="text-2xl font-extrabold text-[#00FF88]">${sellerSales.summary.totalSellerRevenue}</p><p className="text-xs text-gray-400">Your Revenue (80%)</p></div>
+                    <div className="glass-card p-4 text-center"><p className="text-2xl font-extrabold text-[#FFD700]">${sellerSales.summary.totalFees}</p><p className="text-xs text-gray-400">Alphatekx Fee (20%)</p></div>
+                    <div className="glass-card p-4 text-center"><p className="text-2xl font-extrabold text-white">${sellerSales.summary.totalRevenue}</p><p className="text-xs text-gray-400">Gross</p></div>
+                  </div>
+                  <div className="glass-card overflow-hidden">
+                    <div className="p-3 border-b border-white/10 flex justify-between text-xs font-bold text-white"><span>Recent Sales</span><span>{sellerSales.sales.length} records</span></div>
+                    <div className="divide-y divide-white/5 max-h-[400px] overflow-auto">
+                      {sellerSales.sales.map(s => (
+                        <div key={s.id} className="p-3 flex justify-between text-xs">
+                          <div><p className="font-bold text-white">{s.productName}</p><p className="text-gray-400">{s.buyerEmail} → {s.sellerEmail}</p></div>
+                          <div className="text-right"><p className="font-bold text-white">${s.price}</p><p className="text-[#00FF88]">You ${s.sellerRevenue} <span className="text-gray-500">Fee ${s.platformFee}</span></p></div>
+                        </div>
+                      ))}
+                      {sellerSales.sales.length===0 && <p className="p-8 text-center text-sm text-gray-500">No sales yet for {sellerEmailInput}</p>}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  {marketplaceProducts.map((product) => {
+                    const fee = +(product.price*0.20).toFixed(2);
+                    const sellerGets = +(product.price - fee).toFixed(2);
+                    return (
+                      <div key={product.id} className="glass-card p-6 flex flex-col justify-between space-y-4 border border-white/10 hover:border-[#FFD700]/20 transition-colors">
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs font-mono font-bold text-[#00D9FF] bg-[#00D9FF]/10 px-2.5 py-1 rounded">{product.badge}</span>
+                            <span className="text-[10px] text-gray-500">{product.category} • {product.salesCount} sales</span>
+                          </div>
+                          <h3 className="font-bold text-base text-white line-clamp-2">{product.name}</h3>
+                          <p className="text-xs text-gray-400 line-clamp-2">{product.description}</p>
+                          <p className="text-[11px] text-gray-500">{product.sellerEmail}</p>
+                        </div>
+                        <div className="space-y-2">
+                          <div className="flex items-center justify-between">
+                            <span className="text-lg font-extrabold text-white">${product.price}</span>
+                            <span className="text-[11px] text-gray-400">Seller ${sellerGets} • Fee ${fee} (20%)</span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={async () => {
+                                try {
+                                  const res = await fetch("/api/marketplace/purchase", {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ productId: product.id, buyerEmail: "buyer@alphatekx.ai" })
+                                  });
+                                  const data = await res.json();
+                                  if (!res.ok) throw new Error(data.error);
+                                  showToast(`Stripe ✓ Paid $${product.price} — Seller $${data.fees.sellerRevenue}, Fee $${data.fees.platformFee} (20%)`);
+                                  setCartCount(c=>c+1);
+                                  loadSellerSales(product.sellerEmail);
+                                } catch(e) { showToast(e.message); }
+                              }}
+                              className="flex-1 min-h-[44px] px-5 py-2 bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black font-bold text-xs rounded-xl"
+                            >
+                              Buy via Stripe
+                            </button>
+                            <button
+                              onClick={() => {
+                                const fees = { fee: +(product.price*0.20).toFixed(2), gets: +(product.price*0.80).toFixed(2) };
+                                setCheckoutProduct({ ...product, platformFee: fees.fee, sellerRevenue: fees.gets });
+                              }}
+                              className="px-4 min-h-[44px] bg-[#272727] text-white text-xs font-bold rounded-xl border border-white/10"
+                            >
+                              View
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
 
-          {/* ------------------- SELL PRODUCT FORM ------------------- */}
+          {/* ------------------- SELL PRODUCT FORM — PROMPT #6 (20% fee, Stripe) ------------------- */}
           {activeTab === "sell" && (
             <div className="max-w-2xl mx-auto p-4 md:p-8 space-y-6">
-              <div className="glass-card p-8 space-y-6">
-                <h1 className="text-xl font-bold text-white">List Your Developer Asset / Course</h1>
+              <div className="glass-card p-8 space-y-6 border border-white/10">
+                <h1 className="text-xl font-extrabold text-white">List Your Product — 80% Royalty</h1>
+                <p className="text-xs text-gray-400">Alphatekx takes 20% on every sale. Stripe test card 4242 4242 4242 4242</p>
                 <form 
-                  onSubmit={(e) => {
+                  onSubmit={async (e) => {
                     e.preventDefault();
-                    showToast("Product listed! You earn 80% on every sale.");
-                    setActiveTab("marketplace");
+                    const fd = new FormData(e.target);
+                    const payload = {
+                      name: fd.get("name"),
+                      price: Number(fd.get("price")),
+                      description: fd.get("description"),
+                      category: fd.get("category") || "app",
+                      sellerEmail: fd.get("sellerEmail") || "creator@alphatekx.ai",
+                      fileUrl: fd.get("fileUrl") || `https://alphatekx.ai/downloads/product-${Date.now()}.zip`,
+                    };
+                    if (!payload.name || payload.price <= 0) { showToast("Name and valid price required"); return; }
+                    try {
+                      const res = await fetch("/api/marketplace/products", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(payload)
+                      });
+                      const data = await res.json();
+                      if (!res.ok) throw new Error(data.error);
+                      const fee = +(payload.price*0.20).toFixed(2);
+                      const gets = +(payload.price*0.80).toFixed(2);
+                      showToast(`Listed "${data.product.name}" — you keep $${gets}, fee $${fee} (20%)`);
+                      // refresh marketplace
+                      const r = await fetch("/api/marketplace/products");
+                      const d = await r.json();
+                      if (d.products) setMarketplaceProducts(d.products);
+                      setActiveTab("marketplace");
+                    } catch (err) { showToast(err.message); }
                   }}
                   className="space-y-4 text-xs"
                 >
                   <div>
                     <label className="text-gray-400 block mb-1">Product Name</label>
-                    <input required placeholder="e.g. PyTorch CUDA Model Checkpoints" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-white" />
+                    <input name="name" required placeholder="e.g. PyTorch CUDA Model Checkpoints" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-white" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-gray-400 block mb-1">Price (USD)</label>
+                      <input name="price" required type="number" step="0.01" placeholder="19.99" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-white" />
+                    </div>
+                    <div>
+                      <label className="text-gray-400 block mb-1">Category</label>
+                      <select name="category" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-white">
+                        <option value="app">App</option>
+                        <option value="course">Course</option>
+                        <option value="plugin">Plugin</option>
+                      </select>
+                    </div>
                   </div>
                   <div>
-                    <label className="text-gray-400 block mb-1">Price (USD)</label>
-                    <input required type="number" step="0.01" placeholder="19.99" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-white" />
+                    <label className="text-gray-400 block mb-1">Seller Email</label>
+                    <input name="sellerEmail" placeholder="creator@alphatekx.ai" defaultValue="creator@alphatekx.ai" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-white" />
+                  </div>
+                  <div>
+                    <label className="text-gray-400 block mb-1">File URL</label>
+                    <input name="fileUrl" placeholder="https://alphatekx.ai/downloads/product.zip" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-white" />
                   </div>
                   <div>
                     <label className="text-gray-400 block mb-1">Description</label>
-                    <textarea required rows={3} placeholder="Describe the tool or course..." className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-white" />
+                    <textarea name="description" required rows={3} placeholder="Describe the tool or course..." className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-white" />
                   </div>
-                  <button type="submit" className="w-full py-3 bg-[#00FF88] text-black font-extrabold rounded-xl">
+                  <button type="submit" className="w-full min-h-[44px] py-3 bg-gradient-to-r from-[#00FF88] to-[#00D9FF] text-black font-extrabold rounded-xl">
                     Publish to Marketplace
                   </button>
                 </form>
@@ -2794,7 +3089,12 @@ function App() {
                       <p className="text-xs text-gray-300 max-w-2xl line-clamp-2">{channelData.description}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <button onClick={()=>{ setChannelSubscribed(!channelSubscribed); showToast(channelSubscribed ? `Unsubscribed from ${channelData.name}` : `Subscribed to ${channelData.name}! 🎉`); }} className={`px-6 py-2.5 rounded-full font-bold text-xs transition-all active:scale-95 ${channelSubscribed ? "bg-[#272727] text-gray-300" : "bg-[#00D9FF] text-black shadow-[0_0_15px_rgba(0,217,255,0.4)]"}`}>{channelSubscribed ? "Subscribed ✓" : "Subscribe"}</button>
+                      <button onClick={()=>{
+                        const next = !channelSubscribed;
+                        setChannelSubscribed(next);
+                        setChannelData(prev=> prev ? {...prev, subscribers: next ? `${(Number(String(prev.subscribersCount||prev.subscribers||"3020").replace(/[^0-9]/g,"")||3020)+1).toLocaleString()}` : `${(Number(String(prev.subscribersCount||prev.subscribers||"3021").replace(/[^0-9]/g,"")||3021)-1).toLocaleString()}`, subscribersCount: next ? (Number(prev.subscribersCount||3020)+1) : (Number(prev.subscribersCount||3020)-1)} : prev);
+                        showToast(next ? `Subscribed to ${channelData.name}! 🎉 ${next ? (Number(channelData.subscribersCount||3020)+1).toLocaleString() : ""} subs` : `Unsubscribed from ${channelData.name}`);
+                      }} className={`px-6 py-2.5 rounded-full font-bold text-xs transition-all active:scale-95 ${channelSubscribed ? "bg-[#272727] text-gray-300" : "bg-[#00D9FF] text-black shadow-[0_0_15px_rgba(0,217,255,0.4)]"}`}>{channelSubscribed ? "Subscribed ✓" : "Subscribe"}</button>
                       <button onClick={()=>setActiveTab("upload")} className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs font-bold text-white border border-white/10 hidden sm:block">Upload video</button>
                     </div>
                   </div>
@@ -2894,19 +3194,26 @@ function App() {
               </div>
 
               <div className="flex flex-col sm:flex-row items-center sm:items-end gap-4 -mt-12 sm:-mt-16 px-2 sm:px-6 relative z-10">
-                <ChannelAvatar src={profileData?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=160&q=80"} alt={profileData?.name || "Alphatekx Dev"} size={96} verified={profileData?.verified} className="border-4 border-black shadow-xl w-24 h-24 flex-shrink-0" />
+                <ChannelAvatar src={profileData?.avatar || "https://ui-avatars.com/api/?name=Guest&background=0B0215&color=FFD700&size=200"} alt={profileData?.name || "Guest"} size={96} verified={profileData?.verified} className="border-4 border-black shadow-xl w-24 h-24 flex-shrink-0" />
                 <div className="text-center sm:text-left flex-1 min-w-0">
-                  <ChannelName name={profileData?.name || "Alphatekx Dev"} verified={profileData?.verified} handle={profileData?.handle || "@alphatekx_dev"} className="text-xl sm:text-2xl justify-center sm:justify-start" />
-                  <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-start mt-1">
-                    <SubscriberCount count={profileData?.subscribers || "1.2M"} />
-                    <span className="text-gray-500 text-xs">•</span>
-                    <span className="text-xs text-gray-400">{profileData?.email || "user@alphatekx.com"}</span>
+                  <div className="flex items-center gap-2 justify-center sm:justify-start">
+                    <ChannelName name={profileData?.name || "Guest"} verified={profileData?.verified} handle={profileData?.handle || "@guest"} className="text-xl sm:text-2xl justify-center sm:justify-start" />
+                    {profileData?.isGuest && <span className="text-[10px] font-bold bg-[#FFD700] text-black px-2 py-0.5 rounded-full">GUEST</span>}
                   </div>
-                  <p className="text-xs text-gray-300 mt-1 max-w-xl">{profileData?.bio || "Building high-performance AI video infrastructure with Cloudflare Workers."}</p>
+                  <div className="flex flex-wrap items-center gap-2 justify-center sm:justify-start mt-1">
+                    <span className="text-xs text-gray-400">{profileData?.isGuest ? "Browsing as Guest" : <SubscriberCount count={profileData?.subscribers || "0"} />}</span>
+                    <span className="text-gray-500 text-xs">•</span>
+                    <span className="text-xs text-gray-400">{profileData?.email || "guest@alphatekx.stream"}</span>
+                  </div>
+                  <p className="text-xs text-gray-300 mt-1 max-w-xl">{profileData?.bio || "Browsing as Guest — sign up coming soon. Your history is saved locally."}</p>
                 </div>
-                <button onClick={()=>setIsEditingProfile(!isEditingProfile)} className="px-5 py-2 rounded-full bg-[#272727] hover:bg-[#383838] text-xs font-bold text-white border border-white/10 flex-shrink-0">
-                  {isEditingProfile ? "Cancel" : "Edit Profile"}
-                </button>
+                {profileData?.isGuest ? (
+                  <div className="px-5 py-2 rounded-full bg-[#FFD700]/20 text-[#FFD700] text-xs font-bold border border-[#FFD700]/30 flex-shrink-0">Guest Mode — Sign up soon</div>
+                ) : (
+                  <button onClick={()=>setIsEditingProfile(!isEditingProfile)} className="px-5 py-2 rounded-full bg-[#272727] hover:bg-[#383838] text-xs font-bold text-white border border-white/10 flex-shrink-0">
+                    {isEditingProfile ? "Cancel" : "Edit Profile"}
+                  </button>
+                )}
               </div>
 
               {isEditingProfile ? (
@@ -3012,6 +3319,75 @@ function App() {
             </div>
           )}
 
+          {/* ------------------- HISTORY — real searched + watched (Guest) — fit screen full ------------------- */}
+          {activeTab === "history" && (
+            <div className="max-w-[1600px] mx-auto p-3 sm:p-4 md:p-6 space-y-6 overflow-x-hidden min-h-[calc(100vh-56px)]">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <h1 className="text-xl font-bold text-white flex items-center gap-2"><Icon name="history" className="w-6 h-6 text-[#FFD700]" /> History <span className="text-xs text-gray-400 font-mono">• Guest • {searchHistory.length + watchedHistory.length} items</span></h1>
+                <div className="flex gap-2">
+                  <button onClick={()=>{ if(!confirm("Clear all history?")) return; setSearchHistory([]); setWatchedHistory([]); try{localStorage.removeItem("alphatekx_search_history"); localStorage.removeItem("alphatekx_watched_history");}catch{} fetch("/api/search/history",{method:"DELETE"}).catch(()=>{}); showToast("History cleared — Guest"); }} className="text-xs text-red-400 border border-red-400/20 px-3 py-1.5 rounded-full hover:bg-red-400/10 min-h-[44px]">Clear all</button>
+                  <button onClick={()=>setActiveTab("home")} className="px-4 py-2 rounded-full bg-[#272727] hover:bg-[#383838] text-xs text-gray-200 min-h-[44px]">Browse →</button>
+                </div>
+              </div>
+              <div className="flex gap-2 border-b border-white/10 pb-3 overflow-x-auto scrollbar-hide">
+                <button onClick={()=>setHistoryView("watched")} className={`min-h-[44px] px-5 py-2 rounded-full text-xs font-bold whitespace-nowrap ${historyView==="watched" ? "bg-[#FFD700] text-black" : "bg-[#272727] text-gray-300"}`}>Watched ({watchedHistory.length})</button>
+                <button onClick={()=>setHistoryView("searched")} className={`min-h-[44px] px-5 py-2 rounded-full text-xs font-bold whitespace-nowrap ${historyView==="searched" ? "bg-[#00D9FF] text-black" : "bg-[#272727] text-gray-300"}`}>Searched ({searchHistory.length})</button>
+              </div>
+              {historyView==="watched" ? (
+                watchedHistory.length>0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                    {watchedHistory.map(v=>(
+                      <div key={`w-${v.youtubeId||v.id}-${v.watchedAt}`} onClick={()=>{ setActiveVideo(normalizeVideo(v)); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} className="glass-card overflow-hidden cursor-pointer hover:border-[#FFD700]/30 group">
+                        <div className="relative aspect-video bg-black">
+                          <img src={v.img || v.thumbnailUrl} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          <span className="absolute bottom-1 right-1 bg-black/80 text-[10px] px-1 py-0.5 rounded text-white">{v.duration}</span>
+                          <span className="absolute top-1 left-1 bg-[#FFD700] text-black text-[9px] font-bold px-1.5 py-0.5 rounded">WATCHED</span>
+                        </div>
+                        <div className="p-3 space-y-1">
+                          <p className="text-xs font-bold text-white line-clamp-2">{v.title}</p>
+                          <p className="text-xs text-gray-400 truncate">{v.channel || v.channelName}</p>
+                          <p className="text-[11px] text-gray-500">{v.watchedAtStr || "Just now"} • {v.views}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="glass-card p-8 text-center space-y-2 border-dashed">
+                    <Icon name="history" className="w-8 h-8 mx-auto text-gray-600" />
+                    <p className="text-sm text-gray-300">No watched videos yet</p>
+                    <p className="text-xs text-gray-500">Play any long or short video — it will appear here instantly (real-time, Guest).</p>
+                    <button onClick={()=>setActiveTab("home")} className="mt-2 px-5 py-2 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Browse</button>
+                  </div>
+                )
+              ) : (
+                searchHistory.length>0 ? (
+                  <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4">
+                    {searchHistory.map(v=>(
+                      <div key={`s-${v.youtubeId||v.id}-${v.searchedAt}`} onClick={()=>{ setActiveVideo(normalizeVideo(v)); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} className="glass-card overflow-hidden cursor-pointer hover:border-[#00D9FF]/30 group">
+                        <div className="relative aspect-video bg-black">
+                          <img src={v.img || v.thumbnailUrl} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                          <span className="absolute bottom-1 right-1 bg-black/80 text-[10px] px-1 py-0.5 rounded text-white">{v.duration}</span>
+                          <span className="absolute top-1 left-1 bg-[#00D9FF] text-black text-[9px] font-bold px-1.5 py-0.5 rounded">SEARCHED</span>
+                        </div>
+                        <div className="p-3 space-y-1">
+                          <p className="text-xs font-bold text-white line-clamp-2">{v.title}</p>
+                          <p className="text-xs text-gray-400 truncate">{v.channel || v.channelName}</p>
+                          <p className="text-[11px] text-gray-500">{v.searchedQuery ? `q: "${v.searchedQuery}"` : ""} • {v.views}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="glass-card p-8 text-center space-y-2 border-dashed">
+                    <Icon name="search" className="w-8 h-8 mx-auto text-gray-600" />
+                    <p className="text-sm text-gray-300">No searched videos yet</p>
+                    <p className="text-xs text-gray-500">Search for anything — history saves locally and on server, never vanishes.</p>
+                  </div>
+                )
+              )}
+            </div>
+          )}
+
           {/* FOOTER - YouTube TOS Requirement */}
           <footer className="bg-[#0f0f0f] border-t border-[#272727] py-6 px-4 text-center text-xs text-gray-500 space-y-2 mt-8">
             <p>Alphatekx Stream uses YouTube API Services. YouTube is a trademark of Google LLC.</p>
@@ -3021,8 +3397,8 @@ function App() {
         </main>
       </div>
 
-      {/* ------------------- SIGNATURE YOUTUBE FLOATING MINI-PLAYER ------------------- */}
-      {miniPlayerActive && activeTab === "watch" && (
+      {/* MINI-PLAYER — REMOVED — no float popup */}
+      {false && miniPlayerActive && activeTab === "watch" && (
         <div className="fixed bottom-20 right-6 z-40 w-80 md:w-96 aspect-video shadow-[0_0_30px_rgba(0,217,255,0.5)] border-2 border-[#00D9FF] rounded-2xl overflow-hidden bg-black flex flex-col group transition-all duration-300 animate-fade-in">
           <div className="relative w-full h-full bg-black">
             <img src={activeVideo.img} alt={activeVideo.title} className="w-full h-full object-cover opacity-80" />
