@@ -2221,7 +2221,39 @@ export const defaultConfig: AgentConfig = {
                         </div>
                       )}
                       {watchPanelTab==="preview" && (<iframe title="Live Preview" srcDoc={codeValue.trim().startsWith("<!DOCTYPE") || codeValue.trim().startsWith("<html") ? codeValue : `<!DOCTYPE html><html><head><style>body{background:#0f0f1f;color:#d4d4d4;font-family:monospace;padding:16px;white-space:pre-wrap;word-break:break-word} pre{margin:0}</style></head><body><pre>${codeValue.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</pre></body></html>`} sandbox="allow-scripts allow-same-origin" className="flex-1 w-full border-0 bg-white" />)}
-                      {watchPanelTab==="ai" && (<div className="flex-1 p-3 overflow-y-auto space-y-2 bg-[#0f0f1f]">{aiChatMessages.map((m,i)=>(<div key={i} className={`p-2.5 rounded-xl text-sm ${m.role==="user"?"bg-[#FFD700] text-black ml-auto":"bg-[#1a1a2e] text-white mr-auto"}`}>{m.text}</div>))}<div className="flex gap-2 mt-2"><input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAiSend()} placeholder="Ask AI..." className="flex-1 bg-[#1a1a2e] border border-white/10 rounded-full px-4 py-2 text-sm" /><button onClick={handleAiSend} className="px-4 py-2 bg-[#FFD700] text-black font-bold rounded-full">Send</button></div></div>)}
+                      {watchPanelTab==="ai" && (
+                        <div className="flex-1 flex flex-col min-h-0 bg-gradient-to-b from-[#1a1030] to-[#0B0215]">
+                          {!byokKey ? (
+                            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
+                              <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-[#FFD700] to-[#F59E0B] flex items-center justify-center shadow-[0_0_30px_rgba(255,215,0,0.3)]"><span className="text-3xl">🔑</span></div>
+                              <h3 className="text-xl font-extrabold text-white">Select Your API Key</h3>
+                              <p className="text-sm text-gray-300">BYOK — DeepSeek / OpenAI / Groq (stored locally, zero cost to you)</p>
+                              <div className="flex gap-2 w-full max-w-md">
+                                <input id="apiKeyInput" value={byokKey} onChange={e=>{setByokKey(e.target.value);localStorage.setItem('alphatekx_api_key',e.target.value);}} placeholder="sk-... or DeepSeek key" className="flex-1 min-h-[44px] bg-black/60 border border-[#FFD700]/30 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-[#FFD700]" />
+                                <button onClick={()=>{localStorage.setItem('alphatekx_api_key',byokKey);setApiKey(byokKey);showToast('Key saved — AI unlocked!');}} className="min-h-[44px] px-5 bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-extrabold rounded-full shadow-lg hover:scale-105">Done →</button>
+                              </div>
+                              <button onClick={()=>setShowPaywall(true)} className="text-sm text-[#FFD700] underline hover:text-white">No key? Use Alphatekx Credits ₦500 →</button>
+                            </div>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-2 px-3 py-2 bg-[#1a1030] border-b border-[#A855F7]/20 mb-2">
+                                <span className="text-xs font-bold text-[#FFD700]">🔑 BYOK • Your Key</span>
+                                <button onClick={()=>{localStorage.removeItem('alphatekx_api_key');setByokKey('');showToast('Key cleared');}} className="ml-auto text-xs text-gray-400 hover:text-white">Clear</button>
+                              </div>
+                              <div className="flex-1 overflow-y-auto space-y-3 p-3 sm:p-3 bg-[#1a1030]">
+                                {aiChatMessages.map((m,i)=>(<div key={i} className={`p-3 rounded-2xl text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap ${m.role==="user"?"bg-[#FFD700] text-black font-medium ml-auto shadow-md":"bg-[#2a2038] text-gray-200 mr-auto border border-[#A855F7]/20"}`}>{m.text}</div>))}
+                              </div>
+                              <div className="p-3 bg-[#0B0215] border-t border-white/5">
+                                <div className="flex gap-2">
+                                  <input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAiSend()} placeholder="Ask AI to build — e.g. gold button..." className="flex-1 min-h-[44px] bg-[#1a1a2e] border border-[#A855F7]/20 rounded-full px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#A855F7] focus:ring-1 focus:ring-[#A855F7]/20" />
+                                  <button onClick={handleAiSend} className="min-h-[44px] px-5 py-2 bg-gradient-to-r from-[#A855F7] to-[#FFD700] text-white font-bold rounded-full shadow-lg hover:scale-105">Send</button>
+                                </div>
+                                <p className="text-[10px] text-gray-500 font-mono text-center mt-2">Vibe: AI writes files → Preview updates live</p>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
                       {watchPanelTab==="terminal" && (<div ref={terminalRef} className="flex-1 bg-black p-2 overflow-hidden" style={{minHeight:"200px"}} />)}
                     </div>
                   </div>
