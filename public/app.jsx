@@ -399,6 +399,96 @@ helloAlphatekx();`);
     return () => {};
   }, [watchPanelTab]);
 
+  // MISSION 2 — SHADOW-CLONE CHECKPOINT SYSTEM (Timeline Hijacking Engine)
+  const [checkpoints, setCheckpoints] = useState([]);
+  const [activeCheckpoint, setActiveCheckpoint] = useState(null);
+  const [completedCheckpoints, setCompletedCheckpoints] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem("alphatekx_completed_checkpoints")||"[]")); } catch { return new Set(); }
+  });
+  const ytPlayerRef = useRef(null);
+  const checkpointPollRef = useRef(null);
+  // Load checkpoints.json for current video (jvXEkm27XOE + fallback)
+  useEffect(() => {
+    fetch('/checkpoints.json').then(r=>r.ok?r.json():null).then(data=>{
+      if(Array.isArray(data)) setCheckpoints(data);
+    }).catch(()=>{});
+  }, []);
+  // YouTube IFrame API — poll currentTime every 800ms, pause at checkpoint
+  useEffect(() => {
+    if (!checkpoints.length) return;
+    if (activeCheckpoint) return; // already paused, wait for code
+    // init YT player if iframe has enablejsapi
+    const initPlayer = () => {
+      if (ytPlayerRef.current) return;
+      if (!window.YT || !window.YT.Player) return;
+      try {
+        const iframe = iframeRef.current;
+        if (!iframe) return;
+        ytPlayerRef.current = new window.YT.Player(iframe, {
+          events: {
+            onReady: () => {},
+            onStateChange: () => {}
+          }
+        });
+      } catch {}
+    };
+    // load YT API if not present
+    if (!window.YT) {
+      const s = document.createElement("script");
+      s.src = "https://www.youtube.com/iframe_api";
+      document.head.appendChild(s);
+      const t = setInterval(()=>{ if(window.YT && window.YT.Player){ clearInterval(t); initPlayer(); } }, 500);
+      return ()=>clearInterval(t);
+    } else {
+      initPlayer();
+    }
+    const poll = setInterval(async () => {
+      try {
+        let currentTime = null;
+        // Try YT player first
+        if (ytPlayerRef.current && typeof ytPlayerRef.current.getCurrentTime === "function") {
+          try { currentTime = ytPlayerRef.current.getCurrentTime(); } catch {}
+        }
+        // Fallback: try postMessage API estimation via iframe src time param not reliable, so skip if no YT
+        if (currentTime === null || isNaN(currentTime)) return;
+        for (const cp of checkpoints) {
+          if (completedCheckpoints.has(cp.time)) continue;
+          if (Math.abs(currentTime - cp.time) < 1.2) {
+            // HIT — pause, overlay, glow, switch to Code
+            try { ytPlayerRef.current.pauseVideo(); } catch {}
+            // Also try iframe postMessage pause as fallback
+            try { iframeRef.current?.contentWindow?.postMessage(JSON.stringify({ event: "command", func: "pauseVideo", args: [] }), "*"); } catch {}
+            setActiveCheckpoint(cp);
+            setWatchPanelOpen(true);
+            setWatchPanelTab("code");
+            showToast(`🔒 ${cp.title} — ${cp.task}`);
+            break;
+          }
+        }
+      } catch {}
+    }, 800);
+    checkpointPollRef.current = poll;
+    return () => clearInterval(poll);
+  }, [checkpoints, activeCheckpoint, completedCheckpoints]);
+  // Auto-resume when code contains check string
+  useEffect(() => {
+    if (!activeCheckpoint) return;
+    const check = (activeCheckpoint.check || "").trim();
+    if (!check) return;
+    if (codeValue.includes(check)) {
+      const cp = activeCheckpoint;
+      setCompletedCheckpoints(prev => {
+        const next = new Set(prev); next.add(cp.time);
+        try { localStorage.setItem("alphatekx_completed_checkpoints", JSON.stringify([...next])); } catch {}
+        return next;
+      });
+      setActiveCheckpoint(null);
+      try { ytPlayerRef.current?.playVideo(); } catch {}
+      try { iframeRef.current?.contentWindow?.postMessage(JSON.stringify({ event: "command", func: "playVideo", args: [] }), "*"); } catch {}
+      showToast(`✅ Checkpoint cleared — Video resumed • ${cp.title}`);
+    }
+  }, [codeValue, activeCheckpoint]);
+
   // === NEW: Channel / Upload / Profile / Categories (preserve design) ===
   // PROMPT #7: Official ALPHATEKX channel as default
   const [activeChannelId, setActiveChannelId] = useState("UCGm89Z31SYxEU9PEQ-p3cNA");
@@ -2047,43 +2137,62 @@ helloAlphatekx();`);
                         ))}
                       </div>
 
+                      {/* MISSION 2 — SHADOW-CLONE CHECKPOINT OVERLAY */}
+                      {activeCheckpoint && (
+                        <div className="absolute inset-0 bg-[#0B0215]/92 backdrop-blur-md flex flex-col items-center justify-center p-6 sm:p-8 text-center z-30 rounded-2xl">
+                          <div className="w-14 h-14 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center text-2xl mb-4 shadow-lg animate-pulse">🔒</div>
+                          <h3 className="text-white font-extrabold text-lg sm:text-xl">{activeCheckpoint.title}</h3>
+                          <p className="text-[#FFD700] font-bold text-sm mt-1">Creator paused at {activeCheckpoint.time}s</p>
+                          <p className="text-gray-300 text-sm mt-3 max-w-md leading-relaxed">{activeCheckpoint.task}</p>
+                          <p className="text-white/60 text-xs font-mono mt-3">Type <span className="text-[#FFD700] font-bold bg-[#FFD700]/10 px-1.5 py-0.5 rounded">{activeCheckpoint.check}</span> in Code tab to unlock</p>
+                          <button onClick={()=>{ setWatchPanelOpen(true); setWatchPanelTab("code"); }} className="mt-5 px-7 py-3 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-extrabold text-sm shadow-lg animate-pulse hover:scale-105 transition">Go to Code →</button>
+                          <p className="text-gray-500 text-[11px] mt-3">🔒 Complete the task in Code tab to unlock</p>
+                        </div>
+                      )}
+
                     </div>
                   </div>
 
-                  {/* MISSION 1 — PREMIUM ICON: Video 60% top, Code/AI 40% opens on click */}
-                  <div className="flex justify-center">
-                    <button onClick={()=>setWatchPanelOpen(!watchPanelOpen)} className="group flex items-center gap-3 px-7 py-3.5 rounded-full bg-gradient-to-r from-[#FFD700] via-[#F59E0B] to-[#FFD700] text-black font-extrabold text-sm tracking-wide shadow-[0_0_20px_rgba(255,215,0,0.35)] hover:shadow-[0_0_30px_rgba(255,215,0,0.5)] hover:scale-[1.02] active:scale-95 transition-all border border-white/20">
-                      <span className="w-8 h-8 rounded-full bg-black text-[#FFD700] flex items-center justify-center group-hover:rotate-12 transition-transform"><Icon name="sparkles" className="w-4 h-4" /></span>
-                      <span>{watchPanelOpen ? "Close Workspace ✕" : "Open Code + AI Workspace →"}</span>
+                  {/* MISSION 1 — PREMIUM ICON: polished, comfortable on laptop + mobile */}
+                  <div className="flex justify-center px-3">
+                    <button onClick={()=>setWatchPanelOpen(!watchPanelOpen)} className={`group w-full sm:w-auto flex items-center justify-center gap-3 px-6 sm:px-7 py-3.5 sm:py-3.5 min-h-[48px] rounded-full bg-gradient-to-r from-[#FFD700] via-[#F59E0B] to-[#FFD700] text-black font-extrabold text-[13px] sm:text-sm tracking-wide shadow-[0_0_20px_rgba(255,215,0,0.35)] hover:shadow-[0_0_30px_rgba(255,215,0,0.5)] hover:scale-[1.02] active:scale-[0.98] transition-all border border-white/20 ${activeCheckpoint ? "animate-pulse shadow-[0_0_35px_rgba(255,215,0,0.7)] border-[#FFD700]" : ""}`}>
+                      <span className="w-8 h-8 rounded-full bg-black text-[#FFD700] flex items-center justify-center group-hover:rotate-12 transition-transform flex-shrink-0"><Icon name="sparkles" className="w-4 h-4" /></span>
+                      <span className="truncate">{watchPanelOpen ? "Close Workspace ✕" : "Open Code + AI Workspace →"}</span>
                     </button>
                   </div>
                   {watchPanelOpen && (
-                  <div className="bg-[#0B0215] border border-[#FFD700]/20 rounded-2xl overflow-hidden animate-fade-in shadow-[0_10px_40px_rgba(0,0,0,0.6)]">
-                    <div className="flex border-b border-white/10 bg-[#0B0215]/80 backdrop-blur">
-                      <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 py-3.5 text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="code" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>Code</button>
-                      <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 py-3.5 text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="ai" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>AI</button>
+                  <div className="bg-[#0B0215] border border-[#FFD700]/20 rounded-2xl overflow-hidden animate-fade-in shadow-[0_10px_40px_rgba(0,0,0,0.6)] mx-0 sm:mx-0">
+                    <div className="flex border-b border-white/10 bg-[#0B0215]/90 backdrop-blur">
+                      <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 py-3.5 text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="code" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"} ${activeCheckpoint ? "animate-pulse border border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.6)]" : ""}`}>
+                        <span className="w-5 h-5 rounded-md bg-black/10 flex items-center justify-center text-xs">{"</>"}</span> Code {activeCheckpoint && "🔒"}
+                      </button>
+                      <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 py-3.5 text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="ai" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
+                        <Icon name="sparkles" className="w-4 h-4" /> AI
+                      </button>
+                      <button onClick={()=>setWatchPanelOpen(false)} className="px-4 text-gray-400 hover:text-white hover:bg-white/5 border-l border-white/10 flex items-center justify-center" title="Close">✕</button>
                     </div>
-                    <div className="h-[40vh] min-h-[320px] max-h-[420px] bg-[#0B0215] flex flex-col">
+                    <div className="h-[42vh] min-h-[300px] max-h-[440px] sm:h-[40vh] sm:min-h-[340px] bg-[#0B0215] flex flex-col">
                       {watchPanelTab==="code" ? (
                         <div className="flex-1 flex flex-col min-h-0">
                           <div ref={monacoRef} className="flex-1 min-h-0 bg-[#1e1e1e] flex">
-                            <textarea value={codeValue} onChange={e=>setCodeValue(e.target.value)} className="w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[13px] leading-5 p-4 resize-none focus:outline-none" spellCheck={false} />
+                            <textarea value={codeValue} onChange={e=>setCodeValue(e.target.value)} className="w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[13px] sm:text-[14px] leading-5 p-4 sm:p-5 resize-none focus:outline-none" spellCheck={false} placeholder="// Start coding here — your code unlocks video" />
                           </div>
-                          <div className="px-3 py-2 bg-[#1e1e1e] border-t border-white/10 flex items-center gap-2 text-[11px] font-mono text-gray-500">
-                            <span className="w-2 h-2 rounded-full bg-[#00FF88] animate-pulse" /> Monaco Editor • JavaScript • {codeValue.split('\n').length} lines
-                            <button onClick={()=>{ setCodeValue(`// Reset\nconsole.log("Hello Alphatekx! 🚀");`); showToast("Editor reset"); }} className="ml-auto text-xs text-gray-400 hover:text-white">Reset</button>
+                          <div className="px-3 sm:px-4 py-2.5 bg-[#1e1e1e] border-t border-white/10 flex items-center gap-3 text-[11px] font-mono text-gray-500">
+                            <span className="w-2 h-2 rounded-full bg-[#00FF88] animate-pulse flex-shrink-0" /> Monaco Editor • JavaScript • {codeValue.split('\n').length} lines
+                            <span className="hidden sm:inline text-gray-600">• Auto-saves locally</span>
+                            <button onClick={()=>{ setCodeValue(`// Reset\nconsole.log("Hello Alphatekx! 🚀");`); showToast("Editor reset"); }} className="ml-auto min-h-[32px] px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-xs text-gray-300 hover:text-white border border-white/10">Reset</button>
                           </div>
                         </div>
                       ) : (
-                        <div className="flex-1 flex flex-col min-h-0 p-3 bg-[#0B0215]">
-                          <div className="flex-1 overflow-y-auto space-y-2 mb-3 pr-1 scrollbar-hide">
+                        <div className="flex-1 flex flex-col min-h-0 p-3 sm:p-4 bg-[#0B0215]">
+                          <div className="flex-1 overflow-y-auto space-y-3 mb-3 pr-1 scrollbar-hide">
                             {aiChatMessages.map((m,i)=>(
-                              <div key={i} className={`p-3 rounded-xl text-sm leading-snug max-w-[85%] ${m.role==="user" ? "bg-[#FFD700] text-black font-medium ml-auto" : "bg-[#272727] text-gray-200 mr-auto border border-white/5"}`}>{m.text}</div>
+                              <div key={i} className={`p-3 sm:p-3.5 rounded-2xl text-sm leading-relaxed max-w-[85%] ${m.role==="user" ? "bg-[#FFD700] text-black font-medium ml-auto shadow-md" : "bg-[#1a1a2e] text-gray-200 mr-auto border border-white/10"}`}>{m.text}</div>
                             ))}
                           </div>
-                          <div className="flex gap-2">
-                            <input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter" && handleAiSend()} placeholder="Ask AI about this video..." className="flex-1 bg-[#272727] border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]" />
-                            <button onClick={handleAiSend} className="px-5 py-2.5 bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold text-sm rounded-xl hover:scale-105 transition shadow-lg">Send</button>
+                          <div className="flex gap-2 sm:gap-3">
+                            <input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter" && handleAiSend()} placeholder="Ask AI about this video..." className="flex-1 min-h-[44px] bg-[#1a1a2e] border border-white/10 rounded-full sm:rounded-xl px-4 sm:px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700] focus:ring-1 focus:ring-[#FFD700]/20" />
+                            <button onClick={handleAiSend} className="min-h-[44px] min-w-[72px] px-5 sm:px-6 py-3 bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold text-sm rounded-full sm:rounded-xl hover:scale-105 active:scale-95 transition shadow-lg flex-shrink-0">Send</button>
                           </div>
                         </div>
                       )}

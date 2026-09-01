@@ -1,0 +1,4 @@
+[
+  { "time": 30, "title": "Step 1: Setup", "task": "Type console.log('Hello Alphatekx') to continue", "check": "console.log" },
+  { "time": 120, "title": "Step 2: Variable", "task": "Creator defined const db - type it in editor", "check": "const db" }
+]
