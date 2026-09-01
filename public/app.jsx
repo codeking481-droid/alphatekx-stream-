@@ -345,14 +345,24 @@ function App() {
   // MISSION 1 — Premium icon-triggered workspace (video 60% top, icon opens Code/AI 40% below)
   const [watchPanelTab, setWatchPanelTab] = useState("code");
   const [watchPanelOpen, setWatchPanelOpen] = useState(false);
-  const [codeValue, setCodeValue] = useState(`<!DOCTYPE html>
-<html>
-<body style="background:#0B0215;color:white;font-family:sans-serif;padding:24px;text-align:center">
-  <h1 style="color:#FFD700">Hello Alphatekx 🚀🇳🇬</h1>
-  <p>Edit this HTML in Code tab — Preview updates live</p>
-  <button style="background:linear-gradient(90deg,#FFD700,#F59E0B);color:black;font-weight:800;padding:12px 24px;border-radius:9999px;border:none;">Gold Button</button>
-</body>
-</html>`);
+  const [codeValue, setCodeValue] = useState(`interface AgentConfig {
+  name: string;
+  role: "planner" | "exocutor" | "researcher";
+  model: string;
+  maxRetries?: number;
+  tools: string[];
+  memory?: {
+    type: "ephemeral" | "persistent";
+    capacity: number; // tokens
+  };
+};
+
+export const defaultConfig: AgentConfig = {
+  name: "AlphatekxAgent",
+  role: "planner",
+  model: "gpt-4o",
+  tools: ["search", "code"],
+};`);
   const [aiChatInput, setAiChatInput] = useState("");
   const [aiChatMessages, setAiChatMessages] = useState([
     { role: "ai", text: "Hi! I'm your AI Teacher. Ask me anything about this video. 🎓" }
@@ -2055,15 +2065,15 @@ function App() {
             </div>
           )}
 
-          {/* IMAGE 100% WATCH — exact like screenshot, no difference */}
-          {activeTab === "watch" && (
+          {/* IMAGE 100% WATCH — when workspace closed: video + Up Next. When open: laptop side-by-side, mobile stacked per images */}
+          {activeTab === "watch" && !watchPanelOpen && (
             <div className="max-w-[1600px] mx-auto p-4 lg:p-6 space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-8 space-y-4">
                   <div className="relative bg-[#0f0f1f] rounded-2xl overflow-hidden border border-[#FFD700]/20 shadow-[0_0_40px_rgba(255,215,0,0.15)]">
                     <div className="aspect-video relative bg-black">
                       <iframe ref={iframeRef} src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0${(activeVideo.id===DEFAULT_VIDEO.id)?"&autoplay=1&mute=1&playsinline=1":""}`} title={activeVideo.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-                      <div className="absolute bottom-10 right-4 z-20"><button onClick={()=>setWatchPanelOpen(!watchPanelOpen)} className="px-5 py-2.5 rounded-full bg-[#FFD700] text-black font-extrabold text-sm shadow-lg hover:scale-105 transition">{watchPanelOpen?"Close Workspace ✕":"Open AI Workspace →"}</button></div>
+                      <div className="absolute bottom-10 right-4 z-20"><button onClick={()=>setWatchPanelOpen(true)} className="px-5 py-2.5 rounded-full bg-[#FFD700] text-black font-extrabold text-sm shadow-lg hover:scale-105 transition">Open AI Workspace →</button></div>
                       <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black/85 via-black/40 to-transparent px-4 py-3 flex items-center gap-3">
                         <button className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white">❚❚</button>
                         <div className="flex-1 h-1 bg-white/20 rounded-full relative"><div className="absolute left-0 top-0 h-full bg-[#2af5ff] rounded-full" style={{width:'52%'}}><div className="absolute right-0 top-1/2 -translate-y-1/2 w-2.5 h-2.5 bg-[#2af5ff] rounded-full border-2 border-white"></div></div></div>
@@ -2078,23 +2088,6 @@ function App() {
                       <button key={idx} onClick={()=>handleSeek(chap.seconds, chap.timestamp)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border ${activeTimestamp===chap.timestamp||(idx===0&&!activeTimestamp)?"bg-[#FFD700] text-black border-[#FFD700]":"bg-[#1a1a2e] border-white/10 text-gray-300"}`}>{chap.timestamp} {chap.title}</button>
                     ))}
                   </div>
-                  {watchPanelOpen && (
-                    <div className="bg-[#0f0f1f] border border-[#FFD700]/20 rounded-2xl overflow-hidden shadow-xl">
-                      <div className="flex border-b border-white/10 bg-[#0f0f1f]">
-                        <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 min-h-[44px] py-3 text-xs font-bold ${watchPanelTab==="code"?"bg-[#FFD700] text-black":"text-gray-400"}`}>Code</button>
-                        <button onClick={()=>setWatchPanelTab("preview")} className={`flex-1 min-h-[44px] py-3 text-xs font-bold ${watchPanelTab==="preview"?"bg-[#00D9FF] text-black":"text-gray-400"}`}>Preview</button>
-                        <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 min-h-[44px] py-3 text-xs font-bold ${watchPanelTab==="ai"?"bg-[#A855F7] text-white":"text-gray-400"}`}>AI</button>
-                        <button onClick={()=>setWatchPanelTab("terminal")} className={`flex-1 min-h-[44px] py-3 text-xs font-bold ${watchPanelTab==="terminal"?"bg-[#00FF88] text-black":"text-gray-400"}`}>Terminal</button>
-                        <button onClick={()=>setWatchPanelOpen(false)} className="px-3 text-gray-400">✕</button>
-                      </div>
-                      <div className="h-[38vh] min-h-[300px] bg-[#0B0215] flex flex-col">
-                        {watchPanelTab==="code" && (<div ref={monacoRef} className="flex-1 bg-[#1e1e1e] flex"><textarea value={codeValue} onChange={e=>setCodeValue(e.target.value)} className="w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-sm p-4 resize-none focus:outline-none" /></div>)}
-                        {watchPanelTab==="preview" && (<iframe title="Preview" srcDoc={codeValue} sandbox="allow-scripts allow-same-origin" className="flex-1 w-full border-0 bg-white" />)}
-                        {watchPanelTab==="ai" && (<div className="flex-1 p-3 overflow-y-auto space-y-2">{aiChatMessages.map((m,i)=>(<div key={i} className={`p-2 rounded-xl text-sm ${m.role==="user"?"bg-[#FFD700] text-black ml-auto":"bg-[#1a1a2e] text-white mr-auto"}`}>{m.text}</div>))}<div className="flex gap-2 mt-2"><input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAiSend()} placeholder="Ask AI..." className="flex-1 bg-[#1a1a2e] border border-white/10 rounded-full px-4 py-2 text-sm" /><button onClick={handleAiSend} className="px-4 py-2 bg-[#FFD700] text-black font-bold rounded-full">Send</button></div></div>)}
-                        {watchPanelTab==="terminal" && (<div ref={terminalRef} className="flex-1 bg-black p-2 overflow-hidden" style={{minHeight:"300px"}} />)}
-                      </div>
-                    </div>
-                  )}
                   <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight">Building Neural Agents with Reinforcement Learning – Live Breakdown</h1>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
                     <div className="flex items-center gap-3">
@@ -2119,6 +2112,69 @@ function App() {
                         <div className="flex-1 py-1"><h4 className="text-sm font-bold text-white line-clamp-2">{vid.title}</h4><p className="text-xs text-gray-400 mt-1">{vid.duration} • {vid.views} • {vid.ago}</p></div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          {/* WORKSPACE OPEN — laptop side-by-side (Image 2), mobile stacked (Image 1) */}
+          {activeTab === "watch" && watchPanelOpen && (
+            <div className="max-w-[1600px] mx-auto p-3 lg:p-0 space-y-4">
+              {/* Back + Title bar */}
+              <div className="flex items-center gap-3">
+                <button onClick={()=>setWatchPanelOpen(false)} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10">
+                  <span>←</span> <span className="hidden sm:inline">Back to Stream</span><span className="sm:hidden">Back</span>
+                </button>
+                <h2 className="hidden lg:block flex-1 text-center text-xl font-extrabold text-white">Building Scalable AI Agents</h2>
+              </div>
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
+                {/* Video */}
+                <div className="lg:col-span-6">
+                  <div className="relative bg-[#0f0f1f] rounded-2xl overflow-hidden border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.25)]">
+                    <div className="aspect-video relative bg-black">
+                      <div className="absolute top-3 left-3 z-20 bg-black/60 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-[#FFD700] flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Live • AI Agents Network Visualization</div>
+                      <iframe src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0`} title={activeVideo.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                      <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent px-3 py-2 flex items-center gap-2">
+                        <button className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center text-white">❚❚</button>
+                        <span className="text-xs font-mono text-white/70">02:18 / 06:42</span>
+                        <div className="flex-1 h-1 bg-white/20 rounded-full"><div className="h-full bg-[#FFD700] rounded-full" style={{width:'35%'}}></div></div>
+                        <span className="text-white/70">🔊 ⛶ ⋯</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                {/* Code panel — responsive */}
+                <div className="lg:col-span-6">
+                  <div className="bg-[#0f0f1f] border border-white/10 rounded-2xl overflow-hidden shadow-xl flex flex-col h-[55vh] lg:h-[58vh] min-h-[420px]">
+                    <div className="flex border-b border-white/10 bg-[#0f0f1f] overflow-x-auto scrollbar-hide">
+                      <button onClick={()=>setWatchPanelTab("code")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="code"?"bg-[#FFD700] text-black":"text-gray-400"}`}>Code &lt;/&gt;</button>
+                      <button onClick={()=>setWatchPanelTab("preview")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="preview"?"bg-[#00D9FF] text-black":"text-gray-400"}`}>Preview</button>
+                      <button onClick={()=>setWatchPanelTab("ai")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="ai"?"bg-[#A855F7] text-white":"text-gray-400"}`}>AI</button>
+                      <button onClick={()=>setWatchPanelTab("terminal")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="terminal"?"bg-[#00FF88] text-black":"text-gray-400"}`}>Terminal &gt;_</button>
+                      <button className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">⋯ more &gt;</button>
+                    </div>
+                    <div className="flex-1 min-h-0 flex flex-col bg-[#0B0215]">
+                      {watchPanelTab==="code" && (
+                        <div className="flex-1 flex flex-col min-h-0">
+                          <div className="flex-1 p-4 overflow-auto font-mono text-sm leading-6 bg-[#0a0a14]">
+                            <div className="flex gap-4">
+                              <div className="text-gray-600 select-none text-right leading-6">{codeValue.split('\n').map((_,i)=>(<div key={i}>{i+1}</div>))}</div>
+                              <pre className="flex-1 text-[#d4d4d4] whitespace-pre-wrap break-words">{codeValue}</pre>
+                            </div>
+                          </div>
+                          <div className="hidden"><textarea value={codeValue} onChange={e=>setCodeValue(e.target.value)} className="w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-sm p-4 resize-none focus:outline-none" /></div>
+                          <div ref={monacoRef} className="hidden"></div>
+                          <div className="px-3 py-2 bg-[#0a0a14] border-t border-white/10 flex items-center justify-between text-xs font-mono text-gray-500">
+                            <span>ts • AgentConfig.ts • unsaved</span>
+                            <span className="hidden sm:inline">Press Run to execute</span>
+                          </div>
+                          <button onClick={()=>{ showToast("Running AgentConfig..."); try{ eval(codeValue); }catch(e){ showToast("Run: "+e.message); } }} className="m-3 py-3.5 rounded-xl bg-[#FFD700] text-black font-extrabold text-lg flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition shadow-lg">▶ Run</button>
+                        </div>
+                      )}
+                      {watchPanelTab==="preview" && (<iframe title="Preview" srcDoc={codeValue} sandbox="allow-scripts allow-same-origin" className="flex-1 w-full border-0 bg-white" />)}
+                      {watchPanelTab==="ai" && (<div className="flex-1 p-3 overflow-y-auto space-y-2 bg-[#0f0f1f]">{aiChatMessages.map((m,i)=>(<div key={i} className={`p-2.5 rounded-xl text-sm ${m.role==="user"?"bg-[#FFD700] text-black ml-auto":"bg-[#1a1a2e] text-white mr-auto"}`}>{m.text}</div>))}<div className="flex gap-2 mt-2"><input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAiSend()} placeholder="Ask AI..." className="flex-1 bg-[#1a1a2e] border border-white/10 rounded-full px-4 py-2 text-sm" /><button onClick={handleAiSend} className="px-4 py-2 bg-[#FFD700] text-black font-bold rounded-full">Send</button></div></div>)}
+                      {watchPanelTab==="terminal" && (<div ref={terminalRef} className="flex-1 bg-black p-2 overflow-hidden" style={{minHeight:"200px"}} />)}
+                    </div>
                   </div>
                 </div>
               </div>
