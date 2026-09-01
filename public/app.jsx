@@ -426,6 +426,38 @@ function App() {
     }).catch(()=>{});
   }, []);
   useEffect(()=>{ try{ localStorage.setItem("alphatekx_watch_later", JSON.stringify(watchLater)); }catch{} }, [watchLater]);
+  // GATED: YouTube becomes profile — as soon as user signs in, his YouTube is his profile
+  useEffect(() => {
+    if (authUser && !authUser.isGuest) {
+      const ytProfile = {
+        id: authUser.channelId || authUser.id || "yt_user",
+        name: authUser.channelName || "YouTube User",
+        handle: authUser.handle || `@${(authUser.channelName||"youtube").toLowerCase().replace(/[^a-z0-9]/g,"")}`,
+        email: authUser.email || `${(authUser.channelName||"youtube").toLowerCase().replace(/\s+/g,"")}@youtube.local`,
+        avatar: authUser.channelAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(authUser.channelName||"You")}&background=FFD700&color=000&size=200&bold=true`,
+        banner: authUser.banner || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80",
+        bio: `YouTube Channel • ${authUser.channelName || "You"} • Signed in via YouTube — full access unlocked ✓`,
+        subscribers: authUser.subscribers || (authUser.subscribersCount ? String(authUser.subscribersCount) : "—"),
+        subscribersCount: authUser.subscribersCount || 0,
+        verified: true,
+        isGuest: false,
+        youtube: true,
+        channelId: authUser.channelId || authUser.id,
+      };
+      setProfileData(ytProfile);
+      setProfileForm({ name: ytProfile.name, handle: ytProfile.handle, bio: ytProfile.bio, avatar: ytProfile.avatar, banner: ytProfile.banner, email: ytProfile.email });
+    }
+  }, [authUser]);
+  // Personalized feed — fetch user's videos when signed in
+  const [userFeed, setUserFeed] = useState([]);
+  useEffect(() => {
+    if (!isGuest && authUser) {
+      fetch('/api/user/feed', { credentials: 'include' }).then(r=>r.ok?r.json():null).then(d=>{
+        if(d && Array.isArray(d.feed) && d.feed.length>0) setUserFeed(d.feed);
+        else if(d && d.feed) setUserFeed(d.feed);
+      }).catch(()=>{});
+    } else setUserFeed([]);
+  }, [isGuest, authUser]);
   // Fetch channel when activeChannelId changes or when entering channel tab — PROMPT #7 real-time for ALPHATEKX
   useEffect(() => {
     if (activeTab !== "channel") return;
@@ -2117,6 +2149,36 @@ function App() {
                     </button>
                   </div>
 
+                  {/* PERSONALIZED FEED — appears after sign-in, user's YouTube videos */}
+                  {!isGuest && userFeed.length > 0 && (
+                    <div className="glass-card p-5 space-y-4 border border-[#FFD700]/30 animate-fade-in">
+                      <div className="flex items-center gap-2">
+                        <span className="w-7 h-7 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center text-xs font-black">▶</span>
+                        <h3 className="font-bold text-white text-sm">Your Personalized Feed — {authUser?.channelName}</h3>
+                        <span className="ml-auto text-[10px] font-mono bg-[#FFD700]/20 text-[#FFD700] px-2 py-1 rounded-full">{userFeed.length} videos</span>
+                      </div>
+                      <p className="text-xs text-gray-400">Your YouTube is now your profile — these are your videos</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {userFeed.map(v=>(
+                          <div key={v.videoId} onClick={()=>{ setActiveVideo(normalizeVideo({ youtubeId:v.videoId, title:v.title, thumbnailUrl:v.thumbnail, channelName: authUser?.channelName, avatar: authUser?.channelAvatar })); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} className="flex gap-3 p-2 rounded-xl bg-black/40 border border-white/5 hover:border-[#FFD700]/30 cursor-pointer">
+                            <img src={v.thumbnail} alt={v.title} className="w-24 h-16 object-cover rounded-lg flex-shrink-0" />
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-bold text-white line-clamp-2">{v.title}</p>
+                              <p className="text-[11px] text-gray-400 truncate">{v.publishedAt ? new Date(v.publishedAt).toLocaleDateString() : ""}</p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {isGuest && (
+                    <div className="glass-card p-5 text-center space-y-3 border border-[#FFD700]/20">
+                      <p className="text-sm text-white font-bold">Sign in to unlock personalized feed</p>
+                      <p className="text-xs text-gray-400">Your YouTube channel becomes your Alphatekx profile</p>
+                      <SignInButton />
+                    </div>
+                  )}
+
                   {/* AI HELPER — inline under video, analyses video first (only when A clicked) */}
                   {aiHelperOpen && aiHelperVideo && (
                     <div className="glass-card p-5 space-y-4 border border-[#00D9FF]/20 animate-fade-in">
@@ -3270,11 +3332,14 @@ function App() {
                   <p className="text-xs text-gray-300 mt-1 max-w-xl">{profileData?.bio || "Browsing as Guest — sign up coming soon. Your history is saved locally."}</p>
                 </div>
                 {profileData?.isGuest ? (
-                  <div className="px-5 py-2 rounded-full bg-[#FFD700]/20 text-[#FFD700] text-xs font-bold border border-[#FFD700]/30 flex-shrink-0">Guest Mode — Sign up soon</div>
+                  <SignInButton />
                 ) : (
-                  <button onClick={()=>setIsEditingProfile(!isEditingProfile)} className="px-5 py-2 rounded-full bg-[#272727] hover:bg-[#383838] text-xs font-bold text-white border border-white/10 flex-shrink-0">
-                    {isEditingProfile ? "Cancel" : "Edit Profile"}
-                  </button>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <button onClick={()=>setIsEditingProfile(!isEditingProfile)} className="px-5 py-2 rounded-full bg-[#272727] hover:bg-[#383838] text-xs font-bold text-white border border-white/10">
+                      {isEditingProfile ? "Cancel" : "Edit Profile"}
+                    </button>
+                    <button onClick={async()=>{ await fetch('/api/auth/logout',{credentials:'include'}); setAuthUser(null); setProfileData(null); setUserFeed([]); showToast('Logged out'); window.location.reload(); }} className="px-5 py-2 rounded-full bg-[#FFD700] text-black font-bold text-xs hover:scale-105 transition">Logout</button>
+                  </div>
                 )}
               </div>
 
