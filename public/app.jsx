@@ -412,6 +412,12 @@ function App() {
       vibeParser(last.text);
     }
   }, [aiChatMessages]);
+  // TERMINAL — Xterm + WebContainer refs
+  const terminalRef = useRef(null);
+  const xtermRef = useRef(null);
+  const webcontainerRef = useRef(null);
+  const shellInputRef = useRef("");
+  const [terminalReady, setTerminalReady] = useState(false);
   // Monaco loader — upgrade textarea to real Monaco when available (keeps fallback)
   useEffect(() => {
     if (watchPanelTab !== "code") return;
@@ -445,6 +451,95 @@ function App() {
     document.head.appendChild(script);
     return () => {};
   }, [watchPanelTab]);
+
+  // MISSION 4 — TERMINAL Xterm + WebContainer (zero-cost, browser only)
+  useEffect(() => {
+    if (watchPanelTab !== "terminal" || !watchPanelOpen) return;
+    if (xtermRef.current) return;
+    const container = terminalRef.current;
+    if (!container) return;
+    const init = async () => {
+      // CSS
+      if (!document.querySelector('link[href*="xterm"]')) {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.href = "https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css";
+        document.head.appendChild(link);
+      }
+      // Load Xterm if needed
+      const loadXterm = () => new Promise((res, rej) => {
+        if (window.Terminal) return res(window.Terminal);
+        const s = document.createElement("script");
+        s.src = "https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js";
+        s.onload = () => res(window.Terminal);
+        s.onerror = rej;
+        document.head.appendChild(s);
+      });
+      let Term;
+      try { Term = await loadXterm(); } catch { Term = null; }
+      if (!Term) {
+        container.innerHTML = '<div style="color:#FFD700;padding:16px;font-family:monospace">Terminal failed to load. Try reload.</div>';
+        return;
+      }
+      const term = new Term({ theme: { background: "#0B0215", foreground: "#d4d4d4", cursor: "#FFD700" }, fontFamily: "monospace", fontSize: 13, cursorBlink: true });
+      term.open(container);
+      xtermRef.current = term;
+      const prompt = () => term.write("\r\n\x1b[33malphatekx\x1b[0m:\x1b[34m~\x1b[0m$ ");
+      term.writeln("Alphatekx Terminal — WebContainer (zero-cost browser)");
+      term.writeln("Type: ls, echo hello, node --version, npm");
+      prompt();
+      setTerminalReady(true);
+      let booted = false;
+      // Try WebContainer
+      try {
+        const wcMod = await import("https://esm.sh/@webcontainer/api@1.1.9");
+        const WebContainer = wcMod.WebContainer || wcMod.default?.WebContainer;
+        if (WebContainer) {
+          const wc = await WebContainer.boot();
+          webcontainerRef.current = wc;
+          const shell = await wc.spawn("jsh");
+          shell.output.pipeTo(new WritableStream({ write(data) { term.write(data); } }));
+          const input = shell.input.getWriter();
+          term.onData((data) => {
+            // handle enter locally for mock echo if shell not ready
+            input.write(data);
+          });
+          booted = true;
+          term.writeln("\r\n\x1b[32m✓ WebContainer booted — jsh ready\x1b[0m");
+          prompt();
+        }
+      } catch (e) {
+        term.writeln("\r\n\x1b[31mWebContainer not available (needs COOP/COEP). Fallback mock shell.\x1b[0m");
+      }
+      if (!booted) {
+        // Fallback mock shell — handles ls, echo, node --version, npm
+        term.onData((data) => {
+          const code = data.charCodeAt(0);
+          if (code === 13) { // enter
+            const cmd = shellInputRef.current.trim();
+            term.writeln("");
+            if (cmd === "ls") term.writeln("index.html  app.jsx  public  package.json");
+            else if (cmd.startsWith("echo ")) term.writeln(cmd.slice(5));
+            else if (cmd === "node --version") term.writeln("v20.11.0");
+            else if (cmd.startsWith("npm")) term.writeln("npm 10.2.3 — mock");
+            else if (cmd === "clear") term.clear();
+            else if (cmd) term.writeln(`sh: ${cmd}: mock — try echo hello`);
+            shellInputRef.current = "";
+            prompt();
+          } else if (code === 127) { // backspace
+            if (shellInputRef.current.length > 0) {
+              shellInputRef.current = shellInputRef.current.slice(0, -1);
+              term.write("\b \b");
+            }
+          } else if (code >= 32) {
+            shellInputRef.current += data;
+            term.write(data);
+          }
+        });
+      }
+    };
+    init();
+  }, [watchPanelTab, watchPanelOpen]);
 
   // MISSION 2 — SHADOW-CLONE CHECKPOINT SYSTEM (Timeline Hijacking Engine)
   const [checkpoints, setCheckpoints] = useState([]);
@@ -2210,14 +2305,17 @@ function App() {
                   {watchPanelOpen && (
                   <div className="bg-[#0B0215] border border-[#FFD700]/20 rounded-2xl overflow-hidden animate-fade-in shadow-[0_10px_40px_rgba(0,0,0,0.6)] mx-0 sm:mx-0">
                     <div className="flex border-b border-white/10 bg-[#0B0215]/90 backdrop-blur">
-                      <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1.5 sm:gap-2 py-3.5 text-xs sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="code" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"} ${activeCheckpoint ? "animate-pulse border border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.6)]" : ""}`}>
-                        <span className="w-5 h-5 rounded-md bg-black/10 flex items-center justify-center text-xs">{"</>"}</span> Code {activeCheckpoint && "🔒"}
+                      <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="code" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"} ${activeCheckpoint ? "animate-pulse border border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.6)]" : ""}`}>
+                        <span className="w-5 h-5 rounded-md bg-black/10 flex items-center justify-center text-xs">{"</>"}</span> Code{activeCheckpoint && "🔒"}
                       </button>
-                      <button onClick={()=>setWatchPanelTab("preview")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1.5 sm:gap-2 py-3.5 text-xs sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="preview" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
+                      <button onClick={()=>setWatchPanelTab("preview")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="preview" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
                         <Icon name="studio" className="w-4 h-4" /> Preview
                       </button>
-                      <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1.5 sm:gap-2 py-3.5 text-xs sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="ai" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
+                      <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="ai" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
                         <Icon name="sparkles" className="w-4 h-4" /> AI
+                      </button>
+                      <button onClick={()=>setWatchPanelTab("terminal")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1 sm:gap-1.5 py-3.5 text-[11px] sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="terminal" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
+                        <span className="font-mono text-xs">&gt;_</span> Terminal
                       </button>
                       <button onClick={()=>setWatchPanelOpen(false)} className="px-4 text-gray-400 hover:text-white hover:bg-white/5 border-l border-white/10 flex items-center justify-center" title="Close">✕</button>
                     </div>
@@ -2241,7 +2339,7 @@ function App() {
                           </div>
                           <iframe title="Live Preview" srcDoc={codeValue} sandbox="allow-scripts allow-same-origin" className="flex-1 w-full border-0 bg-white" />
                         </div>
-                      ) : (
+                      ) : watchPanelTab==="ai" ? (
                         <div className="flex-1 flex flex-col min-h-0 p-3 sm:p-4 bg-[#0B0215]">
                           <div className="flex-1 overflow-y-auto space-y-3 mb-3 pr-1 scrollbar-hide">
                             {aiChatMessages.map((m,i)=>(
@@ -2253,6 +2351,15 @@ function App() {
                             <button onClick={handleAiSend} className="min-h-[44px] min-w-[72px] px-5 sm:px-6 py-3 bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold text-sm rounded-full sm:rounded-xl hover:scale-105 active:scale-95 transition shadow-lg flex-shrink-0">Send</button>
                           </div>
                           <p className="text-[10px] text-gray-500 font-mono text-center mt-2">Vibe: AI writes &lt;edit_file path="..."&gt; → Preview updates</p>
+                        </div>
+                      ) : (
+                        <div className="flex-1 min-h-0 bg-[#0B0215] flex flex-col">
+                          <div ref={terminalRef} className="flex-1 min-h-0 p-1 sm:p-2 bg-[#0B0215] overflow-hidden" style={{ minHeight: "300px" }} />
+                          {!terminalReady && <div className="px-3 py-2 text-xs font-mono text-gray-500 bg-[#0B0215] border-t border-white/10">Booting WebContainer… alphatekx:~$</div>}
+                          <div className="px-3 py-1.5 bg-[#1a1a2e] border-t border-white/10 text-[11px] font-mono text-gray-500 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-[#00FF88] animate-pulse" /> Terminal • WebContainer • zero-cost
+                            <span className="hidden sm:inline text-gray-600">• echo hello, ls, node --version</span>
+                          </div>
                         </div>
                       )}
                     </div>
