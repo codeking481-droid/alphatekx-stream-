@@ -345,26 +345,73 @@ function App() {
   // MISSION 1 — Premium icon-triggered workspace (video 60% top, icon opens Code/AI 40% below)
   const [watchPanelTab, setWatchPanelTab] = useState("code");
   const [watchPanelOpen, setWatchPanelOpen] = useState(false);
-  const [codeValue, setCodeValue] = useState(`// Alphatekx Stream — Code alongside the video
-// Write your code here while watching
-
-function helloAlphatekx() {
-  console.log("Hello from Alphatekx Stream! 🚀🇳🇬");
-}
-
-helloAlphatekx();`);
+  const [codeValue, setCodeValue] = useState(`<!DOCTYPE html>
+<html>
+<body style="background:#0B0215;color:white;font-family:sans-serif;padding:24px;text-align:center">
+  <h1 style="color:#FFD700">Hello Alphatekx 🚀🇳🇬</h1>
+  <p>Edit this HTML in Code tab — Preview updates live</p>
+  <button style="background:linear-gradient(90deg,#FFD700,#F59E0B);color:black;font-weight:800;padding:12px 24px;border-radius:9999px;border:none;">Gold Button</button>
+</body>
+</html>`);
   const [aiChatInput, setAiChatInput] = useState("");
   const [aiChatMessages, setAiChatMessages] = useState([
     { role: "ai", text: "Hi! I'm your AI Teacher. Ask me anything about this video. 🎓" }
   ]);
   const monacoRef = useRef(null);
   const monacoEditorRef = useRef(null);
+  // Vibe Parser — extracts <edit_file> tags from AI and applies to codeValue
+  const vibeParser = (text) => {
+    const regex = /<edit_file[^>]*>([\s\S]*?)<\/edit_file>/gi;
+    let m; let found = null;
+    while ((m = regex.exec(text)) !== null) { found = m[1]; }
+    if (found) {
+      const cleaned = found.trim();
+      setCodeValue(cleaned);
+      if (monacoEditorRef.current) { try { monacoEditorRef.current.setValue(cleaned); } catch {} }
+      setWatchPanelTab("preview");
+      setWatchPanelOpen(true);
+      showToast("✨ Vibe edit applied → Preview");
+      return cleaned;
+    }
+    return null;
+  };
   const handleAiSend = () => {
     const q = aiChatInput.trim();
     if (!q) return;
-    setAiChatMessages(prev => [...prev, { role: "user", text: q }, { role: "ai", text: `Great question about "${q}" — in this video, try the Code tab to experiment while watching at 2:15!` }]);
+    const qLower = q.toLowerCase();
+    let aiText = `Great question about "${q}" — in this video, try the Code tab to experiment while watching at 2:15!`;
+    // Vibe demo: if user asks to create/edit, generate an <edit_file> response
+    if (qLower.includes("button") || qLower.includes("gold") || qLower.includes("html") || qLower.includes("preview") || qLower.includes("vibe") || qLower.includes("create") || qLower.includes("make")) {
+      const html = `<!DOCTYPE html>
+<html>
+<head><style>
+  body { background:#0B0215; color:white; font-family:sans-serif; padding:32px; text-align:center }
+  .btn { background:linear-gradient(90deg,#FFD700,#F59E0B); color:black; font-weight:800; padding:14px 28px; border-radius:9999px; border:none; box-shadow:0 0 20px rgba(255,215,0,0.35); cursor:pointer }
+  h1 { color:#FFD700 }
+</style></head>
+<body>
+  <h1>Hello Alphatekx 🚀</h1>
+  <p>Generated from your vibe: "${q}"</p>
+  <button class="btn">Gold Button ✨</button>
+  <p style="color:#888;font-size:12px;margin-top:16px">Edit in Code tab — preview updates live</p>
+</body>
+</html>`;
+      aiText = `Done! I've updated your file:\n<edit_file path="index.html">${html}</edit_file>\nSwitched to Preview — see your gold button live!`;
+    } else if (qLower.includes("hello") || qLower.includes("console.log")) {
+      aiText = `Try this in Code tab:\n<edit_file path="index.html"><!DOCTYPE html><html><body style="background:#0B0215;color:#FFD700;padding:20px"><h1>Hello Alphatekx</h1><script>console.log('Hello Alphatekx')</script></body></html></edit_file>`;
+    }
+    setAiChatMessages(prev => [...prev, { role: "user", text: q }, { role: "ai", text: aiText }]);
     setAiChatInput("");
+    // Auto-parse after state update (next tick)
+    setTimeout(() => vibeParser(aiText), 100);
   };
+  // Also parse any AI messages that arrive via other means
+  useEffect(() => {
+    const last = aiChatMessages[aiChatMessages.length - 1];
+    if (last && last.role === "ai" && last.text.includes("<edit_file")) {
+      vibeParser(last.text);
+    }
+  }, [aiChatMessages]);
   // Monaco loader — upgrade textarea to real Monaco when available (keeps fallback)
   useEffect(() => {
     if (watchPanelTab !== "code") return;
@@ -2163,10 +2210,13 @@ helloAlphatekx();`);
                   {watchPanelOpen && (
                   <div className="bg-[#0B0215] border border-[#FFD700]/20 rounded-2xl overflow-hidden animate-fade-in shadow-[0_10px_40px_rgba(0,0,0,0.6)] mx-0 sm:mx-0">
                     <div className="flex border-b border-white/10 bg-[#0B0215]/90 backdrop-blur">
-                      <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 py-3.5 text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="code" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"} ${activeCheckpoint ? "animate-pulse border border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.6)]" : ""}`}>
+                      <button onClick={()=>setWatchPanelTab("code")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1.5 sm:gap-2 py-3.5 text-xs sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="code" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"} ${activeCheckpoint ? "animate-pulse border border-[#FFD700] shadow-[0_0_15px_rgba(255,215,0,0.6)]" : ""}`}>
                         <span className="w-5 h-5 rounded-md bg-black/10 flex items-center justify-center text-xs">{"</>"}</span> Code {activeCheckpoint && "🔒"}
                       </button>
-                      <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-2 py-3.5 text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="ai" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
+                      <button onClick={()=>setWatchPanelTab("preview")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1.5 sm:gap-2 py-3.5 text-xs sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="preview" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
+                        <Icon name="studio" className="w-4 h-4" /> Preview
+                      </button>
+                      <button onClick={()=>setWatchPanelTab("ai")} className={`flex-1 min-h-[48px] flex items-center justify-center gap-1.5 sm:gap-2 py-3.5 text-xs sm:text-sm font-bold tracking-wide transition-colors ${watchPanelTab==="ai" ? "bg-[#FFD700] text-black shadow-inner" : "bg-transparent text-gray-400 hover:text-white hover:bg-white/5"}`}>
                         <Icon name="sparkles" className="w-4 h-4" /> AI
                       </button>
                       <button onClick={()=>setWatchPanelOpen(false)} className="px-4 text-gray-400 hover:text-white hover:bg-white/5 border-l border-white/10 flex items-center justify-center" title="Close">✕</button>
@@ -2178,22 +2228,31 @@ helloAlphatekx();`);
                             <textarea value={codeValue} onChange={e=>setCodeValue(e.target.value)} className="w-full h-full bg-[#1e1e1e] text-[#d4d4d4] font-mono text-[13px] sm:text-[14px] leading-5 p-4 sm:p-5 resize-none focus:outline-none" spellCheck={false} placeholder="// Start coding here — your code unlocks video" />
                           </div>
                           <div className="px-3 sm:px-4 py-2.5 bg-[#1e1e1e] border-t border-white/10 flex items-center gap-3 text-[11px] font-mono text-gray-500">
-                            <span className="w-2 h-2 rounded-full bg-[#00FF88] animate-pulse flex-shrink-0" /> Monaco Editor • JavaScript • {codeValue.split('\n').length} lines
-                            <span className="hidden sm:inline text-gray-600">• Auto-saves locally</span>
-                            <button onClick={()=>{ setCodeValue(`// Reset\nconsole.log("Hello Alphatekx! 🚀");`); showToast("Editor reset"); }} className="ml-auto min-h-[32px] px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-xs text-gray-300 hover:text-white border border-white/10">Reset</button>
+                            <span className="w-2 h-2 rounded-full bg-[#00FF88] animate-pulse flex-shrink-0" /> Monaco Editor • HTML/JS • {codeValue.split('\n').length} lines
+                            <span className="hidden sm:inline text-gray-600">• Live preview in Preview tab →</span>
+                            <button onClick={()=>{ setCodeValue(`<!DOCTYPE html>\n<html>\n<body style="background:#0B0215;color:#FFD700;font-family:sans-serif;padding:20px;text-align:center">\n  <h1>Hello Alphatekx 🚀</h1>\n  <p>Edit me and see Preview</p>\n</body>\n</html>`); showToast("Editor reset"); }} className="ml-auto min-h-[32px] px-3 py-1 rounded-full bg-white/5 hover:bg-white/10 text-xs text-gray-300 hover:text-white border border-white/10">Reset</button>
                           </div>
+                        </div>
+                      ) : watchPanelTab==="preview" ? (
+                        <div className="flex-1 min-h-0 bg-white flex flex-col">
+                          <div className="px-3 py-2 bg-[#1e1e1e] border-b border-white/10 flex items-center gap-2 text-[11px] font-mono text-gray-400">
+                            <span className="w-2 h-2 rounded-full bg-[#FFD700] animate-pulse" /> Live Preview • hot reload • no server
+                            <span className="ml-auto text-gray-500">srcDoc = codeValue</span>
+                          </div>
+                          <iframe title="Live Preview" srcDoc={codeValue} sandbox="allow-scripts allow-same-origin" className="flex-1 w-full border-0 bg-white" />
                         </div>
                       ) : (
                         <div className="flex-1 flex flex-col min-h-0 p-3 sm:p-4 bg-[#0B0215]">
                           <div className="flex-1 overflow-y-auto space-y-3 mb-3 pr-1 scrollbar-hide">
                             {aiChatMessages.map((m,i)=>(
-                              <div key={i} className={`p-3 sm:p-3.5 rounded-2xl text-sm leading-relaxed max-w-[85%] ${m.role==="user" ? "bg-[#FFD700] text-black font-medium ml-auto shadow-md" : "bg-[#1a1a2e] text-gray-200 mr-auto border border-white/10"}`}>{m.text}</div>
+                              <div key={i} className={`p-3 sm:p-3.5 rounded-2xl text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap break-words ${m.role==="user" ? "bg-[#FFD700] text-black font-medium ml-auto shadow-md" : "bg-[#1a1a2e] text-gray-200 mr-auto border border-white/10"}`}>{m.text.replace(/<edit_file[^>]*>[\s\S]*?<\/edit_file>/g, "[Vibe edit applied → Preview]").trim()}</div>
                             ))}
                           </div>
                           <div className="flex gap-2 sm:gap-3">
-                            <input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter" && handleAiSend()} placeholder="Ask AI about this video..." className="flex-1 min-h-[44px] bg-[#1a1a2e] border border-white/10 rounded-full sm:rounded-xl px-4 sm:px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700] focus:ring-1 focus:ring-[#FFD700]/20" />
+                            <input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter" && handleAiSend()} placeholder="Ask AI to edit code — e.g. make a gold button..." className="flex-1 min-h-[44px] bg-[#1a1a2e] border border-white/10 rounded-full sm:rounded-xl px-4 sm:px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700] focus:ring-1 focus:ring-[#FFD700]/20" />
                             <button onClick={handleAiSend} className="min-h-[44px] min-w-[72px] px-5 sm:px-6 py-3 bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold text-sm rounded-full sm:rounded-xl hover:scale-105 active:scale-95 transition shadow-lg flex-shrink-0">Send</button>
                           </div>
+                          <p className="text-[10px] text-gray-500 font-mono text-center mt-2">Vibe: AI writes &lt;edit_file path="..."&gt; → Preview updates</p>
                         </div>
                       )}
                     </div>
