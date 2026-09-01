@@ -203,6 +203,34 @@ const SearchBar = ({ value, onChange, onSubmit, placeholder }) => (
   </form>
 );
 
+// --- GATED EXPERIENCE — SignInButton + GuestOverlay (gold gradient, semi-transparent) ---
+const SignInButton = () => {
+  const handleSignIn = async () => {
+    try {
+      const r = await fetch('/api/auth/url');
+      const data = await r.json();
+      if (data.url) { window.location.href = data.url; return; }
+    } catch {}
+    window.location.href = '/api/auth/url';
+  };
+  return (
+    <button onClick={handleSignIn} className="bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold px-8 py-3 rounded-xl hover:scale-105 transition shadow-lg hover:shadow-gold/30">
+      Sign in with YouTube →
+    </button>
+  );
+};
+const GuestOverlay = ({ children, message }) => (
+  <div className="relative">
+    {children}
+    <div className="absolute inset-0 bg-[#0B0215]/80 backdrop-blur-sm flex items-center justify-center rounded-xl z-10">
+      <div className="text-center p-6">
+        <p className="text-white text-lg font-semibold">{message || 'Sign in to interact'}</p>
+        <div className="mt-4"><SignInButton /></div>
+      </div>
+    </div>
+  </div>
+);
+
 // --- PROMPT #3: DEFAULT VIDEO (YOUR VIDEO) — plays first, helps grow YouTube channel ---
 const DEFAULT_VIDEO = {
   id: "jvXEkm27XOE",
@@ -257,6 +285,17 @@ function normalizeVideo(v) {
 
 // --- Main App Component ---
 function App() {
+  // GATED EXPERIENCE — auth state
+  const [authUser, setAuthUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const isGuest = !authUser;
+  useEffect(() => {
+    fetch('/api/auth/user', { credentials: 'include' }).then(r=>r.ok?r.json():null).then(d=>{
+      if(d && !d.isGuest && d.id) setAuthUser(d);
+      else if(d && d.channelName) setAuthUser(d);
+      else setAuthUser(null);
+    }).catch(()=>setAuthUser(null)).finally(()=>setAuthLoading(false));
+  }, []);
   // Navigation & Drawer State
   const [activeTab, setActiveTab] = useState("watch"); // watch, home, shorts, teacher, memory, chat, community, marketplace, sell, studio, pricing, profile
   const [sidebarOpen, setSidebarOpen] = useState(true); // Desktop sidebar toggle
@@ -1601,16 +1640,20 @@ function App() {
             <span>{isProUser ? "PRO ACTIVE" : "UPGRADE PRO"}</span>
           </button>
 
-          <button 
-            onClick={() => setActiveTab("profile")}
-            className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-[#00D9FF] to-[#00FF88] p-0.5 ml-0.5 sm:ml-1 flex-shrink-0"
-          >
-            <img 
-              src={profileData?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80"} 
-              alt="Profile Avatar" 
-              className="w-full h-full rounded-full object-cover" 
-            />
-          </button>
+          {isGuest ? (
+            <SignInButton />
+          ) : (
+            <button 
+              onClick={() => setActiveTab("profile")}
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-tr from-[#FFD700] to-[#F59E0B] p-0.5 ml-0.5 sm:ml-1 flex-shrink-0 border-2 border-[#FFD700]"
+            >
+              <img 
+                src={authUser?.channelAvatar || profileData?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80"} 
+                alt="Profile Avatar" 
+                className="w-full h-full rounded-full object-cover" 
+              />
+            </button>
+          )}
         </div>
       </header>
 
@@ -1931,28 +1974,46 @@ function App() {
                           </div>
                         </button>
 
-                        {/* Subscribe Button */}
-                        <button
-                          onClick={() => {
-                            const next = !isSubscribed;
-                            setIsSubscribed(next);
-                            // Update real subscriber count display
-                            const cur = Number(String(activeVideo.subscribersCount||activeVideo.subscribers||"1200").replace(/[^0-9]/g,"")) || 1200;
-                            const nextCount = next ? cur+1 : Math.max(0, cur-1);
-                            setActiveVideo(prev=> ({...prev, subscribers: nextCount.toLocaleString(), subscribersCount: nextCount}));
-                            showToast(next ? `Subscribed to ${activeVideo.channel}! 🎉 ${nextCount.toLocaleString()} subs` : `Unsubscribed from ${activeVideo.channel}`);
-                          }}
-                          className={`ml-2 px-5 py-2 rounded-full font-bold text-xs transition-all active:scale-95 ${
-                            isSubscribed 
-                              ? "bg-[#272727] text-gray-300 hover:bg-[#383838]" 
-                              : "bg-[#00D9FF] hover:bg-[#00c4e6] text-black font-extrabold shadow-[0_0_15px_rgba(0,217,255,0.4)]"
-                          }`}
-                        >
-                          {isSubscribed ? "Subscribed ✓" : "Subscribe"}
-                        </button>
+                        {/* Subscribe Button — gated */}
+                        {isGuest ? (
+                          <GuestOverlay message="Sign in to subscribe">
+                            <button className="ml-2 px-5 py-2 rounded-full font-bold text-xs bg-[#272727] text-gray-300">Subscribe</button>
+                          </GuestOverlay>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              const next = !isSubscribed;
+                              setIsSubscribed(next);
+                              const cur = Number(String(activeVideo.subscribersCount||activeVideo.subscribers||"1200").replace(/[^0-9]/g,"")) || 1200;
+                              const nextCount = next ? cur+1 : Math.max(0, cur-1);
+                              setActiveVideo(prev=> ({...prev, subscribers: nextCount.toLocaleString(), subscribersCount: nextCount}));
+                              showToast(next ? `Subscribed to ${activeVideo.channel}! 🎉 ${nextCount.toLocaleString()} subs` : `Unsubscribed from ${activeVideo.channel}`);
+                            }}
+                            className={`ml-2 px-5 py-2 rounded-full font-bold text-xs transition-all active:scale-95 ${
+                              isSubscribed 
+                                ? "bg-[#272727] text-gray-300 hover:bg-[#383838]" 
+                                : "bg-[#00D9FF] hover:bg-[#00c4e6] text-black font-extrabold shadow-[0_0_15px_rgba(0,217,255,0.4)]"
+                            }`}
+                          >
+                            {isSubscribed ? "Subscribed ✓" : "Subscribe"}
+                          </button>
+                        )}
                       </div>
 
-                      {/* Action Row Horizontal Pills — scrolls on mobile without breaking layout */}
+                      {/* Action Row Horizontal Pills — gated when isGuest */}
+                      {isGuest ? (
+                        <GuestOverlay message="Sign in to like & comment">
+                          <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1 flex-nowrap overscroll-x-contain opacity-50 pointer-events-none">
+                            <div className="flex items-center bg-[#272727] rounded-full border border-white/5">
+                              <button className="flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-l-full border-r border-white/10 text-gray-200"><Icon name="like" className="w-4 h-4" /><span>{(likeCount / 1000).toFixed(1)}K</span></button>
+                              <button className="px-3 py-2 text-xs font-semibold rounded-r-full text-gray-400"><Icon name="dislike" className="w-4 h-4" /></button>
+                            </div>
+                            <button className="flex items-center gap-2 px-4 py-2 bg-[#272727] text-xs font-semibold text-gray-200 rounded-full border border-white/5"><Icon name="share" className="w-4 h-4" /><span>Share</span></button>
+                            <button className="flex items-center gap-2 px-4 py-2 bg-[#272727] text-xs font-semibold text-gray-200 rounded-full border border-white/5"><Icon name="download" className="w-4 h-4" /><span>Download</span></button>
+                            <button className="flex items-center gap-2 px-4 py-2 bg-[#272727] text-xs font-semibold rounded-full border border-white/5 text-gray-200"><Icon name="bookmark" className="w-4 h-4" /><span>Save</span></button>
+                          </div>
+                        </GuestOverlay>
+                      ) : (
                       <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 scrollbar-hide -mx-1 px-1 flex-nowrap overscroll-x-contain">
                         
                         {/* Joined Like & Dislike Pill */}
@@ -2031,6 +2092,7 @@ function App() {
                         </button>
 
                       </div>
+                      )}
 
                     </div>
                   </div>
