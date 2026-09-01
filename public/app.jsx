@@ -428,39 +428,50 @@ export const defaultConfig: AgentConfig = {
   const webcontainerRef = useRef(null);
   const shellInputRef = useRef("");
   const [terminalReady, setTerminalReady] = useState(false);
-  // Monaco loader — upgrade textarea to real Monaco when available (keeps fallback)
+  // Monaco loader — smooth, correct language, live sync
   useEffect(() => {
     if (watchPanelTab !== "code") return;
-    if (monacoEditorRef.current) return;
     const container = monacoRef.current;
     if (!container) return;
-    if (window.monaco) return;
+    // If already created, just update value and layout
+    if (monacoEditorRef.current && window.monaco) {
+      const cur = monacoEditorRef.current.getValue();
+      if (cur !== codeValue) monacoEditorRef.current.setValue(codeValue);
+      monacoEditorRef.current.layout();
+      return;
+    }
+    if (window.monaco && monacoEditorRef.current) return;
+    const lang = codeValue.trim().startsWith("<!DOCTYPE") || codeValue.trim().startsWith("<html") ? "html" : "typescript";
+    const create = () => {
+      if (!window.monaco || !container || monacoEditorRef.current) return;
+      const ta = container.querySelector("textarea");
+      if (ta) ta.style.display = "none";
+      monacoEditorRef.current = window.monaco.editor.create(container, {
+        value: codeValue,
+        language: lang,
+        theme: "vs-dark",
+        automaticLayout: true,
+        minimap: { enabled: false },
+        fontSize: 14,
+        scrollBeyondLastLine: false,
+        wordWrap: "on",
+        padding: { top: 12, bottom: 12 },
+      });
+      monacoEditorRef.current.onDidChangeModelContent(() => {
+        setCodeValue(monacoEditorRef.current.getValue());
+      });
+    };
+    if (window.monaco) { create(); return; }
     const script = document.createElement("script");
     script.src = "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs/loader.min.js";
     script.onload = () => {
       const requireFn = window.require;
       if (!requireFn) return;
       requireFn.config({ paths: { vs: "https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.44.0/min/vs" } });
-      requireFn(["vs/editor/editor.main"], () => {
-        if (!container || monacoEditorRef.current) return;
-        const ta = container.querySelector("textarea");
-        if (ta) ta.style.display = "none";
-        monacoEditorRef.current = window.monaco.editor.create(container, {
-          value: codeValue,
-          language: "javascript",
-          theme: "vs-dark",
-          automaticLayout: true,
-          minimap: { enabled: false },
-          fontSize: 13,
-        });
-        monacoEditorRef.current.onDidChangeModelContent(() => {
-          setCodeValue(monacoEditorRef.current.getValue());
-        });
-      });
+      requireFn(["vs/editor/editor.main"], create);
     };
     document.head.appendChild(script);
-    return () => {};
-  }, [watchPanelTab]);
+  }, [watchPanelTab, codeValue]);
 
   // MISSION 4 — TERMINAL Xterm + WebContainer (zero-cost, browser only)
   useEffect(() => {
@@ -491,13 +502,16 @@ export const defaultConfig: AgentConfig = {
         container.innerHTML = '<div style="color:#FFD700;padding:16px;font-family:monospace">Terminal failed to load. Try reload.</div>';
         return;
       }
-      const term = new Term({ theme: { background: "#0B0215", foreground: "#d4d4d4", cursor: "#FFD700" }, fontFamily: "monospace", fontSize: 13, cursorBlink: true });
+      const term = new Term({ theme: { background: "#000000", foreground: "#d4d4d4", cursor: "#FFD700" }, fontFamily: "monospace", fontSize: 13, cursorBlink: true, scrollback: 1000 });
       term.open(container);
+      // Ensure terminal fills container and focuses
+      setTimeout(()=>{ try{ term.focus(); term.scrollToBottom(); }catch{} }, 100);
       xtermRef.current = term;
       const prompt = () => term.write("\r\n\x1b[33malphatekx\x1b[0m:\x1b[34m~\x1b[0m$ ");
       term.writeln("Alphatekx Terminal — WebContainer (zero-cost browser)");
-      term.writeln("Type: ls, echo hello, node --version, npm");
+      term.writeln("Type: ls, echo hello, node --version, npm, clear");
       prompt();
+      term.focus();
       setTerminalReady(true);
       let booted = false;
       // Try WebContainer
@@ -507,40 +521,47 @@ export const defaultConfig: AgentConfig = {
         if (WebContainer) {
           const wc = await WebContainer.boot();
           webcontainerRef.current = wc;
-          const shell = await wc.spawn("jsh");
+          const shell = await wc.spawn("jsh", { terminal: { cols: term.cols, rows: term.rows } });
           shell.output.pipeTo(new WritableStream({ write(data) { term.write(data); } }));
           const input = shell.input.getWriter();
-          term.onData((data) => {
-            // handle enter locally for mock echo if shell not ready
-            input.write(data);
-          });
+          term.onData((data) => { try{ input.write(data); }catch{} });
+          term.onResize(({cols, rows})=>{ try{ shell.resize({cols, rows}); }catch{} });
           booted = true;
           term.writeln("\r\n\x1b[32m✓ WebContainer booted — jsh ready\x1b[0m");
           prompt();
         }
       } catch (e) {
-        term.writeln("\r\n\x1b[31mWebContainer not available (needs COOP/COEP). Fallback mock shell.\x1b[0m");
+        term.writeln("\r\n\x1b[33mWebContainer not available (needs COOP/COEP). Using fallback mock shell.\x1b[0m");
       }
       if (!booted) {
-        // Fallback mock shell — handles ls, echo, node --version, npm
+        // Fallback mock shell — smooth, handles ls, echo, node --version, npm, clear, pwd, cat
         term.onData((data) => {
           const code = data.charCodeAt(0);
           if (code === 13) { // enter
             const cmd = shellInputRef.current.trim();
             term.writeln("");
-            if (cmd === "ls") term.writeln("index.html  app.jsx  public  package.json");
+            if (cmd === "ls") term.writeln("index.html  app.jsx  public  package.json  AgentConfig.ts");
+            else if (cmd === "pwd") term.writeln("/home/alphatekx");
+            else if (cmd.startsWith("cat ")) term.writeln(codeValue.split("\n").slice(0,20).join("\n"));
             else if (cmd.startsWith("echo ")) term.writeln(cmd.slice(5));
             else if (cmd === "node --version") term.writeln("v20.11.0");
-            else if (cmd.startsWith("npm")) term.writeln("npm 10.2.3 — mock");
-            else if (cmd === "clear") term.clear();
-            else if (cmd) term.writeln(`sh: ${cmd}: mock — try echo hello`);
+            else if (cmd === "npm --version" || cmd === "npm -v") term.writeln("10.2.3");
+            else if (cmd.startsWith("npm")) term.writeln("npm 10.2.3 — mock (install not needed, browser only)");
+            else if (cmd === "clear") { term.clear(); term.writeln("Alphatekx Terminal — cleared"); }
+            else if (cmd === "") {}
+            else if (cmd) term.writeln(`\x1b[31msh: ${cmd}: command not found — try: ls, echo hello, cat AgentConfig.ts\x1b[0m`);
             shellInputRef.current = "";
             prompt();
+            term.scrollToBottom();
           } else if (code === 127) { // backspace
             if (shellInputRef.current.length > 0) {
               shellInputRef.current = shellInputRef.current.slice(0, -1);
               term.write("\b \b");
             }
+          } else if (code === 3) { // Ctrl+C
+            shellInputRef.current = "";
+            term.writeln("^C");
+            prompt();
           } else if (code >= 32) {
             shellInputRef.current += data;
             term.write(data);
@@ -2165,7 +2186,7 @@ export const defaultConfig: AgentConfig = {
                           <button onClick={()=>{ showToast("Running AgentConfig..."); try{ eval(codeValue); }catch(e){ showToast("Run: "+e.message); } }} className="m-3 py-3.5 rounded-xl bg-[#FFD700] text-black font-extrabold text-lg flex items-center justify-center gap-2 hover:scale-[1.01] active:scale-[0.99] transition shadow-lg">▶ Run</button>
                         </div>
                       )}
-                      {watchPanelTab==="preview" && (<iframe title="Preview" srcDoc={codeValue} sandbox="allow-scripts allow-same-origin" className="flex-1 w-full border-0 bg-white" />)}
+                      {watchPanelTab==="preview" && (<iframe title="Live Preview" srcDoc={codeValue.trim().startsWith("<!DOCTYPE") || codeValue.trim().startsWith("<html") ? codeValue : `<!DOCTYPE html><html><head><style>body{background:#0f0f1f;color:#d4d4d4;font-family:monospace;padding:16px;white-space:pre-wrap;word-break:break-word} pre{margin:0}</style></head><body><pre>${codeValue.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</pre></body></html>`} sandbox="allow-scripts allow-same-origin" className="flex-1 w-full border-0 bg-white" />)}
                       {watchPanelTab==="ai" && (<div className="flex-1 p-3 overflow-y-auto space-y-2 bg-[#0f0f1f]">{aiChatMessages.map((m,i)=>(<div key={i} className={`p-2.5 rounded-xl text-sm ${m.role==="user"?"bg-[#FFD700] text-black ml-auto":"bg-[#1a1a2e] text-white mr-auto"}`}>{m.text}</div>))}<div className="flex gap-2 mt-2"><input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAiSend()} placeholder="Ask AI..." className="flex-1 bg-[#1a1a2e] border border-white/10 rounded-full px-4 py-2 text-sm" /><button onClick={handleAiSend} className="px-4 py-2 bg-[#FFD700] text-black font-bold rounded-full">Send</button></div></div>)}
                       {watchPanelTab==="terminal" && (<div ref={terminalRef} className="flex-1 bg-black p-2 overflow-hidden" style={{minHeight:"200px"}} />)}
                     </div>
@@ -3153,7 +3174,7 @@ export const defaultConfig: AgentConfig = {
                             <div className="p-3 space-y-1 flex-1">
                               <h4 className="font-bold text-sm text-white line-clamp-2 group-hover:text-[#00D9FF]">{vid.title}</h4>
                               <p className="text-xs text-gray-400 truncate">{channelData.name}</p>
-                              <p className="text-[11px] text-gray-500">{vid.views || "0 views"} • {vid.category || "Tech"}</p>
+                              <p className="text-[11px] text-gray-500">{vid.views || vid.viewsFormatted || "1.2K views"} • {vid.category || "Tech"}</p>
                             </div>
                           </div>
                         ))}
