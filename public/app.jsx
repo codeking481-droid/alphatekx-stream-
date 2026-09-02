@@ -351,6 +351,14 @@ function App() {
   const [aiChatMessages, setAiChatMessages] = useState([
     { role: "ai", text: "Hi! I'm your AI Teacher. Ask me anything about this video. 🎓" }
   ]);
+  const [agentFiles, setAgentFiles] = useState({});
+  const [aiChatInput, setAiChatInput] = useState("");
+  // Notebook
+  const [notebookTab, setNotebookTab] = useState("write");
+  const [notebookNotes, setNotebookNotes] = useState(() => {
+    try { const vid = (typeof window !== 'undefined' && window.location.pathname.match(/\/workspace\/([^/]+)/)?.[1]) || "default"; return localStorage.getItem(`notes_${vid}`) || ""; } catch { return ""; }
+  });
+  const [notebookSavedView, setNotebookSavedView] = useState(false);
   const monacoRef = useRef(null);
   const monacoEditorRef = useRef(null);
   // Vibe Parser — extracts <edit_file> tags from AI and applies to codeValue
@@ -399,35 +407,81 @@ function App() {
     }
     return files;
   };
-  const handleAiSend = () => {
+  const handleAiSend = async () => {
     const q = aiChatInput.trim();
     if (!q) return;
-    if (!apiKey && !isGuest) {
+    const storedKey = (typeof window !== 'undefined' ? localStorage.getItem('alphatekx_api_key') : null) || byokKey || apiKey || "";
+    if (!storedKey) {
       setShowPaywall(true);
-      setAiChatMessages(prev => [...prev, { role: "ai", text: "🔑 Add your DeepSeek/OpenAI API key (BYOK) or use Alphatekx Credits ₦500 — stored locally, zero cost to us." }]);
+      setAiChatMessages(prev => [...prev, { role: "user", text: q }, { role: "ai", text: "🔑 Add your DeepSeek/OpenAI API key (BYOK) or use Alphatekx Credits ₦500 — stored locally, zero cost to us. Paste key above and Save." }]);
+      setAiChatInput("");
       return;
     }
-    const qLower = q.toLowerCase();
-    let aiText = `Agent building... analyzing your request. Building file(s) → Preview`;
-    // Real vibe build — generate file tags that vibeParserAgent parses
-    if (qLower.includes("button") || qLower.includes("pay") || qLower.includes("checkout") || qLower.includes("gold") || qLower.includes("build") || qLower.includes("make") || qLower.includes("create") || qLower.includes("fix")) {
-      const html = `<button onclick="alert('${q}')" class="bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold px-6 py-3 rounded-full shadow-[0_0_20px_rgba(255,215,0,0.35)]">${q}</button>`;
-      aiText = `Built for you:\n<create_file path="index.html"><!DOCTYPE html><html><head><style>body{background:#0B0215;color:#FFD700;font-family:sans-serif;padding:32px;text-align:center;display:flex;align-items:center;justify-content:center;height:100vh}.btn{background:linear-gradient(90deg,#FFD700,#F59E0B);padding:14px 28px;border-radius:9999px;font-weight:bold;color:black;border:none;cursor:pointer;box-shadow:0 0 20px rgba(255,215,0,0.35);min-height:48px}.btn:hover{transform:scale(1.02)}</style></head><body><button class="btn">${q}</button><script>console.log("Built with Alphatekx Agent")</script></body></html></create_file>`;
-    } else if (qLower.includes("hello") || qLower.includes("console")) {
-      aiText = `Built:\n<create_file path="script.js">console.log("Hello Alphatekx! Agent running.");</create_file>`;
-    } else {
-      // Generic agent response that still produces a file for preview
-      aiText = `Built:\n<create_file path="index.html"><!DOCTYPE html><html><head><style>body{background:#0B0215;color:white;padding:24px;font-family:sans-serif}</style></head><body><h1 style="color:#FFD700">${q}</h1><p>Built by Alphatekx Agent</p></body></html></create_file>`;
-    }
-    setAiChatMessages(prev => [...prev, { role: "user", text: q }, { role: "ai", text: aiText, vibe: true }]);
+    setAiChatMessages(prev => [...prev, { role: "user", text: q }]);
     setAiChatInput("");
-    // Auto-apply vibe build
-    setTimeout(() => {
-      setBuilding(true);
-      showToast("🤖 Agent analyzing → creating files → preview");
-      const files = vibeParserAgent(aiText);
-      if (files.length > 0) setTimeout(() => setBuilding(false), 800);
-    }, 300);
+    setBuilding(true);
+    showToast("🤖 Agent building…");
+    try {
+      const isOpenAI = storedKey.startsWith('sk-');
+      const url = isOpenAI ? 'https://api.openai.com/v1/chat/completions' : 'https://api.deepseek.com/chat/completions';
+      const model = isOpenAI ? 'gpt-4o' : 'deepseek-chat';
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${storedKey}` },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: 'You are an AI agent. Always respond with <create_file path="index.html">full code</create_file> blocks. Can create multiple files. No explanation outside files.' },
+            { role: 'user', content: q }
+          ],
+          temperature: 0.7
+        })
+      });
+      if (!res.ok) throw new Error(`AI ${res.status}`);
+      const data = await res.json();
+      const content = data.choices?.[0]?.message?.content || data.choices?.[0]?.text || "";
+      const files = [...content.matchAll(/<create_file path="(.+?)">([\s\S]*?)<\/create_file>/g)];
+      if (files.length > 0) {
+        const newFiles = {};
+        files.forEach(m => { newFiles[m[1]] = m[2].trim(); });
+        setAgentFiles(prev => ({ ...prev, ...newFiles }));
+        if (newFiles['index.html']) {
+          const decoded = newFiles['index.html'].replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&');
+          setCodeValue(decoded);
+          if (monacoEditorRef.current) try { monacoEditorRef.current.setValue(decoded); } catch {}
+        }
+        setWatchPanelTab("preview");
+        setWatchPanelOpen(true);
+        setAiChatMessages(prev => [...prev, { role: "ai", text: content }]);
+        vibeParserAgent(content);
+        showToast(`🤖 Agent built ${files.length} file${files.length>1?'s':''} — gold`);
+      } else {
+        // fallback: treat whole content as file if no tags
+        const fallback = content.includes("<!DOCTYPE") || content.includes("<html") ? content : `<!DOCTYPE html><html><head><style>body{background:#0B0215;color:white;padding:24px;font-family:sans-serif}</style></head><body><h1 style="color:#FFD700">${q}</h1><pre>${content.replace(/</g,'&lt;')}</pre></body></html>`;
+        setCodeValue(fallback);
+        setAgentFiles(prev => ({ ...prev, 'index.html': fallback }));
+        setWatchPanelTab("preview");
+        setWatchPanelOpen(true);
+        setAiChatMessages(prev => [...prev, { role: "ai", text: content }]);
+        showToast("🤖 Agent built 1 file — preview");
+      }
+    } catch (e) {
+      // fallback mock build
+      const qLower = q.toLowerCase();
+      let aiText = "";
+      if (qLower.includes("button") || qLower.includes("pay") || qLower.includes("checkout") || qLower.includes("gold") || qLower.includes("build") || qLower.includes("make") || qLower.includes("create") || qLower.includes("fix")) {
+        aiText = `Built for you:\n<create_file path="index.html"><!DOCTYPE html><html><head><style>body{background:#0B0215;color:#FFD700;font-family:sans-serif;padding:32px;text-align:center;display:flex;align-items:center;justify-content:center;height:100vh}.btn{background:linear-gradient(90deg,#FFD700,#F59E0B);padding:14px 28px;border-radius:9999px;font-weight:bold;color:black;border:none;cursor:pointer;box-shadow:0 0 20px rgba(255,215,0,0.35);min-height:48px}.btn:hover{transform:scale(1.02)}</style></head><body><button class="btn">${q}</button><script>console.log("Built with Alphatekx Agent")</script></body></html></create_file>`;
+      } else if (qLower.includes("hello") || qLower.includes("console")) {
+        aiText = `Built:\n<create_file path="script.js">console.log("Hello Alphatekx! Agent running.");</create_file>`;
+      } else {
+        aiText = `Built:\n<create_file path="index.html"><!DOCTYPE html><html><head><style>body{background:#0B0215;color:white;padding:24px;font-family:sans-serif}</style></head><body><h1 style="color:#FFD700">${q}</h1><p>Built by Alphatekx Agent (offline fallback)</p></body></html></create_file>`;
+      }
+      setAiChatMessages(prev => [...prev, { role: "ai", text: aiText, vibe: true }]);
+      vibeParserAgent(aiText);
+      showToast("🤖 Agent built (offline fallback) → Preview");
+    } finally {
+      setBuilding(false);
+    }
   };
   // Also parse any AI messages that arrive via other means
   useEffect(() => {
@@ -1037,6 +1091,18 @@ function App() {
   useEffect(() => {
     if (activeVideo?.id || activeVideo?.youtubeId) pushWatched(activeVideo);
   }, [activeVideo?.id, activeVideo?.youtubeId]);
+  // Notebook auto-save/load per video
+  useEffect(() => {
+    const vid = activeVideo?.youtubeId || activeVideo?.id || "default";
+    const key = `notes_${vid}`;
+    try { const saved = localStorage.getItem(key); if (saved !== null) setNotebookNotes(saved); else setNotebookNotes(""); } catch {}
+  }, [activeVideo?.youtubeId, activeVideo?.id]);
+  useEffect(() => {
+    const vid = activeVideo?.youtubeId || activeVideo?.id || "default";
+    const key = `notes_${vid}`;
+    const t = setTimeout(() => { try { localStorage.setItem(key, notebookNotes); } catch {} }, 2000);
+    return () => clearTimeout(t);
+  }, [notebookNotes, activeVideo?.youtubeId, activeVideo?.id]);
   useEffect(() => {
     const vid = activeVideo?.youtubeId || activeVideo?.id;
     if (!vid || String(vid).startsWith("mock")) return;
@@ -2194,7 +2260,7 @@ function App() {
                       <button onClick={()=>setWatchPanelTab("preview")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="preview"?"bg-[#00D9FF] text-black":"text-gray-400"}`}>Preview</button>
                       <button onClick={()=>setWatchPanelTab("ai")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="ai"?"bg-[#A855F7] text-white":"text-gray-400"}`}>AI</button>
                       <button onClick={()=>setWatchPanelTab("terminal")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="terminal"?"bg-[#00FF88] text-black":"text-gray-400"}`}>Terminal &gt;_</button>
-                      <button className="px-4 py-3 text-sm text-gray-500 whitespace-nowrap">⋯ more &gt;</button>
+                      <button onClick={()=>setWatchPanelTab("notebook")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="notebook"?"bg-[#FFD700] text-black":"text-gray-500 hover:text-white"}`}>⋯ more &gt; Notebook</button>
                     </div>
                     <div className="flex-1 min-h-0 flex flex-col bg-[#0B0215]">
                       {watchPanelTab==="code" && (
@@ -2216,36 +2282,27 @@ function App() {
                       )}
                       {watchPanelTab==="preview" && (()=>{ const raw=(codeValue||'').trim(); const decoded = raw.includes('&lt;')||raw.includes('&gt;') ? raw.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&') : raw; const isFull = decoded.toLowerCase().startsWith('<!doctype')||decoded.toLowerCase().startsWith('<html'); const doc = isFull ? decoded : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:24px;font-family:system-ui,sans-serif;background:#0B0215;color:#fff}</style></head><body>${decoded}</body></html>`; return (<iframe key={doc} title="Live Preview" srcDoc={doc} sandbox="allow-scripts allow-same-origin allow-modals allow-forms" className="flex-1 w-full border-0 bg-white" />); })()}
                       {watchPanelTab==="ai" && (
-                        <div className="flex-1 flex flex-col min-h-0 bg-gradient-to-b from-[#1a1030] to-[#0B0215]">
-                          {!byokKey ? (
-                            <div className="flex-1 flex flex-col items-center justify-center gap-4 p-6 text-center">
-                              <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-[#FFD700] to-[#F59E0B] flex items-center justify-center shadow-[0_0_30px_rgba(255,215,0,0.3)]"><span className="text-3xl">🔑</span></div>
-                              <h3 className="text-xl font-extrabold text-white">Select Your API Key</h3>
-                              <p className="text-sm text-gray-300">BYOK — DeepSeek / OpenAI / Groq (stored locally, zero cost to you)</p>
-                              <div className="flex gap-2 w-full max-w-md">
-                                <input id="apiKeyInput" value={byokKey} onChange={e=>{setByokKey(e.target.value);localStorage.setItem('alphatekx_api_key',e.target.value);}} placeholder="sk-... or DeepSeek key" className="flex-1 min-h-[44px] bg-black/60 border border-[#FFD700]/30 rounded-full px-4 py-2 text-sm text-white focus:outline-none focus:border-[#FFD700]" />
-                                <button onClick={()=>{localStorage.setItem('alphatekx_api_key',byokKey);setApiKey(byokKey);showToast('Key saved — AI unlocked!');}} className="min-h-[44px] px-5 bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-extrabold rounded-full shadow-lg hover:scale-105">Done →</button>
-                              </div>
-                              <button onClick={()=>setShowPaywall(true)} className="text-sm text-[#FFD700] underline hover:text-white">No key? Use Alphatekx Credits ₦500 →</button>
+                        <div className="flex-1 flex flex-col min-h-0 bg-[#0B0215]">
+                          <div className="flex items-center gap-2 px-3 py-3 bg-[#1a1030] border-b border-[#FFD700]/20">
+                            <span className="text-[#FFD700]">🔑</span>
+                            <input type="password" value={byokKey} onChange={e=>setByokKey(e.target.value)} placeholder="Paste DeepSeek/OpenAI key — stored locally" className="flex-1 min-h-[36px] bg-black/60 border border-[#FFD700]/30 rounded-full px-4 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]" />
+                            <button onClick={()=>{localStorage.setItem('alphatekx_api_key',byokKey); setApiKey(byokKey); showToast('Key saved — AI unlocked!');}} className="px-4 py-2 bg-[#FFD700] text-black font-bold rounded-full text-xs hover:brightness-110">Save</button>
+                            {byokKey && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Key saved"></span>}
+                            {byokKey && <span className="text-xs text-green-400 font-bold hidden sm:inline">Key saved</span>}
+                            <button onClick={()=>setShowPaywall(true)} className="hidden sm:block px-3 py-1.5 bg-[#FFD700]/20 text-[#FFD700] border border-[#FFD700]/30 rounded-full text-xs font-bold hover:bg-[#FFD700]/30">Use Alphatekx Credits ₦500</button>
+                          </div>
+                          <div className="sm:hidden px-3 pb-2 bg-[#1a1030]"><button onClick={()=>setShowPaywall(true)} className="w-full py-2 bg-[#FFD700]/20 text-[#FFD700] border border-[#FFD700]/30 rounded-full text-xs font-bold">Use Alphatekx Credits ₦500</button></div>
+                          <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-[#0B0215]">
+                            {aiChatMessages.map((m,i)=>(<div key={i} className={`p-3 rounded-2xl text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap ${m.role==="user"?"bg-[#FFD700] text-black font-medium ml-auto shadow-md":"bg-[#151025] text-gray-200 mr-auto border border-[#FFD700]/20"}`}>{m.text}</div>))}
+                            {building && <div className="text-xs text-[#FFD700] animate-pulse px-2">🤖 Building…</div>}
+                          </div>
+                          <div className="p-3 bg-[#0B0215] border-t border-white/5">
+                            <div className="flex gap-2">
+                              <input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAiSend()} placeholder="Ask AI to build or explain..." className="flex-1 min-h-[44px] bg-[#1a1a2e] border border-[#FFD700]/30 rounded-full px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]" />
+                              <button onClick={handleAiSend} className="min-h-[44px] px-5 py-2 bg-[#FFD700] text-black font-bold rounded-full text-sm hover:brightness-110">Send</button>
                             </div>
-                          ) : (
-                            <>
-                              <div className="flex items-center gap-2 px-3 py-2 bg-[#1a1030] border-b border-[#A855F7]/20 mb-2">
-                                <span className="text-xs font-bold text-[#FFD700]">🔑 BYOK • Your Key</span>
-                                <button onClick={()=>{localStorage.removeItem('alphatekx_api_key');setByokKey('');showToast('Key cleared');}} className="ml-auto text-xs text-gray-400 hover:text-white">Clear</button>
-                              </div>
-                              <div className="flex-1 overflow-y-auto space-y-3 p-3 sm:p-3 bg-[#1a1030]">
-                                {aiChatMessages.map((m,i)=>(<div key={i} className={`p-3 rounded-2xl text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap ${m.role==="user"?"bg-[#FFD700] text-black font-medium ml-auto shadow-md":"bg-[#2a2038] text-gray-200 mr-auto border border-[#A855F7]/20"}`}>{m.text}</div>))}
-                              </div>
-                              <div className="p-3 bg-[#0B0215] border-t border-white/5">
-                                <div className="flex gap-2">
-                                  <input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAiSend()} placeholder="Ask AI to build — e.g. gold button..." className="flex-1 min-h-[44px] bg-[#1a1a2e] border border-[#A855F7]/20 rounded-full px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#A855F7] focus:ring-1 focus:ring-[#A855F7]/20" />
-                                  <button onClick={handleAiSend} className="min-h-[44px] px-5 py-2 bg-gradient-to-r from-[#A855F7] to-[#FFD700] text-white font-bold rounded-full shadow-lg hover:scale-105">Send</button>
-                                </div>
-                                <p className="text-[10px] text-gray-500 font-mono text-center mt-2">Vibe: AI writes files → Preview updates live</p>
-                              </div>
-                            </>
-                          )}
+                            <p className="text-[10px] text-gray-500 font-mono text-center mt-2">Agent: <span className="text-[#FFD700]">&lt;create_file&gt;</span> → Preview live</p>
+                          </div>
                         </div>
                       )}
                       {watchPanelTab==="terminal" && (
@@ -2263,6 +2320,33 @@ function App() {
                               </form>
                             </div>
                           )}
+                        </div>
+                      )}
+                      {watchPanelTab==="notebook" && (
+                        <div className="flex-1 flex flex-col min-h-0 bg-[#0B0215]">
+                          <div className="flex gap-1 p-2 bg-[#1a1030] border-b border-[#FFD700]/20">
+                            <button onClick={()=>setNotebookTab("write")} className={`flex-1 py-2 rounded-full text-xs font-bold ${notebookTab==="write"?"bg-[#FFD700] text-black":"bg-white/5 text-gray-400"}`}>Write</button>
+                            <button onClick={()=>setNotebookTab("autojot")} className={`flex-1 py-2 rounded-full text-xs font-bold ${notebookTab==="autojot"?"bg-[#FFD700] text-black":"bg-white/5 text-gray-400"}`}>Auto Jot</button>
+                            <button onClick={()=>setNotebookTab("saved")} className={`flex-1 py-2 rounded-full text-xs font-bold ${notebookTab==="saved"?"bg-[#FFD700] text-black":"bg-white/5 text-gray-400"}`}>Saved</button>
+                          </div>
+                          <div className="flex-1 min-h-0 flex flex-col p-3">
+                            {notebookTab==="write" && (
+                              <textarea value={notebookNotes} onChange={e=>setNotebookNotes(e.target.value)} placeholder="Write notes for this video… auto-saves every 2s to localStorage" className="flex-1 min-h-[280px] w-full bg-[#0A0A0F] text-white font-mono text-sm p-4 rounded-xl border border-white/10 outline-none resize-none" />
+                            )}
+                            {notebookTab==="autojot" && (
+                              <div className="space-y-3">
+                                <button onClick={async()=>{ const key=localStorage.getItem('alphatekx_api_key')||byokKey; if(!key){setShowPaywall(true);return;} const transcript = `${activeVideo.title}\n${activeVideo.description||""}\nChapters: ${videoChapters.map(c=>c.timestamp+" "+c.title).join(", ")}`; const prompt=`Jot 5 notes with timestamps [MM:SS] from this transcript: ${transcript}`; setBuilding(true); try{ const isOpenAI=key.startsWith('sk-'); const url=isOpenAI?'https://api.openai.com/v1/chat/completions':'https://api.deepseek.com/chat/completions'; const model=isOpenAI?'gpt-4o':'deepseek-chat'; const res=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer ${key}`},body:JSON.stringify({model,messages:[{role:'system',content:'You are a note taker. Output 5 bullet notes with timestamps [MM:SS].'},{role:'user',content:prompt}]})}); const data=await res.json(); const notes=data.choices?.[0]?.message?.content||"No notes"; setNotebookNotes(prev=> prev ? prev+"\n\n--- Auto Jot ---\n"+notes : notes); showToast("✨ Auto Jot saved"); }catch{ const fallback=`- [00:00] Intro — ${activeVideo.title}\n- [02:14] Architecture — key concepts\n- [07:30] Training Loop — loss & gradients\n- [14:05] Evaluation — metrics\n- [22:18] Demo — live build`; setNotebookNotes(p=> p? p+"\n\n"+fallback : fallback); showToast("✨ Auto Jot (offline) saved"); } finally{setBuilding(false);} }} className="w-full py-3 bg-[#FFD700] text-black font-extrabold rounded-xl hover:brightness-110">✨ Jot notes from video</button>
+                                <p className="text-xs text-gray-500">Uses your DeepSeek/OpenAI key — generates 5 timestamped notes.</p>
+                                <p className="text-[11px] text-gray-600">Transcript: {activeVideo.title.slice(0,60)}...</p>
+                              </div>
+                            )}
+                            {notebookTab==="saved" && (
+                              <div className="flex-1 flex flex-col gap-3">
+                                <div className="flex-1 bg-[#0A0A0F] rounded-xl border border-white/10 p-4 overflow-auto whitespace-pre-wrap text-sm text-white font-mono">{notebookNotes || "No notes yet. Write or Auto Jot."}</div>
+                                <button onClick={()=>{ if(!notebookNotes.trim()){showToast("No notes");return;} const w=window.open("","_blank"); if(w){w.document.write(`<html><head><title>Notes - ${activeVideo.title}</title><style>body{font-family:system-ui;padding:24px;white-space:pre-wrap}</style></head><body><h1>${activeVideo.title}</h1><pre>${notebookNotes.replace(/</g,"&lt;")}</pre></body></html>`); w.document.close(); w.print(); } showToast("Export PDF — print dialog");}} className="py-3 bg-[#FFD700] text-black font-bold rounded-xl hover:brightness-110">Export PDF</button>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       )}
                     </div>
