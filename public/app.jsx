@@ -272,15 +272,15 @@ function normalizeVideo(v) {
     channel: v.channelName || v.channel?.name || v.channel || "YouTube Creator",
     channelName: v.channelName || v.channel?.name || v.channel || "YouTube Creator",
     channelId: v.channelId || v.channel?.id || v.channelId || (v.channelName ? "" : "") || "",
-    subscribers: v.subscribers || "1.2M",
-    views: v.views || v.viewsFormatted || "100K views",
-    timeAgo: v.timeAgo || "Recently uploaded",
-    duration: v.duration || "15:00",
-    tag: v.tag || "YouTube Search",
-    avatar: v.avatar || v.channel?.avatar || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80",
-    img: v.thumbnailUrl || v.img || v.thumbnail || "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
-    thumbnailUrl: v.thumbnailUrl || v.img || v.thumbnail || "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
-    description: v.description || `Watch ${v.title} on Alphatekx Stream.`,
+    subscribers: v.subscribers || (v.subscribersCount ? String(v.subscribersCount) : "") || "",
+    views: v.views || v.viewsFormatted || "",
+    timeAgo: v.timeAgo || "",
+    duration: v.duration || "",
+    tag: v.tag || "",
+    avatar: v.avatar || v.channel?.avatar || "",
+    img: v.thumbnailUrl || v.img || v.thumbnail || `https://img.youtube.com/vi/${v.youtubeId||v.id||DEFAULT_VIDEO.id}/hqdefault.jpg`,
+    thumbnailUrl: v.thumbnailUrl || v.img || v.thumbnail || `https://img.youtube.com/vi/${v.youtubeId||v.id||DEFAULT_VIDEO.id}/hqdefault.jpg`,
+    description: v.description || "",
     platform: v.platform || v.source || "youtube",
     platformMeta: v.platformMeta || null,
     featured: v.featured || false,
@@ -1042,25 +1042,43 @@ function App() {
     if (!vid || String(vid).startsWith("mock")) return;
     fetch(`/api/video/${encodeURIComponent(vid)}`).then(r=>r.ok?r.json():null).then(d=>{
       if (d && d.video) {
-        if (d.video.likeCount) setLikeCount(Number(d.video.likeCount));
-        if (d.video.viewsFormatted) {
-          // update displayed views without re-triggering watched push loop (safe guard)
-          setActiveVideo(prev => {
-            if ((prev.youtubeId||prev.id) !== vid) return prev;
-            if (prev.views === d.video.viewsFormatted) return prev;
-            return { ...prev, views: d.video.viewsFormatted, timeAgo: "Real views" };
-          });
-        }
+        const v = d.video;
+        if (v.likeCount) setLikeCount(Number(v.likeCount));
+        setActiveVideo(prev => {
+          if ((prev.youtubeId||prev.id) !== vid) return prev;
+          let next = {...prev};
+          if (v.viewsFormatted) { next.views = v.viewsFormatted; next.timeAgo = "Real views"; }
+          else if (v.viewCount || v.views) { const vc = v.viewCount || v.views; next.views = Number(String(vc).replace(/[^0-9]/g,"")).toLocaleString() + " views"; next.timeAgo = "Real views"; }
+          if (v.channelId) next.channelId = v.channelId;
+          if (v.channelName || v.channel) next.channel = v.channelName || v.channel || next.channel;
+          if (v.channelAvatar || v.channelThumbnail) next.avatar = v.channelAvatar || v.channelThumbnail || next.avatar;
+          if (v.title) next.title = v.title;
+          // fetch live channel subs
+          const cid = v.channelId || next.channelId;
+          if (cid) {
+            fetch(`/api/channel/${encodeURIComponent(cid)}`).then(r=>r.ok?r.json():null).then(cd=>{
+              const ch = cd?.channel || cd;
+              const subs = ch?.statistics?.subscriberCount || ch?.subscribersCount || ch?.subscriberCount;
+              if (subs) {
+                const fmt = Number(String(subs).replace(/[^0-9]/g,"")).toLocaleString();
+                setActiveVideo(p=> p && (p.youtubeId||p.id)===vid ? {...p, subscribers: fmt, avatar: ch?.snippet?.thumbnails?.default?.url || ch?.avatar || p.avatar} : p);
+              }
+            }).catch(()=>{});
+          } else if (v.channelName || next.channel) {
+            const cname = v.channelName || next.channel;
+            fetch(`/api/channel/${encodeURIComponent(cname)}`).then(r=>r.ok?r.json():null).then(cd=>{
+              const ch = cd?.channel || cd;
+              const subs = ch?.statistics?.subscriberCount || ch?.subscribersCount;
+              if (subs) {
+                const fmt = Number(String(subs).replace(/[^0-9]/g,"")).toLocaleString();
+                setActiveVideo(p=> p && (p.youtubeId||p.id)===vid ? {...p, subscribers: fmt } : p);
+              }
+            }).catch(()=>{});
+          }
+          return next;
+        });
       }
     }).catch(()=>{});
-    // also refresh channel subs real
-    if (activeVideo?.channelId) {
-      fetch(`/api/channel/${encodeURIComponent(activeVideo.channelId)}`).then(r=>r.ok?r.json():null).then(d=>{
-        if (d && d.channel && d.channel.subscribersCount) {
-          // update videoCatalog not needed, just ensure UI shows real
-        }
-      }).catch(()=>{});
-    }
   }, [activeVideo?.youtubeId, activeVideo?.id]);
   // Force real view count on any video play
   useEffect(() => {
@@ -2035,26 +2053,21 @@ function App() {
 
             <div className="border-t border-[#272727] my-2" />
 
-            {/* Subscribed Channels — exact image: Code with Nova, AI Labs, DesignByte */}
+            {/* Subscribed Channels — REAL only, no fake */}
             {sidebarOpen && (
               <div className="px-4 py-3 space-y-3">
                 <span className="text-[11px] font-bold text-[#7a7a9e] uppercase tracking-[0.12em]">Subscribed Channels</span>
-                <div className="space-y-3">
-                  {[
-                    { name: "Code with Nova", subs: "124K subscribers", avatar: "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=80&q=80", dot: true },
-                    { name: "AI Labs", subs: "89K subscribers", icon: "brain", bg: "bg-[#7c3aed]", dot: true },
-                    { name: "DesignByte", subs: "56K subscribers", icon: "studio", bg: "bg-[#0d9488]", dot: true },
-                  ].map((ch, idx) => (
-                    <button key={idx} onClick={()=>navigateToChannel(ch.name)} className="w-full flex items-center gap-3 text-xs hover:text-white cursor-pointer py-1 text-left group">
-                      {ch.avatar ? <img src={ch.avatar} alt={ch.name} className="w-8 h-8 rounded-full object-cover flex-shrink-0" /> : <span className={`w-8 h-8 rounded-full ${ch.bg} flex items-center justify-center text-white flex-shrink-0`}><Icon name={ch.icon} className="w-4 h-4" /></span>}
-                      <div className="flex-1 min-w-0 text-left">
-                        <p className="text-xs font-medium text-white truncate group-hover:text-white">{ch.name}</p>
-                        <p className="text-[11px] text-gray-500 truncate">{ch.subs}</p>
-                      </div>
-                      {ch.dot && <span className="w-1.5 h-1.5 rounded-full bg-white/60 flex-shrink-0" />}
-                    </button>
-                  ))}
-                </div>
+                {isGuest ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-gray-500 leading-relaxed">No fake channels. Sign in with YouTube to load real subscriptions via YouTube API.</p>
+                    <button onClick={async()=>{ try{const r=await fetch('/api/auth/url');const d=await r.json(); if(d.url) window.location.href=d.url;}catch{window.location.href='/api/auth/url';}}} className="text-xs text-[#FFD700] font-bold hover:underline">Sign in →</button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-xs text-gray-400">Real subscriptions • {profileData?.name || authUser?.channelName || "You"} • {profileData?.subscribers || ""}</p>
+                    <p className="text-[11px] text-gray-500">Live from YouTube API — no mock data.</p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -2136,17 +2149,12 @@ function App() {
                   </div>
                 </div>
                 <div className="lg:col-span-4 space-y-4">
-                  <h3 className="font-bold text-xl text-white">Up Next</h3>
+                  <h3 className="font-bold text-xl text-white">Up Next • Real</h3>
                   <div className="space-y-4">
-                    {[
-                      { title: "AI Prompt Engineering Masterclass", duration: "12:34", views: "320K views", ago: "2 days ago", thumb: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=300&q=80" },
-                      { title: "Transformers Explained in 10min", duration: "09:22", views: "158K views", ago: "5 days ago", thumb: "https://images.unsplash.com/photo-1551288049-bebda4e38f71?auto=format&fit=crop&w=300&q=80" },
-                      { title: "Deploying LLMs on Edge Devices", duration: "18:45", views: "97K views", ago: "1 week ago", thumb: "https://images.unsplash.com/photo-1516321497487-e288fb19713f?auto=format&fit=crop&w=300&q=80" },
-                      { title: "RAG vs Fine-tuning: What's Best?", duration: "15:02", views: "210K views", ago: "3 days ago", thumb: "https://images.unsplash.com/photo-1581291518857-4e27b48ff24e?auto=format&fit=crop&w=300&q=80" },
-                    ].map((vid, idx)=>(
-                      <div key={idx} className="flex gap-3 cursor-pointer group">
-                        <div className="relative w-36 h-20 rounded-xl overflow-hidden bg-[#1a1a2e] flex-shrink-0"><img src={vid.thumb} className="w-full h-full object-cover" /><span className="absolute bottom-1 right-1 bg-black/80 text-[10px] px-1 rounded text-white">{vid.duration}</span></div>
-                        <div className="flex-1 py-1"><h4 className="text-sm font-bold text-white line-clamp-2">{vid.title}</h4><p className="text-xs text-gray-400 mt-1">{vid.duration} • {vid.views} • {vid.ago}</p></div>
+                    {videoCatalog.filter(v=> (v.youtubeId||v.id) !== (activeVideo.youtubeId||activeVideo.id)).slice(0,4).map((vid, idx)=>(
+                      <div key={idx} onClick={()=>{ setActiveVideo(vid); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} className="flex gap-3 cursor-pointer group">
+                        <div className="relative w-36 h-20 rounded-xl overflow-hidden bg-[#1a1a2e] flex-shrink-0"><img src={vid.img || vid.thumbnailUrl} alt={vid.title} className="w-full h-full object-cover" /><span className="absolute bottom-1 right-1 bg-black/80 text-[10px] px-1 rounded text-white">{vid.duration || ""}</span></div>
+                        <div className="flex-1 py-1"><h4 className="text-sm font-bold text-white line-clamp-2 group-hover:text-[#FFD700]">{vid.title}</h4><p className="text-xs text-gray-400 mt-1">{vid.views || ""} • {vid.timeAgo || ""}</p><p className="text-[11px] text-gray-500 truncate">{vid.channel || vid.channelName}</p></div>
                       </div>
                     ))}
                   </div>
