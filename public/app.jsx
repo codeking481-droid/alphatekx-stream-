@@ -169,12 +169,10 @@ const VideoPlayer = ({ video, autoplay = false }) => {
   const v = video ? normalizeVideo(video) : null;
   const platform = video?.platform || "youtube";
   if (!v) return null;
-  const isDefault = v.youtubeId === DEFAULT_VIDEO.youtubeId || v.featured || autoplay;
-  const autoplayParams = isDefault ? "&autoplay=1&mute=1&playsinline=1" : "";
   if (platform === "youtube") {
     return (
       <div className="relative aspect-video w-full bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-[#272727] shadow-2xl">
-        <iframe src={`https://www.youtube-nocookie.com/embed/${v.youtubeId}?enablejsapi=1&modestbranding=1&rel=0${autoplayParams}`} title={v.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+        <iframe src={`https://www.youtube.com/embed/${v.youtubeId}?autoplay=0`} title={v.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
       </div>
     );
   }
@@ -2115,13 +2113,13 @@ function App() {
             <div className="max-w-[1600px] mx-auto px-0 sm:px-6 py-3 sm:py-6 space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-8 space-y-4">
-                  <div className="relative bg-[#0f0f1f] rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-[#FFD700]/20 shadow-[0_0_40px_rgba(255,215,0,0.15)]">
+                  <div className="relative bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-[#FFD700]/20 shadow-[0_0_40px_rgba(255,215,0,0.15)]">
                     <div className="aspect-video relative bg-black">
-                      <iframe ref={iframeRef} src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0&playsinline=1${(activeVideo.id===DEFAULT_VIDEO.id)?"&autoplay=1&mute=1":""}`} title={activeVideo.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-                      <div className="absolute bottom-4 right-4 z-20"><button onClick={()=>setWatchPanelOpen(true)} className="px-5 py-2.5 rounded-full bg-[#FFD700] text-black font-extrabold text-sm shadow-lg hover:scale-105 transition">Open AI Workspace →</button></div>
-                      {activeCheckpoint && (<div className="absolute inset-0 bg-[#0B0215]/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-30 rounded-2xl"><div className="w-14 h-14 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center text-2xl mb-3 animate-pulse">🔒</div><h3 className="text-white font-extrabold text-lg">{activeCheckpoint.title}</h3><p className="text-[#FFD700] text-sm mt-1">Creator paused at {activeCheckpoint.time}s</p><p className="text-gray-300 text-sm mt-2">{activeCheckpoint.task}</p><button onClick={()=>{setWatchPanelOpen(true);setWatchPanelTab("code");}} className="mt-4 px-6 py-2.5 rounded-full bg-[#FFD700] text-black font-bold text-sm animate-pulse">Go to Code →</button></div>)}
+                      <iframe ref={iframeRef} src={`https://www.youtube.com/embed/${activeVideo.id}?autoplay=0`} title={activeVideo.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                      {activeCheckpoint && (<div className="absolute inset-0 bg-[#0B0215]/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-30 rounded-none sm:rounded-2xl"><div className="w-14 h-14 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center text-2xl mb-3 animate-pulse">🔒</div><h3 className="text-white font-extrabold text-lg">{activeCheckpoint.title}</h3><p className="text-[#FFD700] text-sm mt-1">Creator paused at {activeCheckpoint.time}s</p><p className="text-gray-300 text-sm mt-2">{activeCheckpoint.task}</p><button onClick={()=>{setWatchPanelOpen(true);setWatchPanelTab("code");}} className="mt-4 px-6 py-2.5 rounded-full bg-[#FFD700] text-black font-bold text-sm animate-pulse">Go to Code →</button></div>)}
                     </div>
                   </div>
+                  <div className="px-4 sm:px-0"><button onClick={()=>setWatchPanelOpen(true)} className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#FFD700] text-black font-extrabold text-sm shadow-lg hover:scale-105 transition">Open AI Workspace →</button></div>
                   <div className="flex gap-2 overflow-x-auto scrollbar-hide px-4 sm:px-0">
                     {videoChapters.map((chap, idx)=>(
                       <button key={idx} onClick={()=>handleSeek(chap.seconds, chap.timestamp)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border ${activeTimestamp===chap.timestamp||(idx===0&&!activeTimestamp)?"bg-[#FFD700] text-black border-[#FFD700]":"bg-[#1a1a2e] border-white/10 text-gray-300"}`}>{chap.timestamp} {chap.title}</button>
@@ -2167,14 +2165,17 @@ function App() {
                 <h2 className="hidden lg:block flex-1 text-center text-xl font-extrabold text-white truncate px-4">{activeVideo.title}</h2>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
-                {/* Video — full bleed on mobile */}
-                <div className="lg:col-span-6">
-                  <div className="relative bg-[#0f0f1f] rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.25)]">
+                {/* Video — ONLY real YouTube iframe, no fake overlays */}
+                <div className="lg:col-span-6 space-y-3">
+                  <div className="relative bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.25)]">
                     <div className="aspect-video relative bg-black">
-                      <div className="absolute top-3 left-3 z-20 bg-black/60 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-[#FFD700] flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Live • {(activeVideo.channel || activeVideo.channelName || "ALPHATEKX")}</div>
-                      <iframe src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0&playsinline=1`} title={activeVideo.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                      <iframe src={`https://www.youtube.com/embed/${activeVideo.id}?autoplay=0`} title={activeVideo.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
 
                     </div>
+                  </div>
+                  <div className="px-4 sm:px-0">
+                    <h1 className="text-lg sm:text-xl font-extrabold text-white leading-tight">{activeVideo.title}</h1>
+                    <p className="text-xs text-gray-400 mt-1">{activeVideo.channel || activeVideo.channelName} • {activeVideo.views} • {activeVideo.timeAgo}</p>
                   </div>
                 </div>
                 {/* Code panel — responsive */}
@@ -2197,7 +2198,7 @@ function App() {
                             <button onClick={()=>{setCodeValue(''); showToast('Cleared');}} className="ml-2 px-2 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[11px]">Clear</button>
                           </div>
                           <div ref={monacoRef} className="hidden"></div>
-                          <textarea value={codeValue} onChange={e=>setCodeValue(e.target.value)} onPaste={e=>{e.preventDefault(); const t=(e.clipboardData||window.clipboardData).getData('text/plain'); const d=t.includes('&lt;')||t.includes('&gt;')?t.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&'):t; const s=e.target.selectionStart; const en=e.target.selectionEnd; const n=(codeValue||'').slice(0,s)+d+(codeValue||'').slice(en); setCodeValue(n); requestAnimationFrame(()=>{e.target.selectionStart=e.target.selectionEnd=s+d.length;});}} spellCheck={false} placeholder="Paste your HTML here — e.g. Digital Clock code..." className="flex-1 min-h-0 w-full bg-[#0A0A0F] text-[#d4d4d4] font-mono text-sm p-4 outline-none resize-none leading-6" style={{minHeight:'280px'}} />
+                          <textarea value={(codeValue||'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')} onChange={e=>setCodeValue(e.target.value)} onPaste={e=>{e.preventDefault(); const t=(e.clipboardData||window.clipboardData).getData('text/plain'); const d=t.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&'); const s=e.target.selectionStart; const en=e.target.selectionEnd; const n=(codeValue||'').slice(0,s)+d+(codeValue||'').slice(en); setCodeValue(n); requestAnimationFrame(()=>{e.target.selectionStart=e.target.selectionEnd=s+d.length;});}} spellCheck={false} placeholder="Paste your HTML here — e.g. Digital Clock code..." className="flex-1 min-h-0 w-full bg-[#0A0A0F] text-white font-mono text-sm p-4 outline-none resize-none leading-6" style={{minHeight:'280px'}} />
                           <div className="px-3 py-2 bg-[#1a1a24] border-t border-white/10 flex items-center justify-between text-xs font-mono text-gray-400">
                             <span>Line {codeValue.split('\n').length} • {codeValue.length} chars</span>
                             <button onClick={()=>{ setCodeValue(''); showToast('Cleared — ready to code!'); }} className="min-h-[32px] px-3 rounded-full bg-[#FFD700]/10 text-[#FFD700] hover:bg-[#FFD700]/20 text-xs font-bold">Clear</button>
@@ -2520,7 +2521,7 @@ function App() {
                 {/* YouTube Short iframe — clean, no controls, loop */}
                 <iframe
                   key={currentShort.youtubeId + shortsMuted + shortsIndex}
-                  src={`https://www.youtube-nocookie.com/embed/${currentShort.youtubeId}?autoplay=1&mute=${shortsMuted?1:0}&controls=0&rel=0&playsinline=1&loop=1&playlist=${currentShort.youtubeId}&modestbranding=1&enablejsapi=1`}
+                  src={`https://www.youtube.com/embed/${currentShort.youtubeId}?autoplay=1&mute=${shortsMuted?1:0}&controls=0&rel=0&playsinline=1&loop=1&playlist=${currentShort.youtubeId}&modestbranding=1`}
                   title={currentShort.title}
                   className="w-full h-full border-0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
