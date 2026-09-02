@@ -1,5 +1,11 @@
 import { useState } from 'react';
 
+function decodeHtmlEntities(str) {
+  const txt = document.createElement('textarea');
+  txt.innerHTML = str;
+  return txt.value;
+}
+
 export default function WorkspacePage() {
   // Fallback if router not available: extract videoId from URL path
   const path = window.location.pathname;
@@ -61,7 +67,7 @@ export default function WorkspacePage() {
               )}
 
               {tab === 'Preview' && (() => {
-                const trimmed = code.trim();
+                const trimmed = decodeHtmlEntities(code.trim());
                 const isFullDoc = trimmed.toLowerCase().startsWith('<!doctype') || trimmed.toLowerCase().startsWith('<html');
                 const doc = isFullDoc ? trimmed : `<!DOCTYPE html>
 <html>
