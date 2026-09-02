@@ -143,8 +143,8 @@ const VideoCard = ({ video, onPlay, onSave, isSaved, onAi }) => {
   const v = normalizeVideo(video);
   const platform = video.platform || v.platform || "youtube";
   return (
-    <div onClick={()=>onPlay&&onPlay(v)} className="glass-card overflow-hidden hover:border-[#FFD700]/50 hover:shadow-[0_0_15px_rgba(255,215,0,0.15)] transition-all cursor-pointer group flex flex-col justify-between">
-      <div className="relative aspect-video w-full bg-gray-900 overflow-hidden">
+    <div onClick={()=>onPlay&&onPlay(v)} className="glass-card overflow-hidden hover:border-[#FFD700]/50 hover:shadow-[0_0_15px_rgba(255,215,0,0.15)] transition-all cursor-pointer group flex flex-col justify-between rounded-xl sm:rounded-2xl">
+      <div className="relative aspect-video w-full bg-gray-900 overflow-hidden rounded-t-xl sm:rounded-t-2xl">
         <img src={v.img || v.thumbnailUrl} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
         <span className="absolute bottom-2 right-2 bg-black/80 text-[10px] font-mono px-1.5 py-0.5 rounded text-white">{v.duration}</span>
         <span className="absolute top-2 left-2"><PlatformBadge platform={platform} /></span>
@@ -173,7 +173,7 @@ const VideoPlayer = ({ video, autoplay = false }) => {
   const autoplayParams = isDefault ? "&autoplay=1&mute=1&playsinline=1" : "";
   if (platform === "youtube") {
     return (
-      <div className="relative aspect-video w-full bg-black rounded-2xl overflow-hidden border border-[#272727] shadow-2xl">
+      <div className="relative aspect-video w-full bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-[#272727] shadow-2xl">
         <iframe src={`https://www.youtube-nocookie.com/embed/${v.youtubeId}?enablejsapi=1&modestbranding=1&rel=0${autoplayParams}`} title={v.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
       </div>
     );
@@ -2265,9 +2265,9 @@ function App() {
 
           {/* ------------------- 2. HOME / DISCOVER FEED — CLEAN mobile-first: generous spacing, 2 cols on mobile ------------------- */}
           {activeTab === "home" && (
-            <div className="max-w-[1600px] mx-auto p-4 sm:p-5 md:p-6 space-y-6 overflow-x-hidden">
+            <div className="max-w-[1600px] mx-auto px-0 sm:px-5 md:px-6 py-4 sm:py-5 md:py-6 space-y-6 overflow-x-hidden">
               {isSearching ? (
-                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+                <div className="grid grid-cols-2 gap-2 px-2 sm:px-0 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
                     <div key={n} className="glass-card overflow-hidden animate-pulse p-0 flex flex-col justify-between">
                       <div className="aspect-video w-full bg-[#1a1a24]" />
@@ -2364,7 +2364,7 @@ function App() {
                     searchHistory.length>0 ? (
                       <div className="space-y-3">
                         <p className="text-[11px] text-gray-500 font-mono flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#00FF88]"></span> Persisted in localStorage "alphatekx_search_history" + server — never vanishes on refresh</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+                        <div className="grid grid-cols-2 gap-2 px-2 sm:px-0 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
                           {searchHistory.map((vid)=>(
                             <div
                               key={`hist-${vid.youtubeId||vid.id}-${vid.searchedAt||""}`}
@@ -2399,7 +2399,7 @@ function App() {
                     )
                   ) : (
                     searchFiltered.length>0 ? (
-                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+                      <div className="grid grid-cols-2 gap-2 px-2 sm:px-0 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
                         {searchFiltered.map((vid) => (
                           <VideoCard key={vid.id || vid.youtubeId} video={vid} onPlay={(norm)=>{ setActiveVideo({...norm, platform: vid.platform || "youtube"}); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing: ${norm.title}`); }} onSave={toggleWatchLater} isSaved={isSavedWatchLater(vid.youtubeId||vid.id)} onAi={openAiHelper} />
                         ))}
@@ -2415,15 +2415,15 @@ function App() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* Featured Hero — DEFAULT_VIDEO jvXEkm27XOE — auto-play muted */}
-                  <div className="glass-card overflow-hidden border-[#FFD700]/30 p-3 sm:p-4 space-y-4">
-                    <div className="flex items-center gap-2 flex-wrap">
+                  {/* Featured Hero — DEFAULT_VIDEO jvXEkm27XOE — auto-play muted — YouTube fit on mobile */}
+                  <div className="glass-card overflow-hidden border-0 sm:border border-[#FFD700]/30 p-0 sm:p-4 space-y-0 sm:space-y-4 rounded-none sm:rounded-2xl">
+                    <div className="flex items-center gap-2 flex-wrap px-4 sm:px-0 pt-3 sm:pt-0">
                       <span className="bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black text-[10px] font-extrabold px-2.5 py-1 rounded-full">FEATURED</span>
                       <span className="text-xs text-gray-400">Your video is first for every visitor • auto-play muted</span>
                       <a href="https://youtu.be/jvXEkm27XOE" target="_blank" rel="noreferrer" className="ml-auto text-[10px] text-[#FFD700] font-bold hover:underline">youtu.be/jvXEkm27XOE ↗</a>
                     </div>
                     <VideoPlayer video={DEFAULT_VIDEO} autoplay />
-                    <div className="space-y-1">
+                    <div className="space-y-1 px-4 sm:px-0 pb-3 sm:pb-0">
                       <h3 className="font-bold text-sm sm:text-base text-white line-clamp-2">{DEFAULT_VIDEO.title}</h3>
                       <p className="text-xs text-gray-400">{DEFAULT_VIDEO.channelName} • {DEFAULT_VIDEO.handle} • Featured • auto-play</p>
                       <div className="flex gap-2 pt-1">
@@ -2432,13 +2432,13 @@ function App() {
                       </div>
                     </div>
                   </div>
-                  {/* Shorts Shelf — best placement, horizontal scroll, even better than YouTube */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
+                  {/* Shorts Shelf — tight like YouTube */}
+                  <div className="space-y-3 px-2 sm:px-0">
+                    <div className="flex items-center justify-between px-2 sm:px-0">
                       <h3 className="font-extrabold text-white flex items-center gap-2"><span className="bg-[#FF0000] text-white text-[10px] px-2 py-1 rounded font-bold">Shorts</span> Trending Shorts</h3>
                       <button onClick={()=>setActiveTab("shorts")} className="text-xs font-bold text-[#FFD700] hover:underline min-h-[44px] px-3 flex items-center">View all →</button>
                     </div>
-                    <div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2 snap-x snap-mandatory">
+                    <div className="flex gap-2 sm:gap-3 overflow-x-auto scrollbar-hide pb-2 snap-x snap-mandatory px-0">
                       {shortsVideos.map((s, idx)=>(
                         <div key={s.id} onClick={()=>{ setShortsIndex(idx); setShortsMuted(false); setActiveTab("shorts"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing Short: ${s.title}`); }} className="flex-shrink-0 w-[140px] sm:w-[160px] cursor-pointer snap-start group">
                           <div className="aspect-[9/16] rounded-xl overflow-hidden bg-black border border-white/10 relative group-hover:border-[#FF0000]/40 transition-colors">
@@ -2461,7 +2461,7 @@ function App() {
                   </div>
                   {homeFiltered.length>0 ? (
                   <>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-6">
+                  <div className="grid grid-cols-2 gap-2 sm:gap-4 md:gap-6 px-2 sm:px-0 md:grid-cols-3 lg:grid-cols-4">
                     {homeFiltered.map((vid) => (
                       <VideoCard key={vid.id} video={{...vid, platform: vid.platform||"youtube"}} onPlay={(norm)=>{ setActiveVideo({...norm, platform: vid.platform||"youtube"}); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} onSave={toggleWatchLater} isSaved={isSavedWatchLater(vid.id)} onAi={openAiHelper} />
                     ))}
@@ -3581,11 +3581,11 @@ function App() {
         </div>
       )}
 
-      {/* MOBILE BOTTOM NAVIGATION BAR */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0f0f0f] border-t border-[#272727] px-4 py-2 flex items-center justify-around md:hidden">
+      {/* MOBILE BOTTOM NAVIGATION BAR — YouTube fit h-16 */}
+      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0f0f0f] border-t border-[#272727] px-4 h-16 flex items-center justify-around md:hidden">
         <button 
           onClick={() => setActiveTab("home")}
-          className={`flex flex-col items-center gap-1 ${activeTab === "home" ? "text-[#00D9FF]" : "text-gray-400"}`}
+          className={`flex flex-col items-center justify-center gap-1 ${activeTab === "home" ? "text-[#FFD700]" : "text-gray-400"}`}
         >
           <Icon name="home" className="w-5 h-5" />
           <span className="text-[10px]">Home</span>
@@ -3593,7 +3593,7 @@ function App() {
 
         <button 
           onClick={() => setActiveTab("shorts")}
-          className={`flex flex-col items-center gap-1 ${activeTab === "shorts" ? "text-[#00D9FF]" : "text-gray-400"}`}
+          className={`flex flex-col items-center justify-center gap-1 ${activeTab === "shorts" ? "text-[#FFD700]" : "text-gray-400"}`}
         >
           <Icon name="shorts" className="w-5 h-5" />
           <span className="text-[10px]">Shorts</span>
@@ -3601,14 +3601,14 @@ function App() {
 
         <button 
           onClick={() => setActiveTab("upload")}
-          className="w-10 h-10 rounded-full bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black flex items-center justify-center -mt-4 shadow-[0_0_15px_rgba(0,255,136,0.6)]"
+          className="w-10 h-10 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center -mt-2 shadow-[0_0_15px_rgba(255,215,0,0.4)]"
         >
           <Icon name="plus" className="w-6 h-6 stroke-[3]" />
         </button>
 
         <button 
           onClick={() => setActiveTab("watch")}
-          className={`flex flex-col items-center gap-1 ${activeTab === "watch" ? "text-[#00FF88]" : "text-gray-400"}`}
+          className={`flex flex-col items-center justify-center gap-1 ${activeTab === "watch" ? "text-[#FFD700]" : "text-gray-400"}`}
         >
           <Icon name="youtube" className="w-5 h-5" />
           <span className="text-[10px]">Watch</span>
@@ -3616,7 +3616,7 @@ function App() {
 
         <button 
           onClick={() => setActiveTab("marketplace")}
-          className={`flex flex-col items-center gap-1 ${activeTab === "marketplace" ? "text-[#00D9FF]" : "text-gray-400"}`}
+          className={`flex flex-col items-center justify-center gap-1 ${activeTab === "marketplace" ? "text-[#FFD700]" : "text-gray-400"}`}
         >
           <Icon name="shopping-bag" className="w-5 h-5" />
           <span className="text-[10px]">Marketplace</span>
