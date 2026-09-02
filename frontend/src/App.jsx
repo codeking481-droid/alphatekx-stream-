@@ -3,6 +3,7 @@ import { getUser } from './lib/auth';
 import { SignInButton } from './components/SignInButton';
 import { GuestOverlay } from './components/GuestOverlay';
 import Home from './pages/Home.jsx';
+import WorkspacePage from './pages/Workspace.jsx';
 
 function Header({ user, isGuest }) {
   return (
@@ -29,8 +30,10 @@ function HomeFeed({ user, isGuest }) {
         {feed.length === 0 && isGuest && (
           <div className="md:col-span-3 text-center text-gray-400">Explore videos while browsing as a guest.</div>
         )}
-        {feed.map(v => (
-          <div key={v.videoId || v.id} className="bg-[#1a0b2e] rounded-2xl overflow-hidden shadow-xl border border-white/5">
+        {feed.map(v => {
+          const vid = v.videoId || v.id || 'jvXEkm27XOE';
+          return (
+            <a key={v.videoId || v.id} href={`/workspace/${vid}`} className="block bg-[#1a0b2e] rounded-2xl overflow-hidden shadow-xl border border-white/5 hover:border-[#FFD700]/30 transition">
             <img src={v.thumbnail} alt="thumb" className="w-full h-48 object-cover" />
             <div className="p-4">
               <h3 className="font-bold text-lg mb-1">{v.title}</h3>
@@ -43,8 +46,8 @@ function HomeFeed({ user, isGuest }) {
                 <button className="mt-3 w-full py-2 bg-[#FFD700] text-black font-bold rounded-lg text-sm hover:scale-[1.02] transition">Like</button>
               )}
             </div>
-          </div>
-        ))}
+            </a>
+        })}
       </div>
     </main>
   );
@@ -64,6 +67,9 @@ export default function App() {
   }, []);
 
   if (loading) return <div className="min-h-screen bg-[#0B0215] flex items-center justify-center text-white text-xl">Loading...</div>;
+
+  const isWorkspace = window.location.pathname.startsWith('/workspace/');
+  if (isWorkspace) return <WorkspacePage />;
 
   return (
     <div className="min-h-screen bg-[#0B0215] text-white">
