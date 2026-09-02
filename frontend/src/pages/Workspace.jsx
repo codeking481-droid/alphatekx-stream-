@@ -1,32 +1,63 @@
 import { useState } from 'react';
 
-function decodeHtmlEntities(str) {
-  const txt = document.createElement('textarea');
-  txt.innerHTML = str;
-  return txt.value;
+function safeDecode(str) {
+  if (!str || !str.includes('&')) return str;
+  // only decode if entities present — preserves raw <tags>
+  if (!str.includes('&lt;') && !str.includes('&gt;') && !str.includes('&amp;')) return str;
+  return str
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/g, "'")
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, '&');
 }
 
 export default function WorkspacePage() {
-  // Fallback if router not available: extract videoId from URL path
   const path = window.location.pathname;
   const match = path.match(/\/workspace\/([^/]+)/);
   const videoId = match ? match[1] : 'jvXEkm27XOE';
 
   const [code, setCode] = useState('');
   const [tab, setTab] = useState('Code');
-
   const tabs = ['Code', 'Preview', 'AI', 'Terminal'];
+
+  const handlePaste = (e) => {
+    e.preventDefault();
+    const text = (e.clipboardData || window.clipboardData).getData('text/plain');
+    const decoded = safeDecode(text);
+    const ta = e.target;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const next = code.slice(0, start) + decoded + code.slice(end);
+    setCode(next);
+    // restore cursor
+    requestAnimationFrame(() => {
+      ta.selectionStart = ta.selectionEnd = start + decoded.length;
+    });
+  };
+
+  const decodedCode = safeDecode(code);
+  const trimmed = decodedCode.trim();
+  const isFullDoc = trimmed.toLowerCase().startsWith('<!doctype') || trimmed.toLowerCase().startsWith('<html');
+  const srcDoc = isFullDoc && trimmed
+    ? trimmed
+    : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:24px;font-family:system-ui,sans-serif;background:#0A0A0F;color:#fff;line-height:1.6}img{max-width:100%;height:auto}</style></head><body>${trimmed}</body></html>`;
 
   return (
     <div className="min-h-screen bg-[#0B0215] text-white">
-      <div className="max-w-7xl mx-auto px-6 py-6">
-        <div className="grid grid-cols-1 lg:grid-cols-[52%_1fr] gap-6 lg:gap-6">
-          {/* Left: Video sticky */}
+      <div className="max-w-[1440px] mx-auto p-4 lg:p-6">
+        {/* back link */}
+        <a href="/" className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-[#FFD700] mb-4">← Back</a>
+
+        <div className="grid grid-cols-1 lg:grid-cols-[52%_48%] gap-6">
+          {/* Left: Video sticky on desktop, top on mobile 16:9 */}
           <div className="lg:sticky lg:top-6 lg:self-start">
-            <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden shadow-2xl border border-white/10 relative">
+            <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden border border-white/10">
               <iframe
-                className="w-full h-full absolute inset-0"
-                src={`https://www.youtube.com/embed/${videoId}?rel=0`}
+                className="w-full h-full"
+                src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1`}
                 title="Workspace Video"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
@@ -36,66 +67,55 @@ export default function WorkspacePage() {
           </div>
 
           {/* Right: Workspace panel */}
-          <div className="bg-[#151025] border border-white/10 rounded-2xl p-4 lg:p-6 flex flex-col gap-4 min-h-[70vh] lg:min-h-0">
-            {/* Tabs */}
-            <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-              {tabs.map(t => (
+          <div className="bg-[#151025] border border-white/10 rounded-2xl p-3 lg:p-5 flex flex-col gap-4 min-h-[70vh] lg:min-h-[70vh]">
+            {/* Tabs: single row, nowrap, scrollable */}
+            <div className="flex items-center gap-2 overflow-x-auto whitespace-nowrap pb-1 -mx-1 px-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+              {tabs.map((t) => (
                 <button
                   key={t}
                   onClick={() => setTab(t)}
-                  className={`px-3 py-1.5 text-sm rounded-full transition border ${
-                    tab === t
-                      ? 'bg-[#FFD700] text-black font-bold border-[#FFD700]'
-                      : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10'
-                  }`}
+                  className={`shrink-0 px-3 py-1.5 text-sm rounded-full border transition ${tab === t ? 'bg-[#FFD700] text-black font-bold border-[#FFD700]' : 'bg-white/5 text-white/80 border-white/10 hover:bg-white/10'}`}
                 >
                   {t}
                 </button>
               ))}
+              <button onClick={() => setCode('')} className="ml-auto shrink-0 px-3 py-1.5 text-xs rounded-full border border-white/10 bg-white/5 hover:bg-white/10">Clear</button>
             </div>
 
-            {/* Tab Content */}
-            <div className="flex-1 bg-[#0A0A0F] rounded-xl border border-white/5 overflow-hidden flex flex-col">
+            {/* Content */}
+            <div className="flex-1 bg-[#0A0A0F] rounded-xl border border-white/5 overflow-hidden flex flex-col min-h-[50vh]">
               {tab === 'Code' && (
                 <textarea
                   value={code}
-                  onChange={e => setCode(e.target.value)}
+                  onChange={(e) => setCode(e.target.value)}
+                  onPaste={handlePaste}
                   spellCheck={false}
-                  className="w-full h-full min-h-[60vh] bg-[#0A0A0F] text-white font-mono text-sm p-4 resize-y outline-none leading-relaxed"
-                  placeholder="Type HTML / code here..."
+                  autoComplete="off"
+                  autoCorrect="off"
+                  className="w-full flex-1 min-h-[50vh] lg:min-h-[60vh] bg-[#0A0A0F] text-white font-mono text-sm p-4 outline-none resize-none leading-relaxed"
+                  placeholder="Paste your HTML here — e.g. Digital Clock code..."
                 />
               )}
 
-              {tab === 'Preview' && (() => {
-                const trimmed = decodeHtmlEntities(code.trim());
-                const isFullDoc = trimmed.toLowerCase().startsWith('<!doctype') || trimmed.toLowerCase().startsWith('<html');
-                const doc = isFullDoc ? trimmed : `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>body{margin:0;padding:24px;font-family:sans-serif;background:#0A0A0F;color:#fff;line-height:1.6}img{max-width:100%;height:auto}</style>
-</head>
-<body>${trimmed}</body>
-</html>`;
-                return (
-                  <iframe
-                    title="Preview"
-                    srcDoc={doc}
-                    className="w-full h-full min-h-[60vh] border-0 bg-[#0A0A0F]"
-                    sandbox="allow-scripts allow-modals"
-                  />
-                );
-              })()}
+              {tab === 'Preview' && (
+                <iframe
+                  key={srcDoc}
+                  title="Preview"
+                  srcDoc={srcDoc}
+                  className="w-full flex-1 min-h-[50vh] lg:min-h-[60vh] border-0 bg-white"
+                  sandbox="allow-scripts allow-same-origin allow-modals allow-forms"
+                />
+              )}
 
               {tab === 'AI' && (
-                <div className="w-full h-full min-h-[60vh] p-4 text-sm text-gray-300 space-y-3">
+                <div className="w-full flex-1 min-h-[50vh] p-4 text-sm text-gray-300 space-y-3">
                   <div className="bg-white/5 rounded-xl p-3 border border-white/10">AI Agent ready. Describe what you want to build.</div>
-                  <div className="bg-[#FFD700]/10 rounded-xl p-3 border border-[#FFD700]/20 text-[#FFD700]">Suggestion: Use <code className="font-mono">&lt;img&gt;</code> tags with alt text for accessibility.</div>
+                  <div className="bg-[#FFD700]/10 rounded-xl p-3 border border-[#FFD700]/20 text-[#FFD700]">Tip: Paste full HTML with &lt;style&gt; and &lt;script&gt; — it will render live in Preview.</div>
                 </div>
               )}
 
               {tab === 'Terminal' && (
-                <div className="w-full h-full min-h-[60vh] p-4 font-mono text-xs text-green-400 bg-[#0A0A0F] space-y-1">
+                <div className="w-full flex-1 min-h-[50vh] p-4 font-mono text-xs text-green-400 bg-[#0A0A0F] space-y-1">
                   <div>~ $ run build</div>
                   <div>Building workspace...</div>
                   <div>Done. 0 errors.</div>
@@ -104,14 +124,11 @@ export default function WorkspacePage() {
               )}
             </div>
 
-            {/* Run button */}
-            <div className="flex justify-end pt-2">
+            <div className="flex items-center justify-between pt-2 gap-3">
+              <span className="text-xs text-white/40">{code.length} chars {isFullDoc ? '• full doc' : '• snippet'}</span>
               <button
-                onClick={() => {
-                  setCode(code + '\n<!-- Ran at ' + new Date().toISOString() + ' -->');
-                  setTab('Preview');
-                }}
-                className="px-6 py-2.5 bg-[#FFD700] text-black font-extrabold rounded-xl shadow-[0_0_20px_rgba(255,215,0,0.3)] hover:brightness-110 transition"
+                onClick={() => setTab('Preview')}
+                className="px-6 py-2.5 bg-[#FFD700] text-black font-extrabold rounded-xl hover:brightness-110 transition"
               >
                 Run
               </button>
