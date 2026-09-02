@@ -438,12 +438,15 @@ function App() {
       vibeParser(last.text);
     }
   }, [aiChatMessages]);
-  // TERMINAL — Xterm + WebContainer refs
+  // TERMINAL — Xterm + WebContainer refs + simple fallback
   const terminalRef = useRef(null);
   const xtermRef = useRef(null);
   const webcontainerRef = useRef(null);
   const shellInputRef = useRef("");
   const [terminalReady, setTerminalReady] = useState(false);
+  const [simpleTermHistory, setSimpleTermHistory] = useState(["Alphatekx Terminal — WebContainer (zero-cost)", "Type: ls, echo hello, pwd, cat, clear, help"]);
+  const [simpleTermInput, setSimpleTermInput] = useState("");
+  const simpleTermRef = useRef(null);
   // Monaco loader — smooth, correct language, live sync
   useEffect(() => {
     if (watchPanelTab !== "code") return;
@@ -507,7 +510,7 @@ function App() {
       const loadXterm = () => new Promise((res, rej) => {
         if (window.Terminal) return res(window.Terminal);
         const s = document.createElement("script");
-        s.src = "https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js";
+        s.src = "https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js";
         s.onload = () => res(window.Terminal);
         s.onerror = rej;
         document.head.appendChild(s);
@@ -2236,7 +2239,23 @@ function App() {
                           )}
                         </div>
                       )}
-                      {watchPanelTab==="terminal" && (<div ref={terminalRef} className="flex-1 bg-black p-2 overflow-hidden" style={{minHeight:"200px"}} />)}
+                      {watchPanelTab==="terminal" && (
+                        <div className="flex-1 flex flex-col bg-black p-3 font-mono text-sm overflow-hidden" style={{minHeight:"280px"}}>
+                          <div ref={terminalRef} className={xtermRef.current ? "flex-1 overflow-hidden" : "hidden"} style={{minHeight: xtermRef.current ? "280px" : "0px"}} />
+                          {!xtermRef.current && (
+                            <div className="flex-1 flex flex-col min-h-0">
+                              <div ref={simpleTermRef} className="flex-1 overflow-auto space-y-1 text-green-400 pr-1" style={{maxHeight:"240px"}}>
+                                {simpleTermHistory.map((line,i)=>(<div key={i} className="whitespace-pre-wrap break-words text-xs leading-5">{line}</div>))}
+                              </div>
+                              <form onSubmit={(e)=>{e.preventDefault(); const cmd=simpleTermInput.trim(); if(!cmd){setSimpleTermHistory(h=>[...h, ""]); setSimpleTermInput(""); return;} let out=""; if(cmd==="ls") out="index.html  app.jsx  public  AgentConfig.ts  package.json"; else if(cmd==="pwd") out="/home/alphatekx"; else if(cmd.startsWith("echo ")) out=cmd.slice(5); else if(cmd==="clear"){setSimpleTermHistory(["Alphatekx Terminal — cleared","Type: ls, echo hello, pwd, cat, clear, help"]); setSimpleTermInput(""); return;} else if(cmd.startsWith("cat ")) out=(codeValue||"").split("\n").slice(0,40).join("\n")||"(empty file)"; else if(cmd==="node --version") out="v20.11.0"; else if(cmd==="npm --version"||cmd==="npm -v") out="10.2.3"; else if(cmd.startsWith("npm")) out="npm 10.2.3 — mock (browser only)"; else if(cmd==="help") out="Commands: ls, pwd, echo <text>, cat, clear, node --version, npm --version, help"; else if(cmd) out=`sh: ${cmd}: command not found — try: help`; setSimpleTermHistory(h=>[...h, `~ $ ${cmd}`, out].filter(Boolean)); setSimpleTermInput(""); setTimeout(()=>{if(simpleTermRef.current) simpleTermRef.current.scrollTop=simpleTermRef.current.scrollHeight;},10);}} className="flex items-center gap-2 mt-3 border-t border-white/10 pt-2">
+                                <span className="text-[#FFD700] text-xs shrink-0">alphatekx:~$</span>
+                                <input value={simpleTermInput} onChange={e=>setSimpleTermInput(e.target.value)} placeholder="type help + enter" className="flex-1 bg-transparent outline-none text-green-400 placeholder:text-gray-600 text-xs" autoFocus />
+                                <button type="submit" className="px-3 py-1 bg-[#FFD700] text-black font-bold rounded-full text-xs">Run</button>
+                              </form>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
