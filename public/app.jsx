@@ -1598,9 +1598,9 @@ function App() {
   const searchFiltered = activePlatform==="all" ? searchResults : searchResults.filter(v=> (v.platform||"youtube")===activePlatform);
   const homeFiltered = activePlatform==="all" ? filteredVideos : filteredVideos.filter(v=> (v.platform||"youtube")===activePlatform);
 
-  return (
-    <div className="h-screen w-full max-w-[100vw] overflow-hidden flex flex-col bg-[#08080f] p-2 sm:p-3 text-white font-sans selection:bg-[#FFD700] selection:text-black">
-      <div className="flex-1 flex flex-col overflow-hidden rounded-2xl bg-[#0f0f1f] border border-white/10 shadow-2xl">
+    return (
+    <div className="h-screen w-full max-w-[100vw] overflow-hidden flex flex-col bg-[#08080f] p-0 sm:p-3 text-white font-sans selection:bg-[#FFD700] selection:text-black">
+      <div className="flex-1 flex flex-col overflow-hidden rounded-none sm:rounded-2xl bg-[#0f0f1f] border-0 sm:border border-white/10 shadow-2xl">
       {/* Toast Notification Banner */}
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 bg-[#00D9FF] text-black font-semibold px-4 py-3 rounded-xl shadow-[0_0_25px_rgba(0,217,255,0.6)] flex items-center gap-3 animate-fade-in">
@@ -2112,29 +2112,29 @@ function App() {
 
           {/* IMAGE 100% WATCH — when workspace closed: video + Up Next. When open: laptop side-by-side, mobile stacked per images */}
           {activeTab === "watch" && !watchPanelOpen && (
-            <div className="max-w-[1600px] mx-auto p-4 lg:p-6 space-y-6">
+            <div className="max-w-[1600px] mx-auto px-0 sm:px-6 py-3 sm:py-6 space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-8 space-y-4">
-                  <div className="relative bg-[#0f0f1f] rounded-2xl overflow-hidden border border-[#FFD700]/20 shadow-[0_0_40px_rgba(255,215,0,0.15)]">
+                  <div className="relative bg-[#0f0f1f] rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-[#FFD700]/20 shadow-[0_0_40px_rgba(255,215,0,0.15)]">
                     <div className="aspect-video relative bg-black">
-                      <iframe ref={iframeRef} src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0${(activeVideo.id===DEFAULT_VIDEO.id)?"&autoplay=1&mute=1&playsinline=1":""}`} title={activeVideo.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                      <iframe ref={iframeRef} src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0&playsinline=1${(activeVideo.id===DEFAULT_VIDEO.id)?"&autoplay=1&mute=1":""}`} title={activeVideo.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
                       <div className="absolute bottom-4 right-4 z-20"><button onClick={()=>setWatchPanelOpen(true)} className="px-5 py-2.5 rounded-full bg-[#FFD700] text-black font-extrabold text-sm shadow-lg hover:scale-105 transition">Open AI Workspace →</button></div>
                       {activeCheckpoint && (<div className="absolute inset-0 bg-[#0B0215]/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-30 rounded-2xl"><div className="w-14 h-14 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center text-2xl mb-3 animate-pulse">🔒</div><h3 className="text-white font-extrabold text-lg">{activeCheckpoint.title}</h3><p className="text-[#FFD700] text-sm mt-1">Creator paused at {activeCheckpoint.time}s</p><p className="text-gray-300 text-sm mt-2">{activeCheckpoint.task}</p><button onClick={()=>{setWatchPanelOpen(true);setWatchPanelTab("code");}} className="mt-4 px-6 py-2.5 rounded-full bg-[#FFD700] text-black font-bold text-sm animate-pulse">Go to Code →</button></div>)}
                     </div>
                   </div>
-                  <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                  <div className="flex gap-2 overflow-x-auto scrollbar-hide px-4 sm:px-0">
                     {videoChapters.map((chap, idx)=>(
                       <button key={idx} onClick={()=>handleSeek(chap.seconds, chap.timestamp)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border ${activeTimestamp===chap.timestamp||(idx===0&&!activeTimestamp)?"bg-[#FFD700] text-black border-[#FFD700]":"bg-[#1a1a2e] border-white/10 text-gray-300"}`}>{chap.timestamp} {chap.title}</button>
                     ))}
                   </div>
-                  <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight">Building Neural Agents with Reinforcement Learning – Live Breakdown</h1>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+                  <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight px-4 sm:px-0">{activeVideo.title}</h1>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4 px-4 sm:px-0">
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#7c3aed] to-[#4f46e5] flex items-center justify-center">🧠</div>
-                      <div><p className="text-sm font-bold text-white">Alphatekx AI • 45.3K subscribers</p><p className="text-xs text-gray-400">Today we explore training RL agents...</p></div>
+                      <img src={activeVideo.avatar || channelData?.avatar || `https://img.youtube.com/vi/${activeVideo.id||activeVideo.youtubeId}/hqdefault.jpg`} alt="avatar" className="w-10 h-10 rounded-full object-cover border border-white/10" />
+                      <div><p className="text-sm font-bold text-white">{activeVideo.channel || activeVideo.channelName} • {channelData?.subscribers || activeVideo.subscribers || ""} subscribers</p><p className="text-xs text-gray-400">{activeVideo.views} • {activeVideo.timeAgo} • {activeVideo.description ? activeVideo.description.slice(0,110) : ""}</p></div>
                       <button onClick={()=>setIsSubscribed(!isSubscribed)} className={`ml-3 px-5 py-2 rounded-full font-bold text-xs ${isSubscribed?"bg-white/10 text-white":"bg-white text-black"}`}>{isSubscribed?"Subscribed ✓":"Subscribe"}</button>
                     </div>
-                    <div className="flex gap-2"><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Like 1.2K</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Save</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Share</button></div>
+                    <div className="flex gap-2"><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Like {likeCount ? likeCount.toLocaleString() : (activeVideo.likes || "0")}</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Save</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Share</button></div>
                   </div>
                 </div>
                 <div className="lg:col-span-4 space-y-4">
@@ -2158,21 +2158,21 @@ function App() {
           )}
           {/* WORKSPACE OPEN — laptop side-by-side (Image 2), mobile stacked (Image 1) */}
           {activeTab === "watch" && watchPanelOpen && (
-            <div className="max-w-[1600px] mx-auto p-3 lg:p-0 space-y-4">
+            <div className="max-w-[1600px] mx-auto px-0 sm:px-4 py-3 lg:py-0 space-y-4">
               {/* Back + Title bar */}
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 px-4 sm:px-0">
                 <button onClick={()=>setWatchPanelOpen(false)} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10">
                   <span>←</span> <span className="hidden sm:inline">Back to Stream</span><span className="sm:hidden">Back</span>
                 </button>
-                <h2 className="hidden lg:block flex-1 text-center text-xl font-extrabold text-white">Building Scalable AI Agents</h2>
+                <h2 className="hidden lg:block flex-1 text-center text-xl font-extrabold text-white truncate px-4">{activeVideo.title}</h2>
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
-                {/* Video */}
+                {/* Video — full bleed on mobile */}
                 <div className="lg:col-span-6">
-                  <div className="relative bg-[#0f0f1f] rounded-2xl overflow-hidden border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.25)]">
+                  <div className="relative bg-[#0f0f1f] rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.25)]">
                     <div className="aspect-video relative bg-black">
-                      <div className="absolute top-3 left-3 z-20 bg-black/60 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-[#FFD700] flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Live • AI Agents Network Visualization</div>
-                      <iframe src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0`} title={activeVideo.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                      <div className="absolute top-3 left-3 z-20 bg-black/60 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-[#FFD700] flex items-center gap-1.5"><span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Live • {(activeVideo.channel || activeVideo.channelName || "ALPHATEKX")}</div>
+                      <iframe src={`https://www.youtube-nocookie.com/embed/${activeVideo.id}?enablejsapi=1&modestbranding=1&rel=0&playsinline=1`} title={activeVideo.title} className="w-full h-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
 
                     </div>
                   </div>
