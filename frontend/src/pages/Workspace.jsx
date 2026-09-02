@@ -6,7 +6,7 @@ export default function WorkspacePage() {
   const match = path.match(/\/workspace\/([^/]+)/);
   const videoId = match ? match[1] : 'jvXEkm27XOE';
 
-  const [code, setCode] = useState('<h1>Hello Workspace</h1>\n<p>Edit code to see preview.</p>');
+  const [code, setCode] = useState('');
   const [tab, setTab] = useState('Code');
 
   const tabs = ['Code', 'Preview', 'AI', 'Terminal'];
@@ -63,9 +63,19 @@ export default function WorkspacePage() {
               {tab === 'Preview' && (
                 <iframe
                   title="Preview"
-                  srcDoc={code}
-                  className="w-full h-full min-h-[60vh] border-0 bg-white"
-                  sandbox="allow-scripts"
+                  srcDoc={`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+body{margin:0;padding:24px;font-family:sans-serif;background:#0A0A0F;color:#fff;line-height:1.6}
+img{max-width:100%;height:auto}
+</style>
+</head>
+<body>${code}</body>
+</html>`}
+                  className="w-full h-full min-h-[60vh] border-0 bg-[#0A0A0F]"
+                  sandbox="allow-scripts allow-modals"
                 />
               )}
 
