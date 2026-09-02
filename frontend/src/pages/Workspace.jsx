@@ -60,24 +60,26 @@ export default function WorkspacePage() {
                 />
               )}
 
-              {tab === 'Preview' && (
-                <iframe
-                  title="Preview"
-                  srcDoc={`<!DOCTYPE html>
+              {tab === 'Preview' && (() => {
+                const trimmed = code.trim();
+                const isFullDoc = trimmed.toLowerCase().startsWith('<!doctype') || trimmed.toLowerCase().startsWith('<html');
+                const doc = isFullDoc ? trimmed : `<!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
-<style>
-body{margin:0;padding:24px;font-family:sans-serif;background:#0A0A0F;color:#fff;line-height:1.6}
-img{max-width:100%;height:auto}
-</style>
+<style>body{margin:0;padding:24px;font-family:sans-serif;background:#0A0A0F;color:#fff;line-height:1.6}img{max-width:100%;height:auto}</style>
 </head>
-<body>${code}</body>
-</html>`}
-                  className="w-full h-full min-h-[60vh] border-0 bg-[#0A0A0F]"
-                  sandbox="allow-scripts allow-modals"
-                />
-              )}
+<body>${trimmed}</body>
+</html>`;
+                return (
+                  <iframe
+                    title="Preview"
+                    srcDoc={doc}
+                    className="w-full h-full min-h-[60vh] border-0 bg-[#0A0A0F]"
+                    sandbox="allow-scripts allow-modals"
+                  />
+                );
+              })()}
 
               {tab === 'AI' && (
                 <div className="w-full h-full min-h-[60vh] p-4 text-sm text-gray-300 space-y-3">
