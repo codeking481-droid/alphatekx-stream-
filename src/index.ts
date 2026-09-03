@@ -390,14 +390,29 @@ function createApiApp() {
 
   app.get("/api/health", (c) => c.json({ status: "ok", app: "Alphatekx Stream", scale: "1M+ Ready" }));
 
-  // === GATED EXPERIENCE + SIGN-IN WITH YOUTUBE (Cloudflare Worker) ===
-  // In-memory session store (replace with D1 in prod). Keep at module scope so it survives warm starts.
+  // === GATED EXPERIENCE + SIGN-IN WITH GOOGLE (stateless cookie — survives Worker isolates) ===
   const gatedSessions = (globalThis as any).__gatedSessions || ((globalThis as any).__gatedSessions = new Map<string, any>());
   function gatedGetUserFromCookie(c: any) {
     const cookie: string = c.req.header("cookie") || "";
     const m = cookie.match(/session=([^;]+)/);
     if (!m) return null;
-    return gatedSessions.get(m[1]) || null;
+    const raw = decodeURIComponent(m[1]);
+    // 1) Try in-memory Map (warm start)
+    const fromMap = gatedSessions.get(m[1]) || gatedSessions.get(raw);
+    if (fromMap) return fromMap;
+    // 2) Try stateless base64 JSON payload (survives isolate restarts / multi-isolate)
+    try {
+      // Worker has atob, Node has Buffer
+      let json = "";
+      if (typeof atob !== "undefined") {
+        json = atob(raw);
+      } else {
+        json = Buffer.from(raw, "base64").toString();
+      }
+      const u = JSON.parse(json);
+      if (u && (u.channelName || u.email || u.id)) return { ...u, isGuest: false };
+    } catch {}
+    return null;
   }
   function gatedGetAuthUrl(c: any): string {
     const env: any = c.env || {};
@@ -476,12 +491,20 @@ function createApiApp() {
       } catch (fetchErr) {
         console.warn("[auth/callback] userinfo fetch failed:", fetchErr);
       }
+      const userPayload = { id: channelId || `google_${Date.now()}`, channelId: channelId || `google_${Date.now()}`, channelName, channelAvatar, email, accessToken: tokens.access_token, refreshToken: tokens.refresh_token || "", expiresAt: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), isGuest: false };
       const sessionToken = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : Math.random().toString(36).slice(2);
-      // channelId here is Google sub for uniqueness; no YouTube channel binding via OAuth
-      gatedSessions.set(sessionToken, { id: channelId || sessionToken, channelId, channelName, channelAvatar, email, accessToken: tokens.access_token, refreshToken: tokens.refresh_token || "", expiresAt: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), isGuest: false });
-      // Secure cookie — add Secure flag when request is https
+      // Store in-memory for warm starts AND encode stateless cookie for multi-isolate durability
+      gatedSessions.set(sessionToken, userPayload);
+      let cookieValue = sessionToken;
+      try {
+        const b64 = typeof btoa !== "undefined" ? btoa(JSON.stringify(userPayload)) : Buffer.from(JSON.stringify(userPayload)).toString("base64");
+        cookieValue = encodeURIComponent(b64);
+        gatedSessions.set(cookieValue, userPayload);
+        try { gatedSessions.set(decodeURIComponent(cookieValue), userPayload); } catch {}
+        gatedSessions.set(b64, userPayload);
+      } catch {}
       const isHttps = url.protocol === "https:";
-      c.header("Set-Cookie", `session=${sessionToken}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax${isHttps ? "; Secure" : ""}`);
+      c.header("Set-Cookie", `session=${cookieValue}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax${isHttps ? "; Secure" : ""}`);
       return c.redirect("/");
     } catch (e: any) {
       console.error("[auth/callback] exchange exception:", e?.message || e);
