@@ -1521,6 +1521,7 @@ function App() {
   const [teacherQuestion, setTeacherQuestion] = useState("");
   const [teacherAnswer, setTeacherAnswer] = useState("");
   const [isAskingTeacher, setIsAskingTeacher] = useState(false);
+  const [showWatchTeacher, setShowWatchTeacher] = useState(false);
 
   // Superpower 8: AI Memory & Chat with History
   const [memoryQuery, setMemoryQuery] = useState("");
@@ -1924,6 +1925,50 @@ function App() {
     } finally {
       setIsAskingTeacher(false);
     }
+  };
+  const handleActivateJot = async () => {
+    if (isGuest) {
+      setShowSignUpBlock(true);
+      return;
+    }
+    const videoId = activeVideo?.youtubeId || activeVideo?.id;
+    if (!videoId) return;
+    setJotsLoading(true);
+    try {
+      const response = await fetch(`/api/ai-jot?videoId=${encodeURIComponent(videoId)}`, { credentials: "include" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) setShowPaywall(true);
+        throw new Error(data.message || data.error || "AI Jot could not be activated");
+      }
+      setVideoJots(Array.isArray(data.result?.jots) ? data.result.jots : []);
+      showToast("AI Jot activated for this video");
+    } catch (error) {
+      showToast(error.message || "AI Jot could not be activated");
+    } finally {
+      setJotsLoading(false);
+    }
+  };
+  const downloadJotsPdf = () => {
+    if (!videoJots.length) {
+      showToast("Activate AI Jot first");
+      return;
+    }
+    const lines = [`Alphatekx AI Jot`, activeVideo?.title || "Video notes", "", ...videoJots.map(j => `${j.time || "0:00"}  ${j.text || j.summary || ""}`)];
+    const escapePdf = value => value.replace(/\\/g, "\\\\").replace(/\(/g, "\\(").replace(/\)/g, "\\)");
+    const content = ["BT", "/F1 11 Tf", "50 760 Td", ...lines.map((line, index) => `${index ? "0 -16 Td" : ""} (${escapePdf(line.slice(0, 110))}) Tj`), "ET"].join("\n");
+    const objects = [`1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj`, `2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj`, `3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>\nendobj`, `4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj`, `5 0 obj\n<< /Length ${content.length} >>\nstream\n${content}\nendstream\nendobj`];
+    let pdf = "%PDF-1.4\n";
+    const offsets = [0];
+    objects.forEach(object => { offsets.push(pdf.length); pdf += `${object}\n`; });
+    const xref = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, "0")} 00000 n `).join("\n")}\ntrailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    const url = URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${(activeVideo?.title || "video-jots").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.pdf`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   // Memory Search — real /api/memory/search with fallback
@@ -2507,6 +2552,42 @@ function App() {
                     </div>
                     <div className="flex flex-wrap gap-2"><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Like {likeCount ? likeCount.toLocaleString() : (activeVideo.likes || "0")}</button><button onClick={()=>setCommentsOpen(true)} className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Comments {activeVideo.comments || ""}</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Save</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Share</button></div>
                   </div>
+                  <section className="watch-ai-buttons px-4 sm:px-0 space-y-3">
+                    <div className="flex flex-wrap gap-2">
+                      <button onClick={()=>{ setWatchPanelOpen(false); setActiveTab("workspace"); window.history.pushState({}, "", `/workspace?videoId=${activeVideo.youtubeId || activeVideo.id}`); }} className="min-h-[40px] px-3 py-2 rounded-full bg-[#FFD60A] text-black text-xs font-bold flex items-center gap-1.5">
+                        <span aria-hidden="true">✨</span> Workspace
+                      </button>
+                      <button onClick={handleActivateJot} className="min-h-[40px] px-3 py-2 rounded-full bg-white text-black text-xs font-bold flex items-center gap-1.5 border border-white">
+                        <span aria-hidden="true">🧠</span> {jotsLoading ? "Capturing..." : "Activate Jot"}
+                      </button>
+                      <button onClick={()=>setShowWatchTeacher(open => !open)} className="min-h-[40px] px-3 py-2 rounded-full bg-[#1a1a2e] text-white text-xs font-bold flex items-center gap-1.5 border border-white/10">
+                        <span aria-hidden="true">🎓</span> AI Teacher
+                      </button>
+                    </div>
+                    <div className="rounded-2xl border border-[#FFD60A]/25 bg-[#18131f] p-4">
+                      <div className="flex items-center justify-between gap-3">
+                        <div>
+                          <h3 className="font-bold text-white text-sm">🧠 AI Jot — Captures Everything Said</h3>
+                          <p className="text-[11px] text-gray-500">Activate to generate clean, clickable timestamped notes.</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[11px] text-gray-400">{videoJots.length} captures</span>
+                          <button onClick={downloadJotsPdf} className="px-2.5 py-1.5 rounded-full bg-white/10 text-white text-[11px] font-bold border border-white/10">PDF</button>
+                        </div>
+                      </div>
+                      <div className="mt-3 max-h-48 overflow-y-auto space-y-2">
+                        {jotsLoading ? <p className="text-xs text-gray-400">Capturing and cleaning up this video…</p> : videoJots.length ? videoJots.map((jot, index) => <button key={`${jot.time}-${index}`} onClick={() => handleSeek(Number(jot.seconds || 0), jot.time || "0:00")} className="block w-full rounded-xl bg-black/30 p-2.5 text-left hover:bg-white/5"><span className="text-xs font-bold text-[#FFD60A]">{jot.time || "0:00"}</span><span className="ml-3 text-sm text-gray-200">{jot.text || jot.summary}</span></button>) : <p className="text-xs text-gray-500">Watching… click Activate Jot to capture the video notes.</p>}
+                      </div>
+                    </div>
+                    {showWatchTeacher && <div className="rounded-2xl border border-white/10 bg-[#18131f] p-4">
+                      <h3 className="font-bold text-white text-sm">🎓 AI Teacher — Ask about this video</h3>
+                      <div className="mt-3 flex gap-2">
+                        <input value={teacherQuestion} onChange={e=>setTeacherQuestion(e.target.value)} onKeyDown={e=>{if(e.key==="Enter") handleAskTeacher();}} placeholder="What is this step about?" className="min-w-0 flex-1 rounded-full border border-white/10 bg-black px-3 py-2 text-sm text-white" />
+                        <button onClick={handleAskTeacher} disabled={isAskingTeacher} className="rounded-full bg-white px-4 py-2 text-xs font-bold text-black">{isAskingTeacher ? "..." : "Ask"}</button>
+                      </div>
+                      {teacherAnswer && <p className="mt-3 whitespace-pre-wrap text-sm text-gray-200">{teacherAnswer}</p>}
+                    </div>}
+                  </section>
                   <section className="px-4 sm:px-0">
                     <button onClick={()=>setCommentsOpen(true)} className="mb-3 text-left text-lg font-bold text-white">Comments {activeVideo.comments ? `(${activeVideo.comments})` : ""}</button>
                     {commentsOpen && (
@@ -2534,10 +2615,6 @@ function App() {
                       <button key={idx} onClick={()=>handleSeek(chap.seconds, chap.timestamp)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border ${activeTimestamp===chap.timestamp||(idx===0&&!activeTimestamp)?"bg-[#FFD700] text-black border-[#FFD700]":"bg-[#1a1a2e] border-white/10 text-gray-300"}`}>{chap.timestamp} {chap.title}</button>
                     ))}
                   </div>
-                  <section className="rounded-2xl border border-[#FFD700]/20 bg-[#18131f] p-4">
-                    <h3 className="font-bold text-white">🧠 AI Jot — Captures video context</h3>
-                    {isGuest ? <p className="mt-2 text-xs text-gray-400">Sign in to generate timestamped notes.</p> : jotsLoading ? <p className="mt-2 text-xs text-gray-400">Generating timestamped notes…</p> : videoJots.length ? <div className="mt-3 space-y-2">{videoJots.map((jot, index) => <button key={`${jot.time}-${index}`} onClick={() => handleSeek(Number(jot.seconds || 0), jot.time || "0:00")} className="block w-full rounded-xl bg-black/30 p-3 text-left hover:bg-white/5"><span className="text-xs font-bold text-[#FFD700]">{jot.time || "0:00"}</span><span className="ml-3 text-sm text-gray-200">{jot.text || jot.summary}</span></button>)}</div> : <p className="mt-2 text-xs text-gray-500">No timestamped notes were returned for this video.</p>}
-                  </section>
                 </div>
               </div>
             </div>
