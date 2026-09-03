@@ -700,14 +700,11 @@ function App() {
         document.head.appendChild(link);
       }
       // Load Xterm if needed
-      const loadXterm = () => new Promise((res, rej) => {
-        if (window.Terminal) return res(window.Terminal);
-        const s = document.createElement("script");
-        s.src = "https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.js";
-        s.onload = () => res(window.Terminal);
-        s.onerror = rej;
-        document.head.appendChild(s);
-      });
+      const loadXterm = async () => {
+        if (window.Terminal) return window.Terminal;
+        const module = await import("https://cdn.jsdelivr.net/npm/@xterm/xterm@5.3.0/+esm");
+        return module.Terminal;
+      };
       let Term;
       try { Term = await loadXterm(); } catch { Term = null; }
       if (!Term) {
