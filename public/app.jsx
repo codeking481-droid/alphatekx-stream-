@@ -971,6 +971,9 @@ function App() {
   const [shortsMuted, setShortsMuted] = useState(true);
   const [shortsPlaying, setShortsPlaying] = useState(true);
   const [shortsLiked, setShortsLiked] = useState({});
+  const [shortsCommentsOpen, setShortsCommentsOpen] = useState(false);
+  const [shortsCommentText, setShortsCommentText] = useState("");
+  const [shortsComments, setShortsComments] = useState({});
   const shortsScrollerRef = useRef(null);
   const shortsSlideRefs = useRef([]);
   const scrollToShort = (index) => {
@@ -2646,7 +2649,7 @@ function App() {
                           key={`${short.youtubeId}-${shortsMuted}-${shortsPlaying}`}
                           src={`https://www.youtube-nocookie.com/embed/${short.youtubeId}?autoplay=${shortsPlaying ? 1 : 0}&mute=${shortsMuted ? 1 : 0}&controls=0&rel=0&playsinline=1&loop=1&playlist=${short.youtubeId}&modestbranding=1`}
                           title={short.title}
-                          className="h-full w-full border-0"
+                          className="pointer-events-none h-full w-full border-0"
                           allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                           allowFullScreen
                         />
@@ -2672,7 +2675,7 @@ function App() {
                       </div>
                       <div className="absolute bottom-4 right-3 z-10 flex flex-col items-center gap-3">
                         <button onClick={() => setShortsLiked(s => ({ ...s, [short.id]: !s[short.id] }))} aria-label="Like short" className={`flex h-11 w-11 items-center justify-center rounded-full bg-black/60 ${shortsLiked[short.id] ? "text-[#FFD700]" : "text-white"}`}><Icon name="like" className="h-6 w-6" /></button>
-                        <button onClick={() => showToast("Comments coming soon")} aria-label="Comments" className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="chat" className="h-6 w-6" /></button>
+                        <button onClick={() => setShortsCommentsOpen(true)} aria-label={`Comments on ${short.title}`} className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="chat" className="h-6 w-6" /></button>
                         <button onClick={() => { navigator.clipboard?.writeText(`https://youtu.be/${short.youtubeId}`); showToast("Link copied"); }} aria-label="Share short" className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="share" className="h-6 w-6" /></button>
                       </div>
                     </article>
@@ -2680,6 +2683,48 @@ function App() {
                 </div>
               </div>
             </section>
+          )}
+
+          {shortsCommentsOpen && (
+            <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 sm:items-center" onClick={() => setShortsCommentsOpen(false)}>
+              <section className="flex max-h-[78dvh] w-full max-w-lg flex-col rounded-t-2xl border border-white/10 bg-[#151025] p-4 sm:rounded-2xl" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between border-b border-white/10 pb-3">
+                  <div>
+                    <h2 className="font-bold text-white">Comments</h2>
+                    <p className="max-w-[280px] truncate text-xs text-gray-400">{currentShort.title}</p>
+                  </div>
+                  <button onClick={() => setShortsCommentsOpen(false)} aria-label="Close comments" className="rounded-full px-3 py-1 text-xl text-gray-400 hover:text-white">×</button>
+                </div>
+                <div className="min-h-0 flex-1 space-y-3 overflow-y-auto py-3">
+                  {(shortsComments[currentShort.youtubeId] || []).length === 0 ? (
+                    <p className="py-8 text-center text-sm text-gray-400">Be the first to comment.</p>
+                  ) : (
+                    shortsComments[currentShort.youtubeId].map(comment => (
+                      <div key={comment.id} className="rounded-xl bg-white/5 p-3">
+                        <p className="text-xs font-bold text-[#FFD700]">{comment.author}</p>
+                        <p className="mt-1 text-sm text-white">{comment.text}</p>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <form onSubmit={e => {
+                  e.preventDefault();
+                  const text = shortsCommentText.trim();
+                  if (!text) return;
+                  const id = currentShort.youtubeId;
+                  setShortsComments(prev => ({ ...prev, [id]: [...(prev[id] || []), { id: Date.now(), author: "You", text }] }));
+                  setShortsCommentText("");
+                  fetch("/api/community/send", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: text, channel: "shorts", videoId: id, userName: "You" })
+                  }).catch(() => {});
+                }} className="flex gap-2 border-t border-white/10 pt-3">
+                  <input value={shortsCommentText} onChange={e => setShortsCommentText(e.target.value)} placeholder="Add a comment..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:border-[#FFD700]" />
+                  <button type="submit" className="rounded-xl bg-[#FFD700] px-4 py-2.5 text-sm font-bold text-black">Post</button>
+                </form>
+              </section>
+            </div>
           )}
 
           {/* ------------------- SUPERPOWER #7: AI TEACHER ------------------- */}
@@ -3588,11 +3633,6 @@ function App() {
             </div>
           )}
 
-          {/* FOOTER - YouTube TOS Requirement */}
-          <footer className="bg-[#0f0f0f] border-t border-[#272727] py-6 px-4 text-center text-xs text-gray-500 space-y-2 mt-8">
-            <p>Alphatekx Stream uses YouTube API Services. YouTube is a trademark of Google LLC.</p>
-            <p className="font-mono text-[10px] text-gray-600">Built with React, Tailwind CSS, Cloudflare Workers & Durable Objects SQLite.</p>
-          </footer>
 
         </main>
       </div>
