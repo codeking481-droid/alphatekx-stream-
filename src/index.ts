@@ -27,6 +27,10 @@ interface Env {
   FACEBOOK_ACCESS_TOKEN?: string;
   STRIPE_SECRET_KEY?: string;
   PAYSTACK_SECRET_KEY?: string;
+  PAYSTACK_CURRENCY?: string;
+  PAYSTACK_PLAN_CURRENCY?: string;
+  PAYSTACK_MONTHLY_AMOUNT?: string;
+  PAYSTACK_YEARLY_AMOUNT?: string;
   PAYSTACK_PLAN_MONTHLY?: string;
   PAYSTACK_PLAN_YEARLY?: string;
   GROQ_API_KEY?: string;
@@ -55,6 +59,13 @@ function formatViews(viewCount?: string): string {
   if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M views`;
   if (count >= 1000) return `${Math.round(count / 1000)}K views`;
   return `${count} views`;
+}
+function formatCount(value?: string, suffix = ""): string {
+  if (!value) return `0 ${suffix}`.trim();
+  const count = Number(value);
+  if (!Number.isFinite(count)) return `0 ${suffix}`.trim();
+  const formatted = count >= 1000000 ? `${(count / 1000000).toFixed(1)}M` : count >= 1000 ? `${Math.round(count / 1000)}K` : String(count);
+  return `${formatted} ${suffix}`.trim();
 }
 
 function isoDurationSeconds(iso?: string): number {
@@ -403,11 +414,18 @@ function createApiApp() {
   // authentication also works when Cloudflare sends the next request to another isolate.
   const gatedSessions = (globalThis as any).__gatedSessions || ((globalThis as any).__gatedSessions = new Map<string, any>());
   function base64UrlEncode(value: string): string {
-    return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const bytes = new TextEncoder().encode(value);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    }
+    return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
   }
   function base64UrlDecode(value: string): string {
     const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((value.length + 3) % 4);
-    return atob(padded);
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
+    return new TextDecoder().decode(bytes);
   }
   async function signSession(payload: string, secret: string): Promise<string> {
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
@@ -418,10 +436,12 @@ function createApiApp() {
     const cookie: string = c.req.header("cookie") || "";
     const m = cookie.match(/session=([^;]+)/);
     if (!m) return null;
-    const cached = gatedSessions.get(m[1]);
+    let cookieValue = m[1];
+    try { cookieValue = decodeURIComponent(cookieValue); } catch {}
+    const cached = gatedSessions.get(m[1]) || gatedSessions.get(cookieValue);
     if (cached) return cached;
     const env: any = c.env || {};
-    const parts = m[1].split(".");
+    const parts = cookieValue.split(".");
     const sessionSecret = env.SESSION_SECRET || env.GOOGLE_CLIENT_SECRET;
     if (parts.length !== 2 || !sessionSecret) return null;
     try {
@@ -429,6 +449,14 @@ function createApiApp() {
       if (expected !== parts[1]) return null;
       const user = JSON.parse(base64UrlDecode(parts[0]));
       if (!user.expiresAt || Date.parse(user.expiresAt) <= Date.now()) return null;
+      if (env.KV && user.sessionId) {
+        try {
+          const persisted = await env.KV.get(`session:${user.sessionId}`, "json");
+          if (persisted && persisted.expiresAt && Date.parse(persisted.expiresAt) > Date.now()) return { ...persisted, isGuest: false };
+        } catch (kvError: any) {
+          console.error("[auth] KV session read failed", kvError?.message || kvError);
+        }
+      }
       return user;
     } catch {
       return null;
@@ -498,6 +526,7 @@ function createApiApp() {
       const sessionToken = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : Math.random().toString(36).slice(2);
       const sessionUser = {
         id: userInfo.sub,
+        sessionId: sessionToken,
         channelId: "",
         channelName: userInfo.name || "Alphatekx User",
         channelAvatar: userInfo.picture || "https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000&size=200&bold=true",
@@ -505,14 +534,33 @@ function createApiApp() {
         expiresAt: new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
         isGuest: false,
       };
-      if (env.DB) {
-        await env.DB.prepare(
-          "INSERT INTO users (id, email, name, picture) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET email = excluded.email, name = excluded.name, picture = excluded.picture"
-        ).bind(sessionUser.id, sessionUser.email, sessionUser.channelName, sessionUser.channelAvatar).run();
-      }
       const sessionPayload = base64UrlEncode(JSON.stringify(sessionUser));
       const sessionSignature = await signSession(sessionPayload, sessionSecret);
       const sessionCookie = `${sessionPayload}.${sessionSignature}`;
+      if (env.DB) {
+        // Persistence must not turn a successful Google exchange into a failed signup
+        // (for example while D1 is briefly unavailable). Handle both unique keys:
+        // email is unique, and users can return with the same Google subject.
+        try {
+          await env.DB.batch([
+            env.DB.prepare(
+              "INSERT INTO users (id, email, name, picture) VALUES (?, ?, ?, ?) ON CONFLICT(email) DO UPDATE SET id = excluded.id, name = excluded.name, picture = excluded.picture"
+            ).bind(sessionUser.id, sessionUser.email, sessionUser.channelName, sessionUser.channelAvatar),
+            env.DB.prepare(
+              "INSERT INTO sessions (id, user_id) VALUES (?, ?) ON CONFLICT(id) DO UPDATE SET user_id = excluded.user_id"
+            ).bind(sessionToken, sessionUser.id),
+          ]);
+        } catch (dbError: any) {
+          console.error("[oauth] D1 persistence failed", dbError?.message || dbError);
+        }
+      }
+      if (env.KV) {
+        try {
+          await env.KV.put(`session:${sessionToken}`, JSON.stringify(sessionUser), { expirationTtl: 30 * 86400 });
+        } catch (kvError: any) {
+          console.error("[oauth] KV persistence failed", kvError?.message || kvError);
+        }
+      }
       gatedSessions.set(sessionCookie, sessionUser);
       c.header("Set-Cookie", `session=${sessionCookie}; HttpOnly; Secure; Path=/; Max-Age=${30 * 86400}; SameSite=Lax`);
       return c.redirect(new URL("/", c.req.url).toString(), 302);
@@ -657,15 +705,19 @@ function createApiApp() {
         searchedQuery?: string;
       }>();
       // Support both single video object and { videos: [...] } batch
+      const user = await gatedGetUserFromCookie(c);
+      if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED" }, 401);
       if (Array.isArray(body.videos) && body.videos.length > 0) {
         const q = (body as any).searchedQuery || body.videos[0]?.searchedQuery || "";
         pushToSearchHistory(body.videos, q);
+        await Promise.all(body.videos.map((video: any) => saveHistoryForUser(c, user.id, "searched", { ...video, searchedQuery: q })));
         return c.json({ success: true, history: inMemorySearchHistory, count: inMemorySearchHistory.length });
       }
       // single item legacy
       const single = body.youtubeId ? [body] : [];
       if (single.length > 0) {
         pushToSearchHistory(single, body.searchedQuery || "");
+        await saveHistoryForUser(c, user.id, "searched", single[0]);
         return c.json({ success: true, history: inMemorySearchHistory, count: inMemorySearchHistory.length });
       }
       // empty batch
@@ -757,6 +809,15 @@ function createApiApp() {
         }
       }
       const seen = new Set<string>();
+      const channelIds = [...new Set(items.map((item: any) => item.snippet?.channelId).filter(Boolean))].slice(0, 50);
+      const channelAvatars: Record<string, string> = {};
+      if (channelIds.length) {
+        const channelRes = await fetch(`https://www.googleapis.com/youtube/v3/channels?part=snippet&id=${channelIds.join(",")}&key=${encodeURIComponent(apiKey)}`);
+        if (channelRes.ok) {
+          const channelData: any = await channelRes.json().catch(() => ({}));
+          for (const channel of channelData.items || []) channelAvatars[channel.id] = channel.snippet?.thumbnails?.default?.url || "";
+        }
+      }
       const videos = items.filter((item: any) => {
         if (!item.id || seen.has(item.id)) return false;
         seen.add(item.id);
@@ -766,14 +827,64 @@ function createApiApp() {
         title: item.snippet?.title || "YouTube Short",
         channelName: item.snippet?.channelTitle || "YouTube Creator",
         channelId: item.snippet?.channelId || "",
+        avatar: channelAvatars[item.snippet?.channelId] || "",
         thumbnailUrl: item.snippet?.thumbnails?.high?.url || `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
         views: formatViews(item.statistics?.viewCount), viewsRaw: Number(item.statistics?.viewCount || 0),
+        likes: formatCount(item.statistics?.likeCount, "likes"), likeCount: Number(item.statistics?.likeCount || 0),
+        comments: formatCount(item.statistics?.commentCount, "comments"), commentCount: Number(item.statistics?.commentCount || 0),
+        description: item.snippet?.description || "",
         duration: parseIsoDuration(item.contentDetails?.duration), publishedAt: item.snippet?.publishedAt || "",
         category: "Shorts"
       }));
       return c.json({ videos, nextPageToken: data.nextPageToken || "", real: true });
     } catch (error: any) {
       return c.json({ videos: [], nextPageToken: "", real: false, error: error.message || "SHORTS_FETCH_FAILED" }, 502);
+    }
+  });
+
+  // Rotating home recommendations sourced from fresh YouTube uploads. The
+  // topic rotates daily and the request offset changes hourly so Home does not
+  // remain pinned to one catalog forever.
+  app.get("/api/feed", async (c) => {
+    const apiKey = (c.env as Env)?.YOUTUBE_API_KEY || "";
+    if (!apiKey) return c.json({ videos: [], real: false, error: "YOUTUBE_API_KEY_NOT_CONFIGURED" }, 503);
+    const topics = ["technology", "science", "programming", "business", "music", "education", "ai"];
+    const day = Math.floor(Date.now() / 86400000);
+    const topic = topics[day % topics.length];
+    const publishedAfter = new Date(Date.now() - 30 * 86400000).toISOString();
+    try {
+      const search = new URL("https://www.googleapis.com/youtube/v3/search");
+      search.searchParams.set("part", "snippet");
+      search.searchParams.set("type", "video");
+      search.searchParams.set("order", "date");
+      search.searchParams.set("q", topic);
+      search.searchParams.set("publishedAfter", publishedAfter);
+      search.searchParams.set("maxResults", "50");
+      search.searchParams.set("key", apiKey);
+      const searchResponse = await fetch(search.toString());
+      if (!searchResponse.ok) throw new Error(`YouTube feed search ${searchResponse.status}`);
+      const searchData: any = await searchResponse.json();
+      const ids = (searchData.items || []).map((item: any) => item.id?.videoId).filter(Boolean);
+      if (!ids.length) return c.json({ videos: [], real: true, topic });
+      const details = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${ids.join(",")}&key=${encodeURIComponent(apiKey)}`);
+      if (!details.ok) throw new Error(`YouTube feed details ${details.status}`);
+      const detailData: any = await details.json();
+      const offset = new Date().getUTCHours() % Math.max(1, detailData.items?.length || 1);
+      const videos = (detailData.items || []).slice(offset).concat(detailData.items || []).slice(0, 24).map((item: any) => ({
+        source: "youtube", platform: "youtube", id: item.id, youtubeId: item.id,
+        title: item.snippet?.title || "New video",
+        channelName: item.snippet?.channelTitle || "YouTube Creator",
+        channelId: item.snippet?.channelId || "",
+        thumbnailUrl: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url,
+        description: item.snippet?.description || "",
+        views: formatViews(item.statistics?.viewCount), viewsRaw: Number(item.statistics?.viewCount || 0),
+        likes: formatCount(item.statistics?.likeCount, "likes"), likeCount: Number(item.statistics?.likeCount || 0),
+        comments: formatCount(item.statistics?.commentCount, "comments"), commentCount: Number(item.statistics?.commentCount || 0),
+        duration: parseIsoDuration(item.contentDetails?.duration), publishedAt: item.snippet?.publishedAt || "",
+      }));
+      return c.json({ videos, real: true, topic, refreshedAt: new Date().toISOString() });
+    } catch (error: any) {
+      return c.json({ videos: [], real: false, error: error.message || "FEED_FETCH_FAILED" }, 502);
     }
   });
 
@@ -823,6 +934,8 @@ function createApiApp() {
   });
 
   app.post("/api/community/send", async (c) => {
+    const user = await gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to comment." }, 401);
     const body = await c.req.json<{
       videoId?: string;
       channel?: string;
@@ -836,8 +949,8 @@ function createApiApp() {
       id: inMemoryMessages.length + 1,
       videoId: body.videoId || "dQw4w9WgXcQ",
       channel: body.channel || "general",
-      userName: body.userName || "Guest_Pioneer",
-      avatarInitials: body.avatarInitials || (body.userName || "G").charAt(0).toUpperCase(),
+      userName: user.channelName || user.email || body.userName || "Alphatekx User",
+      avatarInitials: (user.channelName || user.email || "A").charAt(0).toUpperCase(),
       message: body.message,
       timestampInVideo: body.timestampInVideo || "",
       likes: 0,
@@ -1034,7 +1147,40 @@ function createApiApp() {
   // intentionally kept in memory here; replace this map with durable storage
   // when persistent billing storage is available.
   const aiUsage = (globalThis as any).__aiUsage || ((globalThis as any).__aiUsage = new Map<string, number>());
-  const aiLimits: Record<string, number> = { teacher: 5, jot: 5, workspace: 3 };
+  const aiLimits: Record<string, number> = { teacher: 5, jot: 5, capture: 5, workspace: 3, memory: 5 };
+  async function historyForUser(c: any, userId: string, kind: "watched" | "searched") {
+    const env: any = c.env || {};
+    if (env.DB) {
+      try {
+        await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_history (user_id TEXT NOT NULL, kind TEXT NOT NULL, item_id TEXT NOT NULL, data TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, kind, item_id))").run();
+        const result = await env.DB.prepare("SELECT data FROM user_history WHERE user_id = ? AND kind = ? ORDER BY updated_at DESC LIMIT 100").bind(userId, kind).all();
+        return (result.results || []).map((row: any) => JSON.parse(row.data));
+      } catch (error: any) { console.error("[history] D1 read failed", error?.message || error); }
+    }
+    if (env.KV) {
+      try { return (await env.KV.get(`history:${userId}:${kind}`, "json")) || []; } catch (error: any) { console.error("[history] KV read failed", error?.message || error); }
+    }
+    return [];
+  }
+  async function saveHistoryForUser(c: any, userId: string, kind: "watched" | "searched", item: any) {
+    const env: any = c.env || {};
+    const itemId = String(item.videoId || item.youtubeId || item.id || "").trim();
+    if (!itemId) return;
+    if (env.DB) {
+      try {
+        await env.DB.prepare("CREATE TABLE IF NOT EXISTS user_history (user_id TEXT NOT NULL, kind TEXT NOT NULL, item_id TEXT NOT NULL, data TEXT NOT NULL, updated_at DATETIME DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (user_id, kind, item_id))").run();
+        await env.DB.prepare("INSERT INTO user_history (user_id, kind, item_id, data, updated_at) VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP) ON CONFLICT(user_id, kind, item_id) DO UPDATE SET data = excluded.data, updated_at = CURRENT_TIMESTAMP").bind(userId, kind, itemId, JSON.stringify({ ...item, videoId: itemId, updatedAt: Date.now() })).run();
+        return;
+      } catch (error: any) { console.error("[history] D1 write failed", error?.message || error); }
+    }
+    if (env.KV) {
+      try {
+        const current: any[] = (await env.KV.get(`history:${userId}:${kind}`, "json")) || [];
+        const next = [{ ...item, videoId: itemId, updatedAt: Date.now() }, ...current.filter(row => String(row.videoId || row.youtubeId || row.id) !== itemId)].slice(0, 100);
+        await env.KV.put(`history:${userId}:${kind}`, JSON.stringify(next));
+      } catch (error: any) { console.error("[history] KV write failed", error?.message || error); }
+    }
+  }
   async function getVideoContext(c: any, body: any) {
     const videoId = String(body.videoId || "").trim();
     let title = String(body.title || "this video").trim();
@@ -1052,7 +1198,7 @@ function createApiApp() {
     }
     return { videoId, title, transcript: description || "No public transcript was provided. Be transparent about uncertainty and use the available title/context." };
   }
-  async function runGroq(c: any, feature: "teacher" | "jot" | "workspace", body: any) {
+  async function runGroq(c: any, feature: "teacher" | "jot" | "capture" | "workspace" | "memory", body: any) {
     const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to use AI features." }, 401);
 
@@ -1074,7 +1220,7 @@ function createApiApp() {
     const messageInput = Array.isArray(body.messages)
       ? body.messages.filter((m: any) => m?.role === "user").map((m: any) => m.content).join("\n")
       : "";
-    const input = String(body.prompt || body.message || body.goal || body.text || body.content || messageInput || "").trim();
+    const input = String(body.question || body.prompt || body.message || body.goal || body.text || body.content || messageInput || "").trim();
     if (!input) return c.json({ success: false, error: "PROMPT_REQUIRED" }, 400);
     const apiKey = (c.env as Env)?.GROQ_API_KEY;
     if (!apiKey) return c.json({ success: false, error: "GROQ_NOT_CONFIGURED" }, 503);
@@ -1083,27 +1229,47 @@ function createApiApp() {
     const question = String(body.question || "").trim();
     const instructions = feature === "teacher"
       ? question
-        ? "You are an AI teacher answering questions about a video. Answer directly and concisely. Cite timestamps only when they are present in the supplied transcript/context; never invent timestamps."
-        : "You are an AI teacher. Return a concise course plan as JSON with goal and steps. Each step must have title, description, and searchQuery."
+        ? "You are Alphatekx AI Teacher, a patient expert tutor for any subject. Teach the concept clearly, adapt to the learner's level, explain reasoning step by step, use a short example when useful, and finish with one brief check-for-understanding question. If optional video context is supplied, use it as supporting context; otherwise answer from your broad knowledge. Never invent citations or timestamps. Return JSON with an answer string and optional keyPoints array."
+        : "You are Alphatekx AI Teacher. Build a practical, progressive learning path for any subject. Return JSON with goal and steps. Each step must have title, description, and searchQuery. Make the plan specific, beginner-friendly, and actionable."
+      : feature === "capture"
+        ? "You are Alphatekx AI Capture. Clean a raw real-time transcript into accurate, well-organized study notes. Preserve every important idea, definition, example, decision, and action item. Remove filler and repetition, but never invent content. Return JSON with title, summary, sections (each with heading and bullets), keyTerms, and actionItems."
       : feature === "jot"
         ? "You are AI Jot. Extract 5 concise notes from the supplied video context. Return JSON with jots, where each item has time, seconds, text, and summary. If timestamps are unavailable, use 0 and say so rather than inventing them."
-        : "You are an expert frontend builder. Return JSON with title, summary, and code. Code must be a complete self-contained HTML document with inline CSS and JavaScript that can run in an iframe. Do not return markdown fences.";
+        : feature === "memory"
+          ? "You are an AI memory assistant. Answer the user's question using only the supplied watch and search history. Be clear when the history does not contain enough evidence. Return JSON with answer and sources (each source has title, videoId, and timestamp). Never invent videos, timestamps, or facts."
+          : "You are the Alphatekx AI Workspace agent. Build or explain what the user requests. For code, always return one or more complete files using <create_file path=\"index.html\">...</create_file> tags (also use style.css and script.js when useful). Never omit the file tags. Return concise plain text outside the tags only when explanation is needed.";
     const enrichedInput = [
       input,
       context.videoId ? `Video ID: ${context.videoId}` : "",
-      `Video title: ${context.title}`,
-      `Video context/transcript: ${context.transcript.slice(0, 12000)}`,
+      body.videoId || body.title || body.description || body.transcript ? `Optional video context - title: ${context.title}\n${context.transcript.slice(0, 12000)}` : "",
+      feature === "memory" ? `Persisted watch/search history: ${JSON.stringify(body.history || []).slice(0, 20000)}` : "",
     ].filter(Boolean).join("\n\n");
-    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: (c.env as Env)?.GROQ_MODEL || "llama-3.1-8b-instant",
-        temperature: 0.2,
-        response_format: { type: "json_object" },
-        messages: [{ role: "system", content: instructions }, { role: "user", content: enrichedInput }],
-      }),
+    const groqUrl = "https://api.groq.com/openai/v1/chat/completions";
+    const groqHeaders = {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    };
+    const groqRequest = (jsonMode: boolean) => ({
+      model: (c.env as Env)?.GROQ_MODEL || "llama-3.1-8b-instant",
+      temperature: 0.2,
+      ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
+      messages: [{ role: "system", content: instructions }, { role: "user", content: enrichedInput }],
     });
+    const useJsonMode = feature !== "workspace";
+    let response = await fetch(groqUrl, {
+      method: "POST",
+      headers: groqHeaders,
+      body: JSON.stringify(groqRequest(useJsonMode)),
+    });
+    // Some configured Groq models reject JSON mode even though chat works.
+    // Retry once without that optional constraint before reporting a failure.
+    if (!response.ok && response.status === 400) {
+      response = await fetch(groqUrl, {
+        method: "POST",
+        headers: groqHeaders,
+        body: JSON.stringify(groqRequest(false)),
+      });
+    }
     if (!response.ok) {
       const detail = await response.text();
       return c.json({ success: false, error: "GROQ_REQUEST_FAILED", detail: detail.slice(0, 500) }, 502);
@@ -1146,6 +1312,17 @@ function createApiApp() {
     const videoId = c.req.query("videoId") || "";
     if (!videoId) return c.json({ success: false, error: "VIDEO_ID_REQUIRED" }, 400);
     return runGroq(c, "jot", { videoId, prompt: "Create timestamped memory jots for this video." });
+  });
+  app.post("/api/capture/clean", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    const transcript = String(body.transcript || "").trim();
+    if (!transcript) return c.json({ success: false, error: "TRANSCRIPT_REQUIRED" }, 400);
+    return runGroq(c, "capture", {
+      ...body,
+      prompt: `Clean this live transcript into polished notes:\n\n${transcript.slice(0, 30000)}`,
+      transcript,
+    });
   });
   app.post("/api/workspace", async (c) => {
     let body: any = {};
@@ -1218,63 +1395,55 @@ function createApiApp() {
 
   // Watch History & Vector Search Memory
   app.post("/api/history/save", async (c) => {
+    const user = await gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED" }, 401);
+    let body: any;
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    await saveHistoryForUser(c, user.id, "watched", body);
     return c.json({ success: true });
   });
 
-  app.get("/api/memory/search", (c) => {
-    const q = (c.req.query("q") || "").toLowerCase();
-    const rows = [
-      {
-        videoId: "dQw4w9WgXcQ",
-        title: "How to Build Neural Networks from Scratch | Full AI Tutorial",
-        timestamp: "12:30",
-        snippet: "You watched this 3 weeks ago - Training loop & loss function backprop explained at 12:30",
-        matchScore: "98%"
-      },
-      {
-        videoId: "L_LUpnjgPso",
-        title: "Building Real-time AI Voice Agents with WebSockets & Edge",
-        timestamp: "04:12",
-        snippet: "You watched this 12 days ago - Low-latency audio buffer streaming setup - Jump to 04:12",
-        matchScore: "92%"
-      },
-      {
-        videoId: "M576WGiDBdQ",
-        title: "High Performance Cloudflare Workers & Durable Objects Masterclass",
-        timestamp: "08:45",
-        snippet: "You watched this 5 days ago - SQLite persistence & WebSocket hibernation rules",
-        matchScore: "87%"
-      }
-    ].filter(item => !q || item.title.toLowerCase().includes(q) || item.snippet.toLowerCase().includes(q));
-
-    return c.json({ results: rows });
+  app.get("/api/memory/search", async (c) => {
+    const user = await gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED" }, 401);
+    const q = (c.req.query("q") || "").trim().toLowerCase();
+    const rows = [...await historyForUser(c, user.id, "watched"), ...await historyForUser(c, user.id, "searched")];
+    const seen = new Set<string>();
+    const results = rows.filter((item: any) => {
+      const id = String(item.videoId || item.youtubeId || item.id || "");
+      if (!id || seen.has(id)) return false;
+      seen.add(id);
+      return !q || JSON.stringify(item).toLowerCase().includes(q);
+    }).slice(0, 50).map((item: any) => ({
+      videoId: item.videoId || item.youtubeId || item.id,
+      title: item.title || "Untitled video",
+      timestamp: item.timestamp || item.currentTime || "00:00",
+      snippet: item.description || item.snippet || `Watched ${item.watchedAtStr || "recently"}`,
+      matchScore: "history"
+    }));
+    return c.json({ success: true, results });
   });
 
   app.post("/api/memory/chat", async (c) => {
-    const { message } = await c.req.json<{ message: string }>();
-    const text = (message || "").toLowerCase();
-    
-    let answer = "Based on the 3 videos in your watched memory history: You explored Neural Networks backpropagation (at 12:30), Real-time WebSocket Voice Agents (at 04:12), and Cloudflare Workers SQLite persistence.";
-    if (text.includes("backprop") || text.includes("neural")) {
-      answer = "Based on 'How to Build Neural Networks from Scratch' (watched 3 weeks ago): Backpropagation uses the chain rule to calculate loss gradients backward through each layer to update weights via standard gradient descent (Jump to 12:30).";
-    } else if (text.includes("voice") || text.includes("audio")) {
-      answer = "Based on 'Building Real-time AI Voice Agents' (watched 12 days ago): The author recommends using WebSockets paired with Opus audio encoding for under 150ms roundtrip voice latency.";
-    }
-
-    return c.json({
-      answer,
-      sources: [
-        { title: "How to Build Neural Networks from Scratch", timestamp: "12:30", videoId: "dQw4w9WgXcQ" },
-        { title: "Building Real-time AI Voice Agents", timestamp: "04:12", videoId: "L_LUpnjgPso" }
-      ]
-    });
+    const user = await gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED" }, 401);
+    let body: any;
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    const records = [...await historyForUser(c, user.id, "watched"), ...await historyForUser(c, user.id, "searched")].slice(0, 100);
+    if (!records.length) return c.json({ success: false, error: "NO_HISTORY", message: "Watch or search for videos before asking Memory." }, 404);
+    const response = await runGroq(c, "memory", { ...body, prompt: body.message || body.question, history: records });
+    return response;
   });
 
   // Paystack subscriptions
   app.get("/api/subscription/status", async (c) => {
     const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ authenticated: false, isPro: false });
-    const subscription = proSubscriptions.get(user.id);
+    let subscription = proSubscriptions.get(user.id);
+    if (!subscription && (c.env as Env)?.KV) {
+      subscription = await (c.env as Env).KV!.get(`subscription:${user.id}`, "json").catch(() => null);
+      if (subscription) proSubscriptions.set(user.id, subscription);
+    }
     const isPro = Boolean(subscription?.active);
     const month = new Date().toISOString().slice(0, 7);
     const usage = Object.fromEntries(Object.keys(aiLimits).map(feature => [
@@ -1293,16 +1462,25 @@ function createApiApp() {
     const email = String(body.email || user.email || "").trim();
     if (!email || !email.includes("@")) return c.json({ error: "ACCOUNT_EMAIL_REQUIRED" }, 400);
     const planCode = plan === "yearly" ? (c.env as Env)?.PAYSTACK_PLAN_YEARLY : (c.env as Env)?.PAYSTACK_PLAN_MONTHLY;
-    const amount = plan === "yearly" ? 9900 : 1900;
+    const currency = String((c.env as Env)?.PAYSTACK_CURRENCY || "NGN").toUpperCase();
+    const configuredAmount = plan === "yearly"
+      ? Number((c.env as Env)?.PAYSTACK_YEARLY_AMOUNT || "990000")
+      : Number((c.env as Env)?.PAYSTACK_MONTHLY_AMOUNT || "290000");
+    if (!Number.isInteger(configuredAmount) || configuredAmount <= 0) {
+      return c.json({ error: "PAYSTACK_AMOUNT_NOT_CONFIGURED" }, 503);
+    }
     const origin = new URL(c.req.url).origin;
     const payload: Record<string, unknown> = {
       email,
-      amount,
-      currency: "USD",
+      amount: configuredAmount,
+      currency,
       callback_url: `${origin}/pricing?paystack=success`,
       metadata: { userId: user.id, plan },
     };
-    if (planCode) payload.plan = planCode;
+    // A Paystack plan can carry its own currency. Only use it when it matches
+    // the configured merchant currency; otherwise the one-time charge remains
+    // in the supported currency selected above.
+    if (planCode && String((c.env as Env)?.PAYSTACK_PLAN_CURRENCY || "").toUpperCase() === currency) payload.plan = planCode;
     const response = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
       headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
@@ -1337,7 +1515,11 @@ function createApiApp() {
     }
 
     const plan = transaction?.metadata?.plan === "yearly" ? "yearly" : "monthly";
-    proSubscriptions.set(user.id, { active: true, plan, reference, updatedAt: Date.now() });
+    const subscription = { active: true, plan, reference, updatedAt: Date.now() };
+    proSubscriptions.set(user.id, subscription);
+    if ((c.env as Env)?.KV) {
+      await (c.env as Env).KV!.put(`subscription:${user.id}`, JSON.stringify(subscription));
+    }
     return c.json({ success: true, isPro: true, plan });
   });
   app.post("/api/paystack/webhook", async (c) => {
@@ -1356,7 +1538,11 @@ function createApiApp() {
     }
     if (event.event === "charge.success") {
       const userId = event.data?.metadata?.userId;
-      if (userId) proSubscriptions.set(userId, { active: true, plan: event.data?.metadata?.plan || "monthly", reference: event.data?.reference, updatedAt: Date.now() });
+      if (userId) {
+        const subscription = { active: true, plan: event.data?.metadata?.plan || "monthly", reference: event.data?.reference, updatedAt: Date.now() };
+        proSubscriptions.set(userId, subscription);
+        if ((c.env as Env)?.KV) await (c.env as Env).KV!.put(`subscription:${userId}`, JSON.stringify(subscription));
+      }
     }
     return c.json({ received: true });
   });
@@ -1445,6 +1631,7 @@ function createApiApp() {
           likes: v.statistics.likeCount,
           likeCount: Number(v.statistics.likeCount || 0),
           comments: v.statistics.commentCount,
+          description: v.snippet.description || "",
           duration: v.contentDetails.duration,
           publishedAt: v.snippet.publishedAt,
           statistics: v.statistics,
@@ -1453,7 +1640,12 @@ function createApiApp() {
         }
       });
 
-      app.get("/api/video/:id/comments", async (c) => {
+    } catch (e: any) {
+      return c.json({ error: e.message }, 500);
+    }
+  });
+
+  app.get("/api/video/:id/comments", async (c) => {
         const id = c.req.param("id");
         const apiKey = (c.env as Env)?.YOUTUBE_API_KEY || "";
         const maxResults = Math.min(Math.max(Number(c.req.query("max") || "20"), 1), 100);
@@ -1486,10 +1678,6 @@ function createApiApp() {
         } catch (e: any) {
           return c.json({ comments: [], real: false, error: e.message || "Unable to load comments" }, 502);
         }
-      });
-    } catch (e: any) {
-      return c.json({ error: e.message }, 500);
-    }
   });
 
   // === NEW: Channel — real YouTube for any UC id (no mock), falls back to inMemory

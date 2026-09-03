@@ -1,4 +1,4 @@
-const CACHE_NAME = 'alphatekx-v18-google-signup';
+const CACHE_NAME = 'alphatekx-v20-google-signup';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',

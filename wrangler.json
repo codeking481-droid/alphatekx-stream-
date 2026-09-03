@@ -5,10 +5,17 @@
   "assets": {
     "directory": "./public",
     "html_handling": "auto-trailing-slash",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": [
+      "/api/*"
+    ]
   },
   "vars": {
-    "GOOGLE_REDIRECT_URI": "https://alphatekx.name.ng/api/auth/callback"
+    "GOOGLE_REDIRECT_URI": "https://alphatekx.name.ng/api/auth/callback",
+    "PAYSTACK_CURRENCY": "NGN",
+    "PAYSTACK_PLAN_CURRENCY": "NGN",
+    "PAYSTACK_MONTHLY_AMOUNT": "2900000",
+    "PAYSTACK_YEARLY_AMOUNT": "15000000"
   },
   "d1_databases": [
     {

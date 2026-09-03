@@ -310,6 +310,11 @@ function normalizeVideo(v) {
     channelId: v.channelId || v.channel?.id || v.channelId || (v.channelName ? "" : "") || "",
     subscribers: v.subscribers || (v.subscribersCount ? String(v.subscribersCount) : "") || "",
     views: v.views || v.viewsFormatted || "",
+    viewsRaw: v.viewsRaw || 0,
+    likes: v.likes || (v.likeCount != null ? `${Number(v.likeCount).toLocaleString()} likes` : "0 likes"),
+    likeCount: Number(v.likeCount || 0),
+    comments: v.comments || (v.commentCount != null ? `${Number(v.commentCount).toLocaleString()} comments` : "0 comments"),
+    commentCount: Number(v.commentCount || 0),
     timeAgo: v.timeAgo || "",
     duration: v.duration || "",
     tag: v.tag || "",
@@ -347,6 +352,9 @@ function isShortFormVideo(video) {
 }
 
 // --- Main App Component ---
+// Keep this build marker in the bundle so deployments replace clients still
+// holding the previous index.html/app.jsx query string in an edge cache.
+const AUTH_BUILD = "google-signup-4";
 function App() {
   // GATED EXPERIENCE — auth state
   const [authUser, setAuthUser] = useState(null);
@@ -383,7 +391,7 @@ function App() {
       .catch(() => {});
   }, []);
   useEffect(() => {
-    fetch('/api/auth/user', { credentials: 'include' }).then(r=>r.ok?r.json():null).then(d=>{
+    fetch('/api/auth/user?auth_build=' + encodeURIComponent(AUTH_BUILD), { credentials: 'include', cache: 'no-store' }).then(r=>r.ok?r.json():null).then(d=>{
       if(d && !d.isGuest && d.id) setAuthUser(d);
       else if(d && d.channelName) setAuthUser(d);
       else setAuthUser(null);
@@ -459,12 +467,33 @@ function App() {
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('alphatekx_api_key') || '');
   const [showPaywall, setShowPaywall] = useState(false);
   const [byokKey, setByokKey] = useState(() => localStorage.getItem('alphatekx_api_key') || '');
+  const [byokStatus, setByokStatus] = useState(() => localStorage.getItem('alphatekx_api_key') ? "Key saved ✓" : "Alphatekx AI ready");
   const [building, setBuilding] = useState(false);
   const [aiChatMessages, setAiChatMessages] = useState([
-    { role: "ai", text: "Hi! I'm your AI Teacher. Ask me anything about this video. 🎓" }
+    { role: "ai", text: "Hi! I'm your AI Workspace assistant. Ask me to build, debug, explain, or improve anything, and I can turn the result into a live preview." }
   ]);
   const [agentFiles, setAgentFiles] = useState({});
   const [aiChatInput, setAiChatInput] = useState("");
+  useEffect(() => {
+    const saved = localStorage.getItem("alphatekx_api_key") || "";
+    if (saved) setByokStatus("Key saved ✓");
+  }, []);
+  const saveByokKey = (value) => {
+    setByokKey(value);
+    try {
+      if (value.trim()) {
+        localStorage.setItem("alphatekx_api_key", value.trim());
+        setApiKey(value.trim());
+        setByokStatus("Key saved ✓");
+      } else {
+        localStorage.removeItem("alphatekx_api_key");
+        setApiKey("");
+        setByokStatus("Using Alphatekx AI");
+      }
+    } catch {
+      setByokStatus("Key stays for this session");
+    }
+  };
   // Notebook
   const [notebookTab, setNotebookTab] = useState("write");
   const [notebookNotes, setNotebookNotes] = useState(() => {
@@ -504,17 +533,18 @@ function App() {
       const cleanContent = content.trim();
       files.push({ type, path, content: cleanContent });
       count++;
-      // Apply multi-file to codeValue / editors
-      if (path.endsWith('.ts') || path.endsWith('.tsx') || (path === 'index.html' && watchPanelTab === "code")) {
+      // Keep the primary document in the editor while preserving every file.
+      if (path === 'index.html' || path.endsWith('.ts') || path.endsWith('.tsx')) {
         setCodeValue(cleanContent);
         if (monacoEditorRef.current) try { monacoEditorRef.current.setValue(cleanContent); } catch {}
       }
     }
+    if (files.length) setAgentFiles(prev => ({ ...prev, ...Object.fromEntries(files.map(file => [file.path, file.content])) }));
     if (count > 0) {
-      setWatchPanelTab("code");
-      setWatchPanelOpen(false);
+      setWatchPanelTab("preview");
+      setWatchPanelOpen(true);
       setActiveTab("workspace");
-      setTimeout(() => showToast(`✨ Agent built ${count} file${count>1?'s':''} → Preview`), 300);
+      setTimeout(() => showToast(`✨ Agent built ${count} file${count>1?'s':''} → Live Preview`), 300);
     }
     // Command parsing
     const cmdMatch = text.match(/<run_command>([\s\S]*?)<\/run_command>/gi);
@@ -537,6 +567,7 @@ function App() {
       const res = await fetch("/api/workspace", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ prompt: q, videoId: activeVideo?.youtubeId || activeVideo?.id, title: activeVideo?.title, transcript: activeVideo?.description || "" })
       });
       const data = await res.json().catch(() => ({}));
@@ -545,12 +576,18 @@ function App() {
         throw new Error(data.message || data.error || `AI ${res.status}`);
       }
       const content = data.message || JSON.stringify(data.result || {});
+      let files = [];
+      try { files = vibeParserAgent(content); } catch { showToast("Build failed, try rephrase"); }
       setAiChatMessages(prev => [...prev, { role: "ai", text: content }]);
-      if (data.result?.code) setCodeValue(data.result.code);
-      setWatchPanelTab("preview");
-      setWatchPanelOpen(false);
-      setActiveTab("workspace");
-      showToast("🤖 AI workspace ready");
+      if (!files.length && data.result?.code) setCodeValue(data.result.code);
+      if (!files.length && !data.result?.code) {
+        showToast("AI explained the request — no files were created");
+      } else if (!files.length) {
+        setWatchPanelTab("preview");
+        setWatchPanelOpen(true);
+        setActiveTab("workspace");
+      }
+      showToast(files.length ? `🤖 Built ${files.length} file${files.length > 1 ? "s" : ""} → Preview` : "🤖 AI workspace ready");
     } catch (e) {
       setAiChatMessages(prev => [...prev, { role: "ai", text: `AI request failed: ${e.message}` }]);
       showToast(e.message || "AI request failed");
@@ -949,9 +986,6 @@ function App() {
   // === NEW: Fetch categories + profile on mount (preserve design) ===
   useEffect(() => {
     fetch("/api/categories").then(r=>r.ok?r.json():null).then(d=>{ if(d && Array.isArray(d.categories)) setCategories(d.categories); }).catch(()=>{});
-    fetch("/api/profile").then(r=>r.ok?r.json():null).then(d=>{
-      if(d && d.profile){ setProfileData(d.profile); setProfileForm({ name:d.profile.name||"", handle:d.profile.handle||"", bio:d.profile.bio||"", avatar:d.profile.avatar||"", banner:d.profile.banner||"", email:d.profile.email||"" }); }
-    }).catch(()=>{});
     // watch later sync
     fetch("/api/watch-later").then(r=>r.ok?r.json():null).then(d=>{
       if(d && Array.isArray(d.videos) && d.videos.length>0){
@@ -960,6 +994,15 @@ function App() {
       }
     }).catch(()=>{});
   }, []);
+  useEffect(() => {
+    if (authLoading || authUser) return;
+    fetch("/api/profile").then(r=>r.ok?r.json():null).then(d=>{
+      if(d && d.profile && !authUser){
+        setProfileData(d.profile);
+        setProfileForm({ name:d.profile.name||"", handle:d.profile.handle||"", bio:d.profile.bio||"", avatar:d.profile.avatar||"", banner:d.profile.banner||"", email:d.profile.email||"" });
+      }
+    }).catch(()=>{});
+  }, [authLoading, authUser]);
   useEffect(()=>{ try{ localStorage.setItem("alphatekx_watch_later", JSON.stringify(watchLater)); }catch{} }, [watchLater]);
   // GATED: YouTube becomes profile — as soon as user signs in, his YouTube is his profile
   useEffect(() => {
@@ -1247,24 +1290,36 @@ function App() {
     }
   ]);
 
-  // Load the official channel feed so Home and Shorts use the same live catalog.
+  // Load fresh recommendations so Home is not pinned to the starter catalog.
   useEffect(() => {
-    fetch("/api/channel/videos?max=30").then(r=>r.ok?r.json():null).then(d=>{
+    fetch(`/api/feed?refresh=${Date.now()}`, { cache: "no-store" }).then(r=>r.ok?r.json():null).then(d=>{
       const real = uniqueVideos(Array.isArray(d?.videos) ? d.videos.map(normalizeVideo) : []);
       if (!real.length) return;
       setVideoCatalog(real);
-      const toSeconds = (duration) => {
-        const parts = String(duration || "").split(":").map(Number);
-        if (parts.length < 2 || parts.some(Number.isNaN)) return Infinity;
-        return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
-      };
-      // Shorts are fetched from the dedicated real/trending endpoint below.
     }).catch(()=>{});
     loadShortsPage(true);
+    const refresh = setInterval(() => {
+      fetch(`/api/feed?refresh=${Date.now()}`, { cache: "no-store" }).then(r=>r.ok?r.json():null).then(d => {
+        const real = uniqueVideos(Array.isArray(d?.videos) ? d.videos.map(normalizeVideo) : []);
+        if (real.length) setVideoCatalog(real);
+      }).catch(()=>{});
+    }, 15 * 60 * 1000);
+    return () => clearInterval(refresh);
   }, []);
 
   // Active Video State — also track watched history real-time + real likes/views (no mock)
   const [activeVideo, setActiveVideo] = useState(videoCatalog[0]);
+  useEffect(() => {
+    const videoId = activeVideo?.youtubeId || activeVideo?.id || "default";
+    try {
+      const saved = localStorage.getItem(`alphatekx_files_${videoId}`);
+      if (saved) setAgentFiles(JSON.parse(saved));
+    } catch {}
+  }, [activeVideo?.youtubeId, activeVideo?.id]);
+  useEffect(() => {
+    const videoId = activeVideo?.youtubeId || activeVideo?.id || "default";
+    try { localStorage.setItem(`alphatekx_files_${videoId}`, JSON.stringify(agentFiles || {})); } catch {}
+  }, [agentFiles, activeVideo?.youtubeId, activeVideo?.id]);
   useEffect(() => {
     const requestedId = new URLSearchParams(window.location.search).get("v");
     if (!requestedId) return;
@@ -1539,12 +1594,14 @@ function App() {
   const [isBuildingCourse, setIsBuildingCourse] = useState(false);
   const [teacherQuestion, setTeacherQuestion] = useState("");
   const [teacherAnswer, setTeacherAnswer] = useState("");
+  const [teacherMessages, setTeacherMessages] = useState([]);
   const [isAskingTeacher, setIsAskingTeacher] = useState(false);
   const [showWatchTeacher, setShowWatchTeacher] = useState(false);
 
   // Superpower 8: AI Memory & Chat with History
   const [memoryQuery, setMemoryQuery] = useState("");
   const [memoryResults, setMemoryResults] = useState([]);
+  const [memoryAnswer, setMemoryAnswer] = useState("");
 
   // Superpower 9: AI Studio — PROMPT #5 Pro Toolkit
   const [studioTool, setStudioTool] = useState("clip");
@@ -1563,6 +1620,11 @@ function App() {
   const [studioTemplates, setStudioTemplates] = useState([]);
   const [videoJots, setVideoJots] = useState([]);
   const [jotsLoading, setJotsLoading] = useState(false);
+  const [captureTranscript, setCaptureTranscript] = useState("");
+  const [captureNotes, setCaptureNotes] = useState(null);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [isCleaningCapture, setIsCleaningCapture] = useState(false);
+  const captureRecognitionRef = useRef(null);
 
   // Superpower 10: Monetization Pro Subscription
   const [isProUser, setIsProUser] = useState(false);
@@ -1943,7 +2005,7 @@ function App() {
     if (!teacherGoal.trim()) { showToast("Tell AI what you want to learn first"); return; }
     setIsBuildingCourse(true);
     try {
-      const res = await fetch("/api/teacher/build", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ goal: teacherGoal }) });
+      const res = await fetch("/api/teacher/build", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify({ goal: teacherGoal, prompt: teacherGoal }) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         if (res.status === 401 || res.status === 403) setShowPaywall(true);
@@ -1968,14 +2030,17 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ videoId: activeVideo?.youtubeId || activeVideo?.id, title: activeVideo?.title, description: activeVideo?.description, question }),
+        body: JSON.stringify({ prompt: question, question, videoId: activeVideo?.youtubeId || activeVideo?.id, title: activeVideo?.title, description: activeVideo?.description }),
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) setShowPaywall(true);
         throw new Error(data.message || data.error || "AI Teacher request failed");
       }
-      setTeacherAnswer(data.result?.answer || data.result?.text || data.answer || data.message || "AI Teacher returned no answer.");
+      const answer = data.result?.answer || data.result?.text || data.answer || data.message || "AI Teacher returned no answer.";
+      setTeacherAnswer(answer);
+      setTeacherMessages(prev => [...prev, { question, answer }]);
+      setTeacherQuestion("");
     } catch (error) {
       showToast(error.message || "AI Teacher request failed");
     } finally {
@@ -2026,27 +2091,71 @@ function App() {
     link.click();
     URL.revokeObjectURL(url);
   };
+  const startLiveCapture = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SpeechRecognition) { showToast("Live capture is not supported in this browser"); return; }
+    if (isCapturing) { captureRecognitionRef.current?.stop(); setIsCapturing(false); return; }
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = "en-US";
+    recognition.onresult = event => {
+      let finalText = "";
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        if (event.results[i].isFinal) finalText += `${event.results[i][0].transcript} `;
+      }
+      if (finalText) setCaptureTranscript(prev => `${prev} ${finalText}`.trim());
+    };
+    recognition.onerror = () => { setIsCapturing(false); showToast("Capture stopped — check microphone permission"); };
+    recognition.onend = () => setIsCapturing(false);
+    captureRecognitionRef.current = recognition;
+    setCaptureTranscript("");
+    setCaptureNotes(null);
+    setIsCapturing(true);
+    recognition.start();
+    showToast("Live capture started — speak clearly while the video plays");
+  };
+  const cleanLiveCapture = async () => {
+    if (!captureTranscript.trim()) { showToast("Capture some speech first"); return; }
+    setIsCleaningCapture(true);
+    try {
+      const response = await fetch("/api/capture/clean", {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({ transcript: captureTranscript, title: activeVideo?.title || "Live video capture" }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || data.error || "Unable to clean capture");
+      setCaptureNotes(data.result || data);
+      showToast("Capture cleaned and organized");
+    } catch (error) { showToast(error.message || "Unable to clean capture"); }
+    finally { setIsCleaningCapture(false); }
+  };
+  const exportCapture = (format) => {
+    if (!captureNotes) { showToast("Clean the capture first"); return; }
+    const sections = (captureNotes.sections || []).map(section => `## ${section.heading}\n${(section.bullets || []).map(item => `- ${item}`).join("\n")}`).join("\n\n");
+    const text = `# ${captureNotes.title || activeVideo?.title || "Alphatekx Capture"}\n\n${captureNotes.summary || ""}\n\n${sections}\n\n## Key terms\n${(captureNotes.keyTerms || []).join(", ")}\n\n## Action items\n${(captureNotes.actionItems || []).map(item => `- ${item}`).join("\n")}`;
+    const blob = new Blob([text], { type: format === "txt" ? "text/plain" : "text/markdown" });
+    const url = URL.createObjectURL(blob); const link = document.createElement("a"); link.href = url; link.download = `alphatekx-capture.${format}`; link.click(); URL.revokeObjectURL(url);
+  };
 
-  // Memory Search — real /api/memory/search with fallback
+   // Memory Search — only persisted server history; never manufacture results client-side.
   const handleMemorySearch = async (e) => {
     e.preventDefault();
     if (!memoryQuery.trim()) return;
     try {
       const res = await fetch(`/api/memory/search?q=${encodeURIComponent(memoryQuery)}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data && Array.isArray(data.results) && data.results.length>0) {
-          setMemoryResults(data.results.map(r=> ({ title: r.title, watchedAgo: r.timestamp ? `Watched ${r.timestamp}` : "Watched recently", snippet: r.snippet, videoId: r.videoId, timestamp: r.timestamp || "00:00" })) );
-          showToast(`Memory found ${data.results.length} matches`);
-          return;
-        }
-      }
-      throw new Error("fallback");
-    } catch {
-      setMemoryResults([
-        { title: "How to Build Neural Networks from Scratch", watchedAgo: "Watched 3 weeks ago", snippet: "Training loop loss calculation at 12:30", videoId: "dQw4w9WgXcQ", timestamp: "12:30" },
-        { title: "Building Real-time AI Voice Agents", watchedAgo: "Watched 12 days ago", snippet: "Low-latency WebSocket buffer setup at 04:12", videoId: "L_LUpnjgPso", timestamp: "04:12" }
-      ]);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || data.error || "Memory search failed");
+      setMemoryResults((data.results || []).map(r=> ({ title: r.title, watchedAgo: r.timestamp ? `Watched at ${r.timestamp}` : "From your history", snippet: r.snippet, videoId: r.videoId, timestamp: r.timestamp || "00:00" })));
+      const chatResponse = await fetch("/api/memory/chat", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ message: memoryQuery }) });
+      const chatData = await chatResponse.json().catch(() => ({}));
+      if (chatResponse.ok) setMemoryAnswer(chatData.result?.answer || chatData.result?.text || chatData.answer || chatData.message || "");
+      if (!data.results?.length) showToast("No matching items in your persisted history");
+      else showToast(`Memory found ${data.results.length} matches`);
+    } catch (error) {
+      setMemoryResults([]);
+      setMemoryAnswer("");
+      showToast(error.message || "Memory search failed");
     }
   };
   useEffect(() => {
@@ -2079,6 +2188,17 @@ function App() {
   const searchFiltered = (activePlatform==="all" ? searchResults : searchResults.filter(v=> (v.platform||"youtube")===activePlatform)).filter(isLongFormVideo);
   const homeFiltered = (activePlatform==="all" ? filteredVideos : filteredVideos.filter(v=> (v.platform||"youtube")===activePlatform)).filter(isLongFormVideo);
   const featuredVideo = videoCatalog.find(isLongFormVideo) || DEFAULT_VIDEO;
+  const workspacePreviewDocument = () => {
+    const files = agentFiles || {};
+    let raw = files["index.html"] || codeValue || "";
+    raw = raw.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+    const css = files["style.css"] || "";
+    const js = files["script.js"] || "";
+    if (css) raw = raw.includes("</head>") ? raw.replace("</head>", `<style>${css}</style></head>`) : `${raw}<style>${css}</style>`;
+    if (js) raw = raw.includes("</body>") ? raw.replace("</body>", `<script>${js}</script></body>`) : `${raw}<script>${js}</script>`;
+    const isFull = raw.toLowerCase().startsWith("<!doctype") || raw.toLowerCase().startsWith("<html");
+    return isFull ? raw : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body>${raw}</body></html>`;
+  };
 
     return (
     <div className="h-screen w-full max-w-[100vw] overflow-hidden flex flex-col bg-[#08080f] p-0 sm:p-3 text-white font-sans selection:bg-[#FFD700] selection:text-black">
@@ -2703,7 +2823,7 @@ function App() {
                 {/* Code panel — responsive */}
                 <div className="lg:col-span-6 min-w-0">
                   <div className="bg-[#0f0f1f] border border-white/10 rounded-2xl overflow-hidden shadow-xl flex flex-col h-[55vh] lg:h-[58vh] min-h-[420px]">
-                    <div className="flex border-b border-white/10 bg-[#0f0f1f] overflow-x-auto scrollbar-hide">
+                    <div className="flex flex-nowrap gap-2 border-b border-white/10 bg-[#0f0f1f] overflow-x-auto scrollbar-hide touch-pan-x">
                       <button onClick={()=>setWatchPanelTab("code")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="code"?"bg-[#FFD700] text-black":"text-gray-400"}`}>Code &lt;/&gt;</button>
                       <button onClick={()=>setWatchPanelTab("preview")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="preview"?"bg-[#00D9FF] text-black":"text-gray-400"}`}>Preview</button>
                       <button onClick={()=>setWatchPanelTab("ai")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="ai"?"bg-[#A855F7] text-white":"text-gray-400"}`}>AI</button>
@@ -2725,7 +2845,7 @@ function App() {
                             <span>Line {codeValue.split('\n').length} • {codeValue.length} chars</span>
                             <button onClick={()=>{ setCodeValue(''); showToast('Cleared — ready to code!'); }} className="min-h-[32px] px-3 rounded-full bg-[#FFD700]/10 text-[#FFD700] hover:bg-[#FFD700]/20 text-xs font-bold">Clear</button>
                           </div>
-                          <button onClick={()=>{ setWatchPanelTab('preview'); showToast('Running → Preview'); }} className="m-3 py-3.5 rounded-xl bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-extrabold text-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition flex items-center justify-center gap-2">▶ Run</button>
+                          <button onClick={()=>{ setWatchPanelTab('preview'); showToast('Running → Preview'); }} className="sticky bottom-0 z-10 m-3 min-h-12 py-3.5 rounded-xl bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-extrabold text-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition flex items-center justify-center gap-2">▶ Run</button>
                           <button onClick={async () => {
                             if (!isProUser) { setShowPaywall(true); return; }
                             const title = window.prompt("Marketplace app title", activeVideo?.title || "My AI app");
@@ -2738,16 +2858,14 @@ function App() {
                           }} className="mx-3 mb-3 py-2.5 rounded-xl border border-[#00FF88]/40 text-[#00FF88] font-bold text-sm">Publish to Marketplace</button>
                         </div>
                       )}
-                      {watchPanelTab==="preview" && (()=>{ const raw=(codeValue||'').trim(); const decoded = raw.includes('&lt;')||raw.includes('&gt;') ? raw.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&') : raw; const isFull = decoded.toLowerCase().startsWith('<!doctype')||decoded.toLowerCase().startsWith('<html'); const doc = isFull ? decoded : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:24px;font-family:system-ui,sans-serif;background:#0B0215;color:#fff}</style></head><body>${decoded}</body></html>`; return (<iframe key={doc} title="Live Preview" srcDoc={doc} sandbox="allow-scripts allow-same-origin allow-modals allow-forms" className="flex-1 w-full border-0 bg-white" />); })()}
+                      {watchPanelTab==="preview" && (()=>{ const doc = workspacePreviewDocument(); return (<iframe key={doc} title="Live Preview" srcDoc={doc} sandbox="allow-scripts allow-same-origin allow-modals allow-forms" className="flex-1 w-full border-0 bg-white" />); })()}
                       {watchPanelTab==="ai" && (
                         <div className="flex-1 flex flex-col min-h-0 bg-[#0B0215]">
                           <div className="flex items-center gap-2 px-3 py-3 bg-[#1a1030] border-b border-[#FFD700]/20">
                             <span className="text-[#FFD700]">🔑</span>
-                            <input type="password" value={byokKey} onChange={e=>setByokKey(e.target.value)} placeholder="Paste DeepSeek/OpenAI key — stored locally" className="flex-1 min-h-[36px] bg-black/60 border border-[#FFD700]/30 rounded-full px-4 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]" />
-                            <button onClick={()=>{localStorage.setItem('alphatekx_api_key',byokKey); setApiKey(byokKey); showToast('Key saved — AI unlocked!');}} className="px-4 py-2 bg-[#FFD700] text-black font-bold rounded-full text-xs hover:brightness-110">Save</button>
-                            {byokKey && <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" title="Key saved"></span>}
-                            {byokKey && <span className="text-xs text-green-400 font-bold hidden sm:inline">Key saved</span>}
-                            <button onClick={()=>setShowPaywall(true)} className="hidden sm:block px-3 py-1.5 bg-[#FFD700]/20 text-[#FFD700] border border-[#FFD700]/30 rounded-full text-xs font-bold hover:bg-[#FFD700]/30">Use Alphatekx Credits ₦500</button>
+                            <input id="byok-input" type="password" value={byokKey} onChange={e=>saveByokKey(e.target.value)} placeholder="Paste DeepSeek/OpenAI key (optional)" className="flex-1 min-h-[36px] bg-black/60 border border-[#FFD700]/30 rounded-full px-4 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]" />
+                            <span className={`text-[10px] font-bold whitespace-nowrap ${byokKey ? "text-green-400" : "text-gray-400"}`}>{byokStatus}</span>
+                            <button onClick={()=>setShowPaywall(true)} className="hidden sm:block px-3 py-1.5 bg-[#FFD700]/20 text-[#FFD700] border border-[#FFD700]/30 rounded-full text-xs font-bold hover:bg-[#FFD700]/30">Use Credits</button>
                           </div>
                           <div className="sm:hidden px-3 pb-2 bg-[#1a1030]"><button onClick={()=>setShowPaywall(true)} className="w-full py-2 bg-[#FFD700]/20 text-[#FFD700] border border-[#FFD700]/30 rounded-full text-xs font-bold">Use Alphatekx Credits ₦500</button></div>
                           <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-[#0B0215]">
@@ -3121,16 +3239,31 @@ function App() {
                           <button onClick={() => showToast(`Subscribed to ${short.channel}!`)} className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-black">Subscribe</button>
                         </div>
                         <p className="line-clamp-2 text-sm leading-snug text-white">{short.title}</p>
-                        <p className="text-xs text-gray-300">{short.views} • {short.subscribers} subs</p>
+                        <p className="line-clamp-3 text-xs leading-5 text-gray-300">{short.description || "Watch this Short on Alphatekx."}</p>
+                        <p className="text-xs text-gray-300">{short.views || "0 views"} • {short.likes || "0 likes"} • {short.comments || "0 comments"}</p>
                       </div>
                       <div className="absolute bottom-4 right-3 z-10 flex flex-col items-center gap-3">
-                        <button onClick={() => setShortsLiked(s => ({ ...s, [short.id]: !s[short.id] }))} aria-label="Like short" className={`flex h-11 w-11 items-center justify-center rounded-full bg-black/60 ${shortsLiked[short.id] ? "text-[#FFD700]" : "text-white"}`}><Icon name="like" className="h-6 w-6" /></button>
+                        <button onClick={() => { if (isGuest) { setShowSignUpBlock(true); return; } setShortsLiked(s => ({ ...s, [short.id]: !s[short.id] })); }} aria-label={`Like short (${short.likes || "0 likes"})`} className={`flex h-11 w-11 flex-col items-center justify-center rounded-full bg-black/60 ${shortsLiked[short.id] ? "text-[#FFD700]" : "text-white"}`}><Icon name="like" className="h-6 w-6" /><span className="text-[9px]">{short.likes || "0"}</span></button>
                         <button onClick={() => { setShortsCommentsOpen(true); loadVideoComments(short.youtubeId); }} aria-label={`Comments on ${short.title}`} className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="chat" className="h-6 w-6" /></button>
                         <button onClick={() => { navigator.clipboard?.writeText(`https://youtu.be/${short.youtubeId}`); showToast("Link copied"); }} aria-label="Share short" className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="share" className="h-6 w-6" /></button>
                       </div>
                     </article>
                   ))}
                 </div>
+              </div>
+              <div className="mt-4 border-t border-white/10 pt-4">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <div><p className="text-xs font-bold text-white">Live Capture</p><p className="text-[11px] text-gray-500">Capture spoken discussion through your microphone, then clean it into exportable notes.</p></div>
+                  <button onClick={startLiveCapture} className={`shrink-0 rounded-full px-3 py-2 text-[11px] font-bold ${isCapturing ? "bg-red-500 text-white" : "bg-[#00FF88] text-black"}`}>{isCapturing ? "Stop" : "Start capture"}</button>
+                </div>
+                {(captureTranscript || captureNotes) && <div className="space-y-2">
+                  <textarea value={captureTranscript} onChange={e => setCaptureTranscript(e.target.value)} placeholder="Your live transcript appears here..." className="w-full min-h-[80px] rounded-xl border border-white/10 bg-black/40 p-3 text-xs text-gray-200 outline-none focus:border-[#00FF88]" />
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={cleanLiveCapture} disabled={isCleaningCapture} className="rounded-full bg-[#A855F7] px-3 py-2 text-[11px] font-bold text-white">{isCleaningCapture ? "Cleaning..." : "Clean with AI"}</button>
+                    {captureNotes && <><button onClick={() => exportCapture("md")} className="rounded-full border border-white/15 px-3 py-2 text-[11px] font-bold text-white">Export Markdown</button><button onClick={() => exportCapture("txt")} className="rounded-full border border-white/15 px-3 py-2 text-[11px] font-bold text-white">Download TXT</button></>}
+                  </div>
+                  {captureNotes && <div className="rounded-xl border border-[#00FF88]/20 bg-black/30 p-3 text-xs text-gray-200 space-y-2"><p className="font-bold text-white">{captureNotes.title || "Clean capture"}</p><p>{captureNotes.summary}</p>{(captureNotes.sections || []).slice(0, 3).map(section => <div key={section.heading}><p className="font-bold text-[#00FF88]">{section.heading}</p><ul className="list-disc pl-4">{(section.bullets || []).slice(0, 4).map(item => <li key={item}>{item}</li>)}</ul></div>)}</div>}
+                </div>}
               </div>
             </section>
           )}
@@ -3172,13 +3305,15 @@ function App() {
                   e.preventDefault();
                   const text = shortsCommentText.trim();
                   if (!text) return;
+                  if (isGuest) { setShowSignUpBlock(true); return; }
                   const id = currentShort.youtubeId;
                   setShortsComments(prev => ({ ...prev, [id]: [...(prev[id] || []), { id: Date.now(), author: "You", text }] }));
                   setShortsCommentText("");
                   fetch("/api/community/send", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ message: text, channel: "shorts", videoId: id, userName: "You" })
+                    credentials: "include",
+                    body: JSON.stringify({ message: text, channel: "shorts", videoId: id, userName: authUser?.name || authUser?.email || "You", avatarInitials: (authUser?.name || authUser?.email || "Y").charAt(0).toUpperCase() })
                   }).catch(() => {});
                 }} className="flex gap-2 border-t border-white/10 pt-3">
                   <input value={shortsCommentText} onChange={e => setShortsCommentText(e.target.value)} placeholder="Add a comment..." className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:border-[#FFD700]" />
@@ -3191,16 +3326,28 @@ function App() {
           {/* ------------------- SUPERPOWER #7: AI TEACHER ------------------- */}
           {activeTab === "teacher" && (
             <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-8">
-              <div className="glass-card neon-border-green p-8 text-center space-y-4">
-                <div className="w-14 h-14 rounded-2xl bg-[#00FF88]/20 text-[#00FF88] flex items-center justify-center mx-auto border border-[#00FF88]/40">
-                  <Icon name="teacher" className="w-8 h-8" />
+              <div className="glass-card neon-border-green overflow-hidden">
+                <div className="p-6 md:p-8 bg-gradient-to-br from-[#10231d] via-[#12121e] to-[#171126]">
+                  <div className="flex items-start gap-4">
+                    <div className="w-12 h-12 rounded-2xl bg-[#00FF88]/15 text-[#00FF88] flex items-center justify-center border border-[#00FF88]/30 flex-shrink-0">
+                      <Icon name="teacher" className="w-7 h-7" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#00FF88]">Alphatekx Learning Lab</p>
+                      <h1 className="text-2xl md:text-3xl font-extrabold text-white mt-1">AI Teacher</h1>
+                      <p className="text-sm text-gray-300 mt-2 max-w-2xl">A patient, expert tutor for any question. Learn a new subject, solve a difficult problem, prepare for an exam, or explore the current video.</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2 mt-6">
+                    {["Explain a concept simply", "Help me study for an exam", "Create a learning plan"].map(suggestion => (
+                      <button key={suggestion} onClick={() => setTeacherQuestion(suggestion)} className="rounded-full border border-white/15 bg-white/5 px-3 py-2 text-xs text-gray-300 hover:border-[#00FF88]/60 hover:text-white">{suggestion}</button>
+                    ))}
+                  </div>
                 </div>
-                <h1 className="text-2xl md:text-3xl font-extrabold text-white">AI Teacher & Course Builder</h1>
-                <p className="text-sm text-gray-300 max-w-lg mx-auto">
-                  YouTube doesn't build structured courses. Tell Alphatekx AI what skill you want to master, and it will generate a 5-step curriculum with hand-picked YouTube tutorials.
-                </p>
-
-                <div className="flex flex-col sm:flex-row items-center gap-3 max-w-xl mx-auto pt-4">
+                <div className="p-6 md:p-8 space-y-6">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mb-2">Build a guided course</p>
+                    <div className="flex flex-col sm:flex-row items-center gap-3">
                   <input
                     type="text"
                     value={teacherGoal}
@@ -3216,13 +3363,20 @@ function App() {
                     {isBuildingCourse ? "Building Course..." : "Build Course ✨"}
                   </button>
                 </div>
-                <div className="max-w-xl mx-auto pt-5 border-t border-white/10 space-y-3 text-left">
-                  <p className="text-xs font-bold text-[#FFD700]">Ask about the current video</p>
+                  </div>
+                  <div className="border-t border-white/10 pt-5 space-y-3 text-left">
+                  <p className="text-xs font-bold text-[#FFD700]">Ask your tutor anything</p>
+                  {teacherMessages.length > 0 && <div className="space-y-4 max-h-80 overflow-y-auto pr-1">
+                    {teacherMessages.map((message, index) => <div key={index} className="space-y-2">
+                      <div className="ml-auto max-w-[90%] rounded-2xl rounded-br-sm bg-[#00FF88]/15 border border-[#00FF88]/20 px-4 py-3 text-sm text-white">{message.question}</div>
+                      <div className="max-w-[95%] rounded-2xl rounded-bl-sm bg-black/40 border border-white/10 px-4 py-3 text-sm leading-6 text-gray-200 whitespace-pre-wrap">{message.answer}</div>
+                    </div>)}
+                  </div>}
                   <div className="flex gap-2">
-                    <input value={teacherQuestion} onChange={e => setTeacherQuestion(e.target.value)} placeholder="What is this video about?" className="min-w-0 flex-1 bg-black/80 border border-white/20 rounded-xl px-4 py-3 text-sm text-white" />
+                    <input value={teacherQuestion} onChange={e => setTeacherQuestion(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleAskTeacher(); }} placeholder="Ask anything — maths, code, business, science..." className="min-w-0 flex-1 bg-black/80 border border-white/20 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-[#FFD700]" />
                     <button onClick={handleAskTeacher} disabled={isAskingTeacher} className="px-4 py-3 bg-[#FFD700] text-black font-bold text-xs rounded-xl">{isAskingTeacher ? "Asking…" : "Ask"}</button>
                   </div>
-                  {teacherAnswer && <div className="rounded-xl bg-black/50 border border-[#FFD700]/30 p-4 text-sm text-gray-200 whitespace-pre-wrap">{teacherAnswer}</div>}
+                </div>
                 </div>
               </div>
 
@@ -3299,6 +3453,7 @@ function App() {
                   </button>
                 </form>
 
+                {memoryAnswer && <div className="rounded-xl border border-[#00D9FF]/30 bg-[#00D9FF]/10 p-4 text-sm text-gray-200 whitespace-pre-wrap">{memoryAnswer}</div>}
                 {memoryResults.length > 0 && (
                   <div className="space-y-3 pt-4 border-t border-white/10">
                     <h3 className="text-xs font-mono text-[#00D9FF] uppercase">Vector Matches Found</h3>
@@ -3311,9 +3466,12 @@ function App() {
                         <p className="text-xs text-gray-300">{res.snippet}</p>
                         <button 
                           onClick={() => {
-                            setActiveVideo(videoCatalog[0]);
+                            const matched = videoCatalog.find(v => (v.youtubeId || v.id) === res.videoId);
+                            if (matched) setActiveVideo(matched);
                             setActiveTab("watch");
-                            handleSeek(750, res.timestamp);
+                            const parts = String(res.timestamp || "0:00").split(":").map(Number);
+                            const seconds = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+                            handleSeek(Number.isFinite(seconds) ? seconds : 0, res.timestamp);
                           }}
                           className="text-xs font-mono font-bold text-[#00FF88] hover:underline"
                         >
@@ -3567,7 +3725,7 @@ function App() {
                       <Icon name="crown" className="w-5 h-5 text-[#00FF88]" />
                     </h3>
                     <div className="text-3xl font-extrabold text-[#00D9FF]">
-                      $19 <span className="text-xs font-normal text-gray-300">/ month or $99 / year</span>
+                      $19 <span className="text-xs font-normal text-gray-300">/ month or $99 / year (charged in NGN equivalent)</span>
                     </div>
                   </div>
 
@@ -3584,7 +3742,7 @@ function App() {
                   >
                     {isProUser ? "You are Pro ✓" : "Upgrade to Pro — $19/month"}
                   </button>
-                  {!isProUser && <button onClick={() => startProCheckout("yearly")} className="w-full py-3 rounded-xl border border-[#00D9FF]/40 text-[#00D9FF] text-sm font-bold hover:bg-[#00D9FF]/10">Choose annual — $99/year</button>}
+                  {!isProUser && <button onClick={() => startProCheckout("yearly")} className="w-full py-3 rounded-xl border border-[#00D9FF]/40 text-[#00D9FF] text-sm font-bold hover:bg-[#00D9FF]/10">Choose annual — $99/year (NGN equivalent)</button>}
                 </div>
               </div>
             </div>
