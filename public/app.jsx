@@ -1131,6 +1131,33 @@ function App() {
   // Active Video State — also track watched history real-time + real likes/views (no mock)
   const [activeVideo, setActiveVideo] = useState(videoCatalog[0]);
   useEffect(() => {
+    const requestedId = new URLSearchParams(window.location.search).get("v");
+    if (!requestedId) return;
+    const match = videoCatalog.find(video => (video.youtubeId || video.id) === requestedId);
+    if (match) {
+      setActiveVideo(current => (current?.youtubeId || current?.id) === requestedId ? current : match);
+      return;
+    }
+    const requestedVideo = normalizeVideo({ id: requestedId, youtubeId: requestedId, title: "Loading video…" });
+    setActiveVideo(current => (current?.youtubeId || current?.id) === requestedId ? current : requestedVideo);
+    fetch(`/api/video/${encodeURIComponent(requestedId)}`)
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (!data?.video) return;
+        setActiveVideo(current => (current?.youtubeId || current?.id) === requestedId ? normalizeVideo({
+          ...current,
+          ...data.video,
+          id: requestedId,
+          youtubeId: requestedId,
+          thumbnailUrl: data.video.thumbnail || current.thumbnailUrl,
+          views: data.video.viewsFormatted || current.views,
+          channelName: data.video.channel || current.channelName,
+          duration: data.video.duration || current.duration,
+        }) : current);
+      })
+      .catch(() => {});
+  }, [videoCatalog]);
+  useEffect(() => {
     if (activeVideo?.id || activeVideo?.youtubeId) pushWatched(activeVideo);
   }, [activeVideo?.id, activeVideo?.youtubeId]);
   // Notebook auto-save/load per video
