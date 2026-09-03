@@ -2520,19 +2520,31 @@ function App() {
                 </div>
               ) : (
                 <div className="space-y-6">
-                  {/* Featured Hero — DEFAULT_VIDEO jvXEkm27XOE — auto-play muted — YouTube fit on mobile */}
+                  {/* Featured Hero — discovery is thumbnail-only; playback belongs on Watch */}
                   <div className="glass-card overflow-hidden border-0 sm:border border-[#FFD700]/30 p-0 sm:p-4 space-y-0 sm:space-y-4 rounded-none sm:rounded-2xl">
                     <div className="flex items-center gap-2 flex-wrap px-4 sm:px-0 pt-3 sm:pt-0">
                       <span className="bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black text-[10px] font-extrabold px-2.5 py-1 rounded-full">FEATURED</span>
-                      <span className="text-xs text-gray-400">Your video is first for every visitor • auto-play muted</span>
-                      <a href="https://youtu.be/jvXEkm27XOE" target="_blank" rel="noreferrer" className="ml-auto text-[10px] text-[#FFD700] font-bold hover:underline">youtu.be/jvXEkm27XOE ↗</a>
+                      <span className="text-xs text-gray-400">Featured from Alphatekx</span>
                     </div>
-                    <VideoPlayer video={DEFAULT_VIDEO} autoplay />
+                    <button
+                      type="button"
+                      onClick={() => { window.location.href = `/watch?v=${DEFAULT_VIDEO.youtubeId}`; }}
+                      className="group relative block w-full aspect-video bg-black overflow-hidden sm:rounded-xl text-left"
+                      aria-label={`Watch ${DEFAULT_VIDEO.title}`}
+                    >
+                      <img
+                        src={`https://i.ytimg.com/vi/${DEFAULT_VIDEO.youtubeId}/hqdefault.jpg`}
+                        alt={DEFAULT_VIDEO.title}
+                        className="h-full w-full object-cover transition-opacity group-hover:opacity-90"
+                        loading="eager"
+                      />
+                      <span className="absolute bottom-2 right-2 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-mono text-white">{DEFAULT_VIDEO.duration}</span>
+                    </button>
                     <div className="space-y-1 px-4 sm:px-0 pb-3 sm:pb-0">
                       <h3 className="font-bold text-sm sm:text-base text-white line-clamp-2">{DEFAULT_VIDEO.title}</h3>
-                      <p className="text-xs text-gray-400">{DEFAULT_VIDEO.channelName} • {DEFAULT_VIDEO.handle} • Featured • auto-play</p>
+                      <p className="text-xs text-gray-400">{DEFAULT_VIDEO.channelName} • {DEFAULT_VIDEO.handle} • Featured</p>
                       <div className="flex gap-2 pt-1">
-                        <button onClick={()=>{ setActiveVideo(DEFAULT_VIDEO); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} className="min-h-[44px] px-5 py-2.5 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Watch Now</button>
+                        <button onClick={()=>{ window.location.href = `/watch?v=${DEFAULT_VIDEO.youtubeId}`; }} className="min-h-[44px] px-5 py-2.5 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Watch Now</button>
                         <a href="https://youtu.be/jvXEkm27XOE" target="_blank" rel="noreferrer" className="min-h-[44px] px-5 py-2.5 bg-[#272727] text-white font-bold text-xs rounded-xl flex items-center">Open on YouTube ↗</a>
                       </div>
                     </div>
