@@ -90,6 +90,18 @@
     .glass-card {
       max-width: 100%;
     }
+    .watch-video-player {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+    @media (max-width: 640px) {
+      .watch-video-player {
+        width: 100vw;
+        margin-left: calc(50% - 50vw);
+        border-radius: 0;
+      }
+    }
     /* Extra safety for mobile: prevent horizontal scroll from absolute elements */
     @media (max-width: 640px) {
       #root { overflow-x: hidden; }
@@ -146,6 +158,6 @@
 <body class="bg-[#0B0215] text-white min-h-screen selection:bg-[#FFD700] selection:text-black">
   <div id="root"></div>
 
-  <script type="text/babel" data-type="module" data-presets="react" src="./app.jsx?v=9e3613d"></script>
+  <script type="text/babel" data-type="module" data-presets="react" src="./app.jsx?v=prompt2-watch"></script>
 </body>
 </html>

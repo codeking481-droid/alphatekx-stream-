@@ -1,4 +1,4 @@
-const CACHE_NAME = 'alphatekx-v9';
+const CACHE_NAME = 'alphatekx-v10';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',

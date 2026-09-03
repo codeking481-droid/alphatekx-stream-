@@ -2293,17 +2293,8 @@ function App() {
             <div className="max-w-[1600px] mx-auto px-0 sm:px-6 py-3 sm:py-6 space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-8 space-y-4">
-                  <div className="relative bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-[#FFD700]/20 shadow-[0_0_40px_rgba(255,215,0,0.15)]">
-                    <div className="aspect-video relative bg-black">
-                      <iframe ref={iframeRef} src={`https://www.youtube.com/embed/${activeVideo.id}?autoplay=1&playsinline=1&rel=0`} title={activeVideo.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="autoplay; accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-                      {activeCheckpoint && (<div className="absolute inset-0 bg-[#0B0215]/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-30 rounded-none sm:rounded-2xl"><div className="w-14 h-14 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center text-2xl mb-3 animate-pulse">🔒</div><h3 className="text-white font-extrabold text-lg">{activeCheckpoint.title}</h3><p className="text-[#FFD700] text-sm mt-1">Creator paused at {activeCheckpoint.time}s</p><p className="text-gray-300 text-sm mt-2">{activeCheckpoint.task}</p><button onClick={()=>{setWatchPanelOpen(true);setWatchPanelTab("code");}} className="mt-4 px-6 py-2.5 rounded-full bg-[#FFD700] text-black font-bold text-sm animate-pulse">Go to Code →</button></div>)}
-                    </div>
-                  </div>
-                  <div className="px-4 sm:px-0"><button onClick={()=>setWatchPanelOpen(true)} className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#FFD700] text-black font-extrabold text-sm shadow-lg hover:scale-105 transition">Open AI Workspace →</button></div>
-                  <div className="flex gap-2 overflow-x-auto scrollbar-hide px-4 sm:px-0">
-                    {videoChapters.map((chap, idx)=>(
-                      <button key={idx} onClick={()=>handleSeek(chap.seconds, chap.timestamp)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border ${activeTimestamp===chap.timestamp||(idx===0&&!activeTimestamp)?"bg-[#FFD700] text-black border-[#FFD700]":"bg-[#1a1a2e] border-white/10 text-gray-300"}`}>{chap.timestamp} {chap.title}</button>
-                    ))}
+                  <div className="watch-video-player sticky top-0 z-20 w-full aspect-video bg-black">
+                    <iframe ref={iframeRef} src={`https://www.youtube-nocookie.com/embed/${activeVideo.youtubeId || activeVideo.id}?autoplay=1&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&iv_load_policy=3&cc_load_policy=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowFullScreen />
                   </div>
                   <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight px-4 sm:px-0">{activeVideo.title}</h1>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4 px-4 sm:px-0">
@@ -2334,6 +2325,14 @@ function App() {
                     ))}
                   </div>
                 </div>
+                <div className="space-y-3 px-4 sm:px-0">
+                  <button onClick={()=>setWatchPanelOpen(true)} className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#FFD700] text-black font-extrabold text-sm shadow-lg hover:scale-105 transition">Open AI Workspace →</button>
+                  <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+                    {videoChapters.map((chap, idx)=>(
+                      <button key={idx} onClick={()=>handleSeek(chap.seconds, chap.timestamp)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border ${activeTimestamp===chap.timestamp||(idx===0&&!activeTimestamp)?"bg-[#FFD700] text-black border-[#FFD700]":"bg-[#1a1a2e] border-white/10 text-gray-300"}`}>{chap.timestamp} {chap.title}</button>
+                    ))}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -2352,8 +2351,7 @@ function App() {
                 <div className="lg:col-span-6 space-y-3">
                   <div className="relative bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.25)]">
                     <div className="aspect-video relative bg-black">
-                      <iframe src={`https://www.youtube.com/embed/${activeVideo.id}?autoplay=0`} title={activeVideo.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
-
+                      <iframe src={`https://www.youtube-nocookie.com/embed/${activeVideo.youtubeId || activeVideo.id}?autoplay=1&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&iv_load_policy=3&cc_load_policy=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowFullScreen />
                     </div>
                   </div>
                   <div className="px-4 sm:px-0">
