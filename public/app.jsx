@@ -419,7 +419,9 @@ function App() {
     const path = window.location.pathname.replace(/\/+$/, "") || "/";
     if (path === "/shorts") return "shorts";
     if (path === "/watch" || path.startsWith("/watch/")) return "watch";
+    if (path === "/marketplace" || path.startsWith("/marketplace/")) return "marketplace";
     if (path === "/workspace") return "workspace";
+    if (path === "/marketplace" || path.startsWith("/marketplace/")) return "marketplace";
     if (path === "/home") return "home";
     return "home";
   }); // watch, home, shorts, teacher, memory, chat, community, marketplace, sell, studio, pricing, profile
@@ -1617,12 +1619,42 @@ function App() {
   ]);
   const [marketplaceApps, setMarketplaceApps] = useState([]);
   const [marketplaceCategory, setMarketplaceCategory] = useState("all");
+  const [marketplaceSearch, setMarketplaceSearch] = useState("");
+  const [marketplaceSort, setMarketplaceSort] = useState("newest");
+  const [marketplaceDetail, setMarketplaceDetail] = useState(() => {
+    const match = window.location.pathname.match(/^\/marketplace\/([^/]+)\/?$/);
+    return match ? { id: decodeURIComponent(match[1]), product: null } : null;
+  });
+  const [marketplaceLoading, setMarketplaceLoading] = useState(false);
+  const [sellSheetOpen, setSellSheetOpen] = useState(false);
+  const [sellForm, setSellForm] = useState({ name: "", description: "", price: "", category: "app", sellerEmail: "", fileUrl: "", tags: "", thumbnailUrl: "", fileName: "" });
+  const [sellThumbnailPreview, setSellThumbnailPreview] = useState("");
+  const [sellError, setSellError] = useState("");
+  const [sellLoading, setSellLoading] = useState(false);
+  const [purchaseLoading, setPurchaseLoading] = useState(false);
   const [sellerSales, setSellerSales] = useState({ sales: [], summary: { totalSales:0, totalRevenue:0, totalFees:0, totalSellerRevenue:0 } });
   const [sellerEmailInput, setSellerEmailInput] = useState("creator@alphatekx.ai");
   const [marketplaceView, setMarketplaceView] = useState("products"); // products | dashboard | sell
+  const loadMarketplaceProducts = async () => {
+    setMarketplaceLoading(true);
+    try {
+      const params = new URLSearchParams({ category: marketplaceCategory, q: marketplaceSearch, sort: marketplaceSort });
+      const response = await fetch(`/api/marketplace/products?${params.toString()}`, { credentials: "include" });
+      const data = response.ok ? await response.json() : null;
+      if (data && Array.isArray(data.products)) setMarketplaceProducts(data.products);
+    } catch {}
+    finally { setMarketplaceLoading(false); }
+  };
+  useEffect(() => { loadMarketplaceProducts(); }, [marketplaceCategory, marketplaceSearch, marketplaceSort]);
   useEffect(() => {
-    fetch(`/api/marketplace/products?category=${marketplaceCategory}`).then(r=>r.ok?r.json():null).then(d=>{ if(d && Array.isArray(d.products)) setMarketplaceProducts(d.products); }).catch(()=>{});
-  }, [marketplaceCategory]);
+    if (!marketplaceDetail) return;
+    const existing = marketplaceProducts.find(product => String(product.id) === String(marketplaceDetail.id));
+    if (existing) setMarketplaceDetail(current => current ? { ...current, product: existing } : current);
+    fetch(`/api/marketplace/products/${encodeURIComponent(marketplaceDetail.id)}`, { credentials: "include" })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => { if (data?.product) setMarketplaceDetail(current => current ? { ...current, product: data.product } : current); })
+      .catch(() => {});
+  }, [marketplaceDetail?.id]);
   useEffect(() => {
     if (activeTab !== "marketplace") return;
     fetch("/api/marketplace/apps").then(r => r.ok ? r.json() : null).then(d => setMarketplaceApps(Array.isArray(d?.apps) ? d.apps : [])).catch(() => {});
@@ -1633,6 +1665,121 @@ function App() {
     if (data) setSellerSales(data);
   };
   useEffect(() => { if(activeTab==="marketplace" && marketplaceView==="dashboard") loadSellerSales(); }, [activeTab, marketplaceView]);
+  useEffect(() => {
+    if (authUser?.email && sellerEmailInput === "creator@alphatekx.ai") setSellerEmailInput(authUser.email);
+  }, [authUser?.email]);
+  const openMarketplaceProduct = (product) => {
+    setMarketplaceDetail({ id: String(product.id), product });
+    setActiveTab("marketplace");
+    window.history.pushState({}, "", `/marketplace/${encodeURIComponent(product.id)}`);
+    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+  };
+  const closeMarketplaceProduct = () => {
+    setMarketplaceDetail(null);
+    window.history.pushState({}, "", "/marketplace");
+  };
+  const handleMarketplaceFile = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const allowed = ["application/zip", "application/x-zip-compressed", "application/pdf", "application/vnd.android.package-archive", "text/plain", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "application/json", "application/octet-stream"];
+    const extensionOk = /\.(pdf|zip|rar|apk|txt|docx|json|xmp)$/i.test(file.name);
+    if (/\.(mp3|mp4|wav|mov|m4v)$/i.test(file.name) || ["audio/", "video/"].some(prefix => file.type.startsWith(prefix)) || ((!allowed.includes(file.type) && !extensionOk) || file.size > 20 * 1024 * 1024)) {
+      setSellError("Choose a PDF, ZIP, RAR, APK, TXT, DOCX, JSON, or XMP file up to 20 MB. Audio and video are not allowed.");
+      event.target.value = "";
+      return;
+    }
+    setSellError("");
+    setSellForm(current => ({ ...current, fileName: file.name }));
+  };
+  const handleMarketplaceThumbnail = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 2 * 1024 * 1024) {
+      setSellError("Thumbnail must be an image up to 2 MB.");
+      event.target.value = "";
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const preview = String(reader.result || "");
+      setSellThumbnailPreview(preview);
+      setSellForm(current => ({ ...current, thumbnailUrl: preview }));
+      setSellError("");
+    };
+    reader.readAsDataURL(file);
+  };
+  const submitMarketplaceProduct = async (event) => {
+    event.preventDefault();
+    const price = Number(sellForm.price);
+    if (sellForm.name.trim().length < 2 || !sellForm.description.trim() || !Number.isFinite(price) || price <= 0) {
+      setSellError("Add a name, description, and a valid price.");
+      return;
+    }
+    if (!/^https:\/\/\S+$/i.test(sellForm.fileUrl.trim())) {
+      setSellError("Add a hosted HTTPS download URL for the product file.");
+      return;
+    }
+    setSellLoading(true);
+    setSellError("");
+    try {
+      const response = await fetch("/api/marketplace/products", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ...sellForm, name: sellForm.name.trim(), description: sellForm.description.trim(), price, sellerEmail: sellForm.sellerEmail.trim() || authUser?.email || "creator@alphatekx.ai" }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Unable to list product");
+      setSellSheetOpen(false);
+      setSellForm({ name: "", description: "", price: "", category: "app", sellerEmail: "", fileUrl: "", tags: "", thumbnailUrl: "", fileName: "" });
+      setSellThumbnailPreview("");
+      showToast("Product listed");
+      loadMarketplaceProducts();
+    } catch (error) {
+      setSellError(error.message || "Unable to list product");
+    } finally {
+      setSellLoading(false);
+    }
+  };
+  const purchaseMarketplaceProduct = async () => {
+    if (!checkoutProduct || purchaseLoading) return;
+    setPurchaseLoading(true);
+    try {
+      const response = await fetch("/api/marketplace/purchase", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ productId: checkoutProduct.id, buyerEmail: authUser?.email || undefined }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok || !data.success) throw new Error(data.error || "Checkout could not be completed");
+      setCheckoutProduct(null);
+      setCartCount(count => count + 1);
+      showToast(data.stripe?.testMode
+        ? "Test checkout completed — no live charge was made."
+        : (data.downloadUrl ? "Payment confirmed — your download is ready." : "Payment confirmed."));
+      loadMarketplaceProducts();
+    } catch (error) {
+      showToast(error.message || "Checkout could not be completed");
+    } finally {
+      setPurchaseLoading(false);
+    }
+  };
+  useEffect(() => {
+    const onPopState = () => {
+      const path = window.location.pathname.replace(/\/+$/, "") || "/";
+      const match = path.match(/^\/marketplace\/([^/]+)$/);
+      if (match) {
+        setActiveTab("marketplace");
+        setMarketplaceDetail({ id: decodeURIComponent(match[1]), product: null });
+      } else if (path === "/marketplace") {
+        setActiveTab("marketplace");
+        setMarketplaceDetail(null);
+      }
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
 
   // Superpower 6: Unified Queue (YouTube + TikTok)
   const [queueItems, setQueueItems] = useState([
@@ -2409,10 +2556,10 @@ function App() {
         </div>
       )}
 
-      {/* Stripe Checkout Test Modal */}
+      {/* Marketplace checkout confirmation */}
       {checkoutProduct && (
         <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="bg-[#0D0D12] border border-[#00D9FF] rounded-3xl max-w-md w-full p-6 shadow-[0_0_40px_rgba(0,217,255,0.4)] relative">
+          <div className="bg-[#0D0D12] border border-[#00D9FF] rounded-t-3xl sm:rounded-3xl max-w-md w-full p-6 shadow-[0_0_40px_rgba(0,217,255,0.4)] relative">
             <button onClick={() => setCheckoutProduct(null)} className="absolute top-4 right-4 text-gray-400 hover:text-white text-xl">✕</button>
             <div className="flex items-center gap-3 mb-4">
               <div className="p-3 bg-[#00D9FF]/20 text-[#00D9FF] rounded-xl">
@@ -2420,7 +2567,7 @@ function App() {
               </div>
               <div>
                 <h3 className="font-bold text-lg text-white">{checkoutProduct.name}</h3>
-                <p className="text-xs text-[#00FF88] font-mono">Stripe Test Mode • Instant Download</p>
+                <p className="text-xs text-gray-400">Secure checkout • digital delivery</p>
               </div>
             </div>
             
@@ -2434,20 +2581,17 @@ function App() {
                 <span className="text-[#00FF88] font-mono">${(checkoutProduct.price * 0.8).toFixed(2)}</span>
               </div>
               <div className="flex justify-between text-sm border-t border-white/10 pt-2">
-                <span className="text-gray-400">Test Card:</span>
-                <span className="text-gray-200 font-mono">4242 •••• •••• 4242</span>
+                <span className="text-gray-400">Delivery:</span>
+                <span className="text-gray-200">After payment confirmation</span>
               </div>
             </div>
 
             <button
-              onClick={() => {
-                showToast(`Payment Successful for ${checkoutProduct.name}! Asset downloaded.`);
-                setCheckoutProduct(null);
-                setCartCount(prev => prev + 1);
-              }}
+              onClick={purchaseMarketplaceProduct}
+              disabled={purchaseLoading}
               className="w-full bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black font-bold py-3 rounded-xl hover:opacity-95 transition-transform active:scale-95 shadow-[0_0_20px_rgba(0,255,136,0.4)]"
             >
-              Confirm Pay ${checkoutProduct.price}
+              {purchaseLoading ? "Processing…" : `Continue to checkout · $${checkoutProduct.price}`}
             </button>
           </div>
         </div>
@@ -3212,7 +3356,7 @@ function App() {
                               <h4 className="font-bold text-sm text-white line-clamp-2">{p.name}</h4>
                               <p className="text-xs text-gray-400 line-clamp-2">{p.description}</p>
                               <p className="text-[11px] text-gray-500">Seller ${gets} • Fee ${fee} (20%) • {p.salesCount} sales</p>
-                              <button onClick={async()=>{ const res=await fetch("/api/marketplace/purchase",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:p.id})}); const d=await res.json(); if(d.success) showToast(`Bought ${p.name} — Seller $${d.fees.sellerRevenue}`); else showToast(d.error); }} className="w-full min-h-[44px] bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black font-bold text-xs rounded-xl">Buy via Stripe</button>
+                              <button onClick={async()=>{ const res=await fetch("/api/marketplace/purchase",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({productId:p.id}),credentials:"include"}); const d=await res.json().catch(()=>({})); if(d.success) showToast(d.stripe?.testMode ? "Test checkout completed — no live charge was made." : `Payment confirmed for ${p.name}`); else showToast(d.error || "Checkout unavailable"); }} className="w-full min-h-[44px] bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black font-bold text-xs rounded-xl">Buy securely</button>
                             </div>
                           );
                         })}
@@ -3795,22 +3939,61 @@ function App() {
 
           {/* ------------------- MARKETPLACE — PROMPT #6 (20% fee, Stripe, Seller Dashboard) ------------------- */}
           {activeTab === "marketplace" && (
-            <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6">
+           <div className="max-w-6xl mx-auto w-full min-w-0 p-3 sm:p-4 md:p-8 space-y-5 overflow-x-hidden">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>
-                  <h1 className="text-2xl font-extrabold text-white">Marketplace</h1>
-                  <p className="text-xs text-gray-400">Apps, courses, video assets — Alphatekx 20% fee • Seller keeps 80% • Stripe 4242 test</p>
+                 <h1 className="text-2xl font-extrabold text-white">Market</h1>
+                 <p className="text-xs text-gray-400">Discover digital products from Alphatekx creators.</p>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => setActiveTab("sell")} className="min-h-[44px] px-5 py-2.5 bg-[#00FF88] text-black font-extrabold text-xs rounded-xl hover:bg-[#00c468]">+ List Product (80%)</button>
+                 <button onClick={() => setSellSheetOpen(true)} className="min-h-[44px] px-5 py-2.5 bg-[#00FF88] text-black font-extrabold text-xs rounded-xl hover:bg-[#00c468]">+ Sell</button>
                   <button onClick={() => { setMarketplaceView(marketplaceView==="dashboard"?"products":"dashboard"); if(marketplaceView!=="dashboard") loadSellerSales(); }} className="min-h-[44px] px-5 py-2.5 bg-[#272727] text-white font-bold text-xs rounded-xl border border-white/10">
-                    {marketplaceView==="dashboard" ? "Products" : "Seller Dashboard"}
+                   {marketplaceView==="dashboard" ? "Products" : "My shop"}
                   </button>
                 </div>
               </div>
 
-              {/* Category filter */}
-              <div className="flex gap-2 overflow-x-auto scrollbar-hide">
+             {!marketplaceDetail && marketplaceView !== "dashboard" && (
+               <div className="flex flex-col sm:flex-row gap-2">
+                 <div className="relative flex-1">
+                   <Icon name="search" className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-500" />
+                   <input value={marketplaceSearch} onChange={e=>setMarketplaceSearch(e.target.value)} placeholder="Search products, creators, tags…" className="w-full min-h-[44px] bg-black/50 border border-white/10 rounded-xl pl-10 pr-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]/60" />
+                 </div>
+                 <select value={marketplaceSort} onChange={e=>setMarketplaceSort(e.target.value)} className="min-h-[44px] bg-black/50 border border-white/10 rounded-xl px-3 text-xs text-white">
+                   <option value="newest">Newest</option>
+                   <option value="popular">Most popular</option>
+                   <option value="price-low">Price: low to high</option>
+                   <option value="price-high">Price: high to low</option>
+                 </select>
+               </div>
+             )}
+
+             {marketplaceDetail ? (
+               <div className="space-y-4">
+                 <button onClick={closeMarketplaceProduct} className="min-h-[44px] px-3 rounded-xl bg-white/5 border border-white/10 text-xs text-gray-200">← Back to Market</button>
+                 {marketplaceDetail.product ? (
+                   <div className="glass-card overflow-hidden border border-white/10">
+                     {marketplaceDetail.product.thumbnailUrl && <img src={marketplaceDetail.product.thumbnailUrl} alt="" className="w-full max-h-64 object-cover" />}
+                     <div className="p-5 sm:p-7 space-y-4">
+                       <div className="flex flex-wrap items-center gap-2">
+                         <span className="text-[10px] font-bold uppercase bg-[#FFD700] text-black px-2 py-1 rounded-full">{marketplaceDetail.product.badge || marketplaceDetail.product.category}</span>
+                         <span className="text-xs text-gray-500">{marketplaceDetail.product.salesCount || 0} sales</span>
+                       </div>
+                       <h2 className="text-2xl font-extrabold text-white break-words">{marketplaceDetail.product.name}</h2>
+                       <p className="text-sm text-gray-300 whitespace-pre-wrap">{marketplaceDetail.product.description}</p>
+                       <p className="text-xs text-gray-500">By {marketplaceDetail.product.sellerEmail}</p>
+                       <div className="flex flex-col sm:flex-row sm:items-center gap-3 pt-2">
+                         <span className="text-2xl font-extrabold text-[#FFD700]">₦{Number(marketplaceDetail.product.price).toLocaleString()}</span>
+                         <button onClick={()=>setCheckoutProduct(marketplaceDetail.product)} className="sm:ml-auto min-h-[44px] px-6 rounded-xl bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black font-bold text-sm">Buy securely</button>
+                       </div>
+                     </div>
+                   </div>
+                 ) : <div className="glass-card p-8 text-center text-sm text-gray-400">Loading product…</div>}
+               </div>
+             ) : (
+             <>
+             {/* Category filter */}
+             <div className="flex gap-2 overflow-x-auto scrollbar-hide">
                 {["all","app","course","plugin"].map(c => (
                   <button key={c} onClick={()=>setMarketplaceCategory(c)} className={`min-h-[44px] px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap ${marketplaceCategory===c ? "bg-[#FFD700] text-black" : "bg-[#272727] text-gray-300 border border-white/10"}`}>{c}</button>
                 ))}
@@ -3830,7 +4013,7 @@ function App() {
               {marketplaceView === "dashboard" ? (
                 <div className="space-y-4">
                   <div className="flex gap-2">
-                    <input value={sellerEmailInput} onChange={e=>setSellerEmailInput(e.target.value)} placeholder="seller email" className="flex-1 bg-black/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white" />
+                    <input value={sellerEmailInput} onChange={e=>setSellerEmailInput(e.target.value)} placeholder="seller email" className="min-w-0 flex-1 bg-black/60 border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white" />
                     <button onClick={()=>loadSellerSales()} className="min-h-[44px] px-5 py-2.5 bg-[#00D9FF] text-black font-bold text-xs rounded-xl">Load Sales</button>
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -3843,9 +4026,9 @@ function App() {
                     <div className="p-3 border-b border-white/10 flex justify-between text-xs font-bold text-white"><span>Recent Sales</span><span>{sellerSales.sales.length} records</span></div>
                     <div className="divide-y divide-white/5 max-h-[400px] overflow-auto">
                       {sellerSales.sales.map(s => (
-                        <div key={s.id} className="p-3 flex justify-between text-xs">
-                          <div><p className="font-bold text-white">{s.productName}</p><p className="text-gray-400">{s.buyerEmail} → {s.sellerEmail}</p></div>
-                          <div className="text-right"><p className="font-bold text-white">${s.price}</p><p className="text-[#00FF88]">You ${s.sellerRevenue} <span className="text-gray-500">Fee ${s.platformFee}</span></p></div>
+                        <div key={s.id} className="p-3 flex justify-between gap-3 text-xs">
+                          <div className="min-w-0"><p className="font-bold text-white truncate">{s.productName}</p><p className="text-gray-400 break-all">{s.buyerEmail} → {s.sellerEmail}</p></div>
+                          <div className="text-right flex-shrink-0"><p className="font-bold text-white">${s.price}</p><p className="text-[#00FF88]">You ${s.sellerRevenue} <span className="text-gray-500">Fee ${s.platformFee}</span></p></div>
                         </div>
                       ))}
                       {sellerSales.sales.length===0 && <p className="p-8 text-center text-sm text-gray-500">No sales yet for {sellerEmailInput}</p>}
@@ -3853,61 +4036,50 @@ function App() {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {marketplaceLoading && <div className="sm:col-span-2 lg:col-span-3 text-center py-8 text-sm text-gray-500">Loading products…</div>}
                   {marketplaceProducts.map((product) => {
                     const fee = +(product.price*0.20).toFixed(2);
                     const sellerGets = +(product.price - fee).toFixed(2);
                     return (
-                      <div key={product.id} className="glass-card p-6 flex flex-col justify-between space-y-4 border border-white/10 hover:border-[#FFD700]/20 transition-colors">
+                      <div key={product.id} className="glass-card min-w-0 p-4 sm:p-6 flex flex-col justify-between space-y-4 border border-white/10 hover:border-[#FFD700]/20 transition-colors">
                         <div className="space-y-3">
-                          <div className="flex items-center justify-between">
+                          {product.thumbnailUrl ? <img src={product.thumbnailUrl} alt={product.name} loading="lazy" className="w-full h-32 object-cover rounded-xl border border-white/10" /> : <div className="w-full h-20 rounded-xl bg-gradient-to-br from-[#00D9FF]/20 to-[#00FF88]/10 flex items-center justify-center text-3xl">{product.iconType === "video" ? "🎬" : product.iconType === "sparkles" ? "✨" : "🧠"}</div>}
+                          <div className="flex items-center justify-between gap-2 min-w-0">
                             <span className="text-xs font-mono font-bold text-[#00D9FF] bg-[#00D9FF]/10 px-2.5 py-1 rounded">{product.badge}</span>
                             <span className="text-[10px] text-gray-500">{product.category} • {product.salesCount} sales</span>
                           </div>
-                          <h3 className="font-bold text-base text-white line-clamp-2">{product.name}</h3>
+                          <button onClick={()=>openMarketplaceProduct(product)} className="text-left font-bold text-base text-white line-clamp-2 hover:text-[#FFD700]">{product.name}</button>
                           <p className="text-xs text-gray-400 line-clamp-2">{product.description}</p>
                           <p className="text-[11px] text-gray-500">{product.sellerEmail}</p>
                         </div>
                         <div className="space-y-2">
                           <div className="flex items-center justify-between">
-                            <span className="text-lg font-extrabold text-white">${product.price}</span>
-                            <span className="text-[11px] text-gray-400">Seller ${sellerGets} • Fee ${fee} (20%)</span>
+                            <span className="text-lg font-extrabold text-[#FFD700]">₦{Number(product.price).toLocaleString()}</span>
+                            <span className="text-[11px] text-gray-400 text-right">Seller ₦{Number(sellerGets).toLocaleString()} • Fee ₦{Number(fee).toLocaleString()} (20%)</span>
                           </div>
                           <div className="flex gap-2">
                             <button
-                              onClick={async () => {
-                                try {
-                                  const res = await fetch("/api/marketplace/purchase", {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ productId: product.id, buyerEmail: "buyer@alphatekx.ai" })
-                                  });
-                                  const data = await res.json();
-                                  if (!res.ok) throw new Error(data.error);
-                                  showToast(`Stripe ✓ Paid $${product.price} — Seller $${data.fees.sellerRevenue}, Fee $${data.fees.platformFee} (20%)`);
-                                  setCartCount(c=>c+1);
-                                  loadSellerSales(product.sellerEmail);
-                                } catch(e) { showToast(e.message); }
-                              }}
+                              onClick={() => setCheckoutProduct(product)}
                               className="flex-1 min-h-[44px] px-5 py-2 bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black font-bold text-xs rounded-xl"
                             >
-                              Buy via Stripe
+                              Buy securely
                             </button>
                             <button
-                              onClick={() => {
-                                const fees = { fee: +(product.price*0.20).toFixed(2), gets: +(product.price*0.80).toFixed(2) };
-                                setCheckoutProduct({ ...product, platformFee: fees.fee, sellerRevenue: fees.gets });
-                              }}
+                              onClick={() => openMarketplaceProduct(product)}
                               className="px-4 min-h-[44px] bg-[#272727] text-white text-xs font-bold rounded-xl border border-white/10"
                             >
-                              View
+                              Details
                             </button>
                           </div>
                         </div>
                       </div>
                     );
                   })}
+                 {!marketplaceLoading && marketplaceProducts.length === 0 && <p className="sm:col-span-2 lg:col-span-3 text-center py-10 text-sm text-gray-500">No products match your search.</p>}
                 </div>
+              )}
+              </>
               )}
             </div>
           )}
@@ -3917,7 +4089,7 @@ function App() {
             <div className="max-w-2xl mx-auto p-4 md:p-8 space-y-6">
               <div className="glass-card p-8 space-y-6 border border-white/10">
                 <h1 className="text-xl font-extrabold text-white">List Your Product — 80% Royalty</h1>
-                <p className="text-xs text-gray-400">Alphatekx takes 20% on every sale. Stripe test card 4242 4242 4242 4242</p>
+                <p className="text-xs text-gray-400">Alphatekx takes 20% on every sale. A hosted download URL is required.</p>
                 <form 
                   onSubmit={async (e) => {
                     e.preventDefault();
@@ -3928,9 +4100,9 @@ function App() {
                       description: fd.get("description"),
                       category: fd.get("category") || "app",
                       sellerEmail: fd.get("sellerEmail") || "creator@alphatekx.ai",
-                      fileUrl: fd.get("fileUrl") || `https://alphatekx.ai/downloads/product-${Date.now()}.zip`,
+                      fileUrl: fd.get("fileUrl"),
                     };
-                    if (!payload.name || payload.price <= 0) { showToast("Name and valid price required"); return; }
+                    if (!payload.name || payload.price <= 0 || !/^https:\/\/\S+$/i.test(String(payload.fileUrl || ""))) { showToast("Name, valid price, and hosted HTTPS download URL required"); return; }
                     try {
                       const res = await fetch("/api/marketplace/products", {
                         method: "POST",
@@ -3957,7 +4129,7 @@ function App() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="text-gray-400 block mb-1">Price (USD)</label>
+                      <label className="text-gray-400 block mb-1">Price (₦)</label>
                       <input name="price" required type="number" step="0.01" placeholder="19.99" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-2.5 text-white" />
                     </div>
                     <div>
@@ -3984,6 +4156,49 @@ function App() {
                   <button type="submit" className="w-full min-h-[44px] py-3 bg-gradient-to-r from-[#00FF88] to-[#00D9FF] text-black font-extrabold rounded-xl">
                     Publish to Marketplace
                   </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {sellSheetOpen && (
+            <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-end justify-center">
+              <div className="w-full max-w-2xl max-h-[92vh] overflow-y-auto rounded-t-3xl bg-[#101018] border border-white/10 p-4 sm:p-6 shadow-[0_-12px_50px_rgba(0,0,0,.55)]">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <p className="text-[10px] uppercase tracking-widest text-[#00FF88] font-bold">Creator tools</p>
+                    <h2 className="text-xl font-extrabold text-white">Sell a digital product</h2>
+                  </div>
+                  <button onClick={()=>{setSellSheetOpen(false);setSellError("");}} className="w-10 h-10 rounded-full bg-white/5 text-gray-300 text-xl" aria-label="Close sell form">×</button>
+                </div>
+                <form onSubmit={submitMarketplaceProduct} className="space-y-4">
+                  {sellError && <p role="alert" className="rounded-xl bg-red-500/10 border border-red-400/30 p-3 text-xs text-red-300">{sellError}</p>}
+                  <input value={sellForm.name} onChange={e=>setSellForm({...sellForm,name:e.target.value})} required minLength={2} placeholder="Product name" className="w-full min-h-[44px] bg-black/60 border border-white/10 rounded-xl px-3 text-sm text-white placeholder-gray-500" />
+                  <textarea value={sellForm.description} onChange={e=>setSellForm({...sellForm,description:e.target.value})} required rows={3} placeholder="What will buyers get?" className="w-full bg-black/60 border border-white/10 rounded-xl p-3 text-sm text-white placeholder-gray-500" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <input value={sellForm.price} onChange={e=>setSellForm({...sellForm,price:e.target.value})} required type="number" min="500" step="1" placeholder="Price (₦)" className="w-full min-h-[44px] bg-black/60 border border-white/10 rounded-xl px-3 text-sm text-white placeholder-gray-500" />
+                    <select value={sellForm.category} onChange={e=>setSellForm({...sellForm,category:e.target.value})} className="w-full min-h-[44px] bg-black/60 border border-white/10 rounded-xl px-3 text-sm text-white">
+                      <option value="app">App</option><option value="course">Course</option><option value="plugin">Plugin</option>
+                    </select>
+                  </div>
+                  <input value={sellForm.tags} onChange={e=>setSellForm({...sellForm,tags:e.target.value})} placeholder="Tags (comma separated)" className="w-full min-h-[44px] bg-black/60 border border-white/10 rounded-xl px-3 text-sm text-white placeholder-gray-500" />
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <label className="rounded-xl border border-dashed border-white/20 p-3 text-xs text-gray-400 cursor-pointer hover:border-[#00D9FF]">
+                      <span className="block text-white font-bold mb-1">Product file</span>
+                      <span>{sellForm.fileName || "PDF, ZIP, RAR, APK, TXT, DOCX, JSON, XMP (20 MB max)"}</span>
+                      <input type="file" accept=".pdf,.zip,.rar,.apk,.txt,.docx,.json,.xmp" onChange={handleMarketplaceFile} className="sr-only" />
+                    </label>
+                    <label className="rounded-xl border border-dashed border-white/20 p-3 text-xs text-gray-400 cursor-pointer hover:border-[#00D9FF]">
+                      <span className="block text-white font-bold mb-1">Thumbnail</span>
+                      <span>PNG/JPG/WebP (2 MB max)</span>
+                      <input type="file" accept="image/png,image/jpeg,image/webp" onChange={handleMarketplaceThumbnail} className="sr-only" />
+                    </label>
+                  </div>
+                  {sellThumbnailPreview && <img src={sellThumbnailPreview} alt="Thumbnail preview" className="w-full h-32 object-cover rounded-xl border border-white/10" />}
+                  <input value={sellForm.fileUrl} onChange={e=>setSellForm({...sellForm,fileUrl:e.target.value})} required type="url" placeholder="Hosted download URL (https://…)" className="w-full min-h-[44px] bg-black/60 border border-white/10 rounded-xl px-3 text-sm text-white placeholder-gray-500" />
+                  <input value={sellForm.sellerEmail || authUser?.email || ""} onChange={e=>setSellForm({...sellForm,sellerEmail:e.target.value})} type="email" placeholder="Payout email" className="w-full min-h-[44px] bg-black/60 border border-white/10 rounded-xl px-3 text-sm text-white placeholder-gray-500" />
+                  <p className="text-[11px] text-gray-500">The selected file is validated in your browser. Provide a hosted download URL so buyers can receive the asset after payment.</p>
+                  <button type="submit" disabled={sellLoading} className="w-full min-h-[46px] rounded-xl bg-gradient-to-r from-[#00FF88] to-[#00D9FF] text-black font-extrabold text-sm">{sellLoading ? "Publishing…" : "Publish product"}</button>
                 </form>
               </div>
             </div>

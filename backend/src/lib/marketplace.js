@@ -12,23 +12,27 @@ export function calculateFees(price) {
 // For standalone lib, we operate on passed arrays; for backend, we use module globals if injected
 export function createProduct(products, data) {
   if (!data.name || data.name.trim().length < 2) throw new Error("Name must be at least 2 characters");
-  if (!data.price || Number(data.price) <= 0) throw new Error("Price must be > 0");
-  const id = Date.now() % 1000000;
+  if (!Number.isFinite(Number(data.price)) || Number(data.price) <= 0) throw new Error("Price must be > 0");
+  if (!data.fileUrl || !/^https:\/\/\S+$/i.test(String(data.fileUrl).trim())) throw new Error("A hosted HTTPS download URL is required");
+  const category = ["app", "course", "plugin"].includes(data.category) ? data.category : "app";
+  const id = `${Date.now()}_${Math.floor(Math.random() * 10000)}`;
   const product = {
     id,
     name: data.name.trim(),
     description: data.description?.trim() || "",
     price: Number(data.price),
     badge: data.badge || "NEW",
-    iconType: data.category === "app" ? "cpu" : (data.category === "course" ? "video" : "sparkles"),
+    iconType: category === "app" ? "cpu" : (category === "course" ? "video" : "sparkles"),
     sellerEmail: data.sellerEmail || "creator@alphatekx.ai",
     sellerId: data.sellerId || data.sellerEmail || "creator@alphatekx.ai",
-    fileUrl: data.fileUrl || `https://alphatekx.ai/downloads/product-${id}.zip`,
+    fileUrl: String(data.fileUrl).trim(),
+    fileName: data.fileName || "",
+    thumbnailUrl: data.thumbnailUrl || "",
     salesCount: 0,
     totalRevenue: 0,
     totalFees: 0,
-    category: data.category || "app",
-    tags: data.tags || "",
+    category,
+    tags: String(data.tags || "").slice(0, 300),
     relatedTopic: data.relatedTopic || "ai",
     createdAt: Date.now(),
   };

@@ -1014,10 +1014,22 @@ function createApiApp() {
   // === PROMPT #6: Marketplace Spec Endpoints (20% fee, Stripe) ===
   app.get("/api/marketplace/products", (c) => {
     const category = c.req.query("category");
+    const query = (c.req.query("q") || "").trim().toLowerCase();
+    const sort = c.req.query("sort") || "newest";
     let products = inMemoryProducts;
     if (category && category !== "all" && category !== "All") {
       products = products.filter(p => p.category === category);
     }
+    if (query) {
+      products = products.filter(p => [p.name, p.description, p.sellerEmail, p.tags].some(value => String(value || "").toLowerCase().includes(query)));
+    }
+    products = [...products].sort((a, b) => sort === "popular"
+      ? Number(b.salesCount || 0) - Number(a.salesCount || 0)
+      : sort === "price-low"
+        ? Number(a.price) - Number(b.price)
+        : sort === "price-high"
+          ? Number(b.price) - Number(a.price)
+          : Number(b.createdAt || 0) - Number(a.createdAt || 0));
     // Include fee breakdown for each product
     const withFees = products.map(p => {
       const fees = libCalcFees(p.price);
