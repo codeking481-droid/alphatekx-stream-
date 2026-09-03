@@ -13,6 +13,12 @@ import { processPayment as libStripePay, createCheckoutSession as libStripeCheck
 import { fetchChannelInfo as libFetchChannelInfo, fetchChannelVideos as libFetchChannelVideos, CHANNEL_ID as OFFICIAL_CHANNEL_ID, CHANNEL_NAME as OFFICIAL_CHANNEL_NAME, CHANNEL_HANDLE as OFFICIAL_CHANNEL_HANDLE } from "./lib/channel.js";
 
 interface Env {
+  DB?: D1Database;
+  KV?: KVNamespace;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  SESSION_SECRET?: string;
+  GOOGLE_REDIRECT_URI?: string;
   YOUTUBE_API_KEY?: string;
   TIKHUB_API_KEY?: string;
   TIKTOK_API_KEY?: string;
@@ -49,6 +55,12 @@ function formatViews(viewCount?: string): string {
   if (count >= 1000000) return `${(count / 1000000).toFixed(1)}M views`;
   if (count >= 1000) return `${Math.round(count / 1000)}K views`;
   return `${count} views`;
+}
+
+function isoDurationSeconds(iso?: string): number {
+  const match = String(iso || "").match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return Infinity;
+  return Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0);
 }
 
 // In-memory mock storage fallback when Durable Object SQL storage is unavailable
@@ -386,25 +398,53 @@ function createApiApp() {
 
   app.get("/api/health", (c) => c.json({ status: "ok", app: "Alphatekx Stream", scale: "1M+ Ready" }));
 
-  // === GATED EXPERIENCE + SIGN-IN WITH YOUTUBE (Cloudflare Worker) ===
-  // In-memory session store (replace with D1 in prod). Keep at module scope so it survives warm starts.
+  // === SIGN-IN WITH GOOGLE (Cloudflare Worker) ===
+  // Keep a small warm-cache for local development, but the cookie is self-contained so
+  // authentication also works when Cloudflare sends the next request to another isolate.
   const gatedSessions = (globalThis as any).__gatedSessions || ((globalThis as any).__gatedSessions = new Map<string, any>());
-  function gatedGetUserFromCookie(c: any) {
+  function base64UrlEncode(value: string): string {
+    return btoa(value).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  }
+  function base64UrlDecode(value: string): string {
+    const padded = value.replace(/-/g, "+").replace(/_/g, "/") + "===".slice((value.length + 3) % 4);
+    return atob(padded);
+  }
+  async function signSession(payload: string, secret: string): Promise<string> {
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+    const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+    return base64UrlEncode(String.fromCharCode(...new Uint8Array(signature)));
+  }
+  async function gatedGetUserFromCookie(c: any) {
     const cookie: string = c.req.header("cookie") || "";
     const m = cookie.match(/session=([^;]+)/);
     if (!m) return null;
-    return gatedSessions.get(m[1]) || null;
+    const cached = gatedSessions.get(m[1]);
+    if (cached) return cached;
+    const env: any = c.env || {};
+    const parts = m[1].split(".");
+    const sessionSecret = env.SESSION_SECRET || env.GOOGLE_CLIENT_SECRET;
+    if (parts.length !== 2 || !sessionSecret) return null;
+    try {
+      const expected = await signSession(parts[0], sessionSecret);
+      if (expected !== parts[1]) return null;
+      const user = JSON.parse(base64UrlDecode(parts[0]));
+      if (!user.expiresAt || Date.parse(user.expiresAt) <= Date.now()) return null;
+      return user;
+    } catch {
+      return null;
+    }
   }
   function gatedGetAuthUrl(c: any): string {
     const env: any = c.env || {};
     const clientId = env.GOOGLE_CLIENT_ID || (typeof process !== "undefined" ? (process as any).env?.GOOGLE_CLIENT_ID : "") || "";
-    const redirectUri = `${new URL(c.req.url).origin}/api/auth/callback`;
-    const scopes = "https://www.googleapis.com/auth/youtube.readonly";
+    const redirectUri = env.GOOGLE_REDIRECT_URI || `${new URL(c.req.url).origin}/api/auth/callback`;
+    const scopes = "openid email profile";
     if (!clientId) throw new Error("GOOGLE_OAUTH_NOT_CONFIGURED");
     const cid = clientId;
     return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(cid)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`;
   }
   app.get("/api/auth/url", (c) => {
+    c.header("Cache-Control", "no-store");
     try {
       const url = gatedGetAuthUrl(c);
       return c.json({ url });
@@ -412,72 +452,89 @@ function createApiApp() {
       return c.json({ error: e.message, url: null }, 500);
     }
   });
-  app.get("/api/auth/callback", async (c) => {
+  const handleGoogleCallback = async (c: any) => {
+    c.header("Cache-Control", "no-store");
     const code = c.req.query("code");
-    if (!code) return c.json({ error: "Missing code" }, 400);
     const env: any = c.env || {};
-    // Try real token exchange if secrets present, else create mock session for gated demo
     const clientId = env.GOOGLE_CLIENT_ID || "";
     const clientSecret = env.GOOGLE_CLIENT_SECRET || "";
-    const redirectUri = `${new URL(c.req.url).origin}/api/auth/callback`;
-    let sessionToken = "";
-    let channelName = "Alphatekx User";
-    let channelAvatar = "https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000&size=200&bold=true";
-    let channelId = "";
-    let email = "";
+    const sessionSecret = env.SESSION_SECRET || clientSecret;
+    const redirectUri = env.GOOGLE_REDIRECT_URI || `${new URL(c.req.url).origin}/api/auth/callback`;
+    const errorRedirect = (error: string, detail?: string) => {
+      const target = new URL("/", c.req.url);
+      target.searchParams.set("auth_error", error);
+      if (detail) target.searchParams.set("details", detail.slice(0, 240));
+      return c.redirect(target.toString(), 302);
+    };
+    if (!code) return errorRedirect(c.req.query("error") || "missing_code", c.req.query("error_description"));
+    if (!clientId || !clientSecret) return errorRedirect("oauth_not_configured");
     try {
-      if (clientId && clientSecret) {
-        // Real OAuth exchange
-        const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" }),
-        });
-        const tokens: any = await tokenRes.json();
-        if (tokens.access_token) {
-          const userRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-          const userInfo: any = await userRes.json();
-          email = userInfo.email || "";
-          const chRes = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-          const chData: any = await chRes.json();
-          const ch = chData.items?.[0];
-          if (ch) {
-            channelId = ch.id;
-            channelName = ch.snippet?.title || channelName;
-            channelAvatar = ch.snippet?.thumbnails?.default?.url || channelAvatar;
-          }
-          sessionToken = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : Math.random().toString(36).slice(2);
-          gatedSessions.set(sessionToken, { id: channelId || sessionToken, channelId, channelName, channelAvatar, email, accessToken: tokens.access_token, refreshToken: tokens.refresh_token || "", expiresAt: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), isGuest: false });
-        }
+      const tokenController = new AbortController();
+      const tokenTimeout = setTimeout(() => tokenController.abort(), 10000);
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" }),
+        signal: tokenController.signal,
+      });
+      clearTimeout(tokenTimeout);
+      const tokens: any = await tokenRes.json().catch(() => ({}));
+      if (!tokenRes.ok || !tokens.access_token) {
+        console.error("[oauth] token exchange failed", tokenRes.status, tokens.error);
+        return errorRedirect("token_exchange_failed", tokens.error_description || tokens.error);
       }
-    } catch {
-      return c.json({ error: "OAUTH_EXCHANGE_FAILED", message: "Google sign-in could not be completed. Please try again." }, 502);
+      const profileController = new AbortController();
+      const profileTimeout = setTimeout(() => profileController.abort(), 10000);
+      const userRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", {
+        headers: { Authorization: `Bearer ${tokens.access_token}` },
+        signal: profileController.signal,
+      });
+      clearTimeout(profileTimeout);
+      const userInfo: any = await userRes.json().catch(() => ({}));
+      if (!userRes.ok || !userInfo.sub || !userInfo.email) {
+        console.error("[oauth] userinfo failed", userRes.status, userInfo);
+        return errorRedirect("profile_failed", userInfo.error_description || userInfo.error);
+      }
+      const sessionToken = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : Math.random().toString(36).slice(2);
+      const sessionUser = {
+        id: userInfo.sub,
+        channelId: "",
+        channelName: userInfo.name || "Alphatekx User",
+        channelAvatar: userInfo.picture || "https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000&size=200&bold=true",
+        email: userInfo.email,
+        expiresAt: new Date(Date.now() + 30 * 86400 * 1000).toISOString(),
+        isGuest: false,
+      };
+      if (env.DB) {
+        await env.DB.prepare(
+          "INSERT INTO users (id, email, name, picture) VALUES (?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET email = excluded.email, name = excluded.name, picture = excluded.picture"
+        ).bind(sessionUser.id, sessionUser.email, sessionUser.channelName, sessionUser.channelAvatar).run();
+      }
+      const sessionPayload = base64UrlEncode(JSON.stringify(sessionUser));
+      const sessionSignature = await signSession(sessionPayload, sessionSecret);
+      const sessionCookie = `${sessionPayload}.${sessionSignature}`;
+      gatedSessions.set(sessionCookie, sessionUser);
+      c.header("Set-Cookie", `session=${sessionCookie}; HttpOnly; Secure; Path=/; Max-Age=${30 * 86400}; SameSite=Lax`);
+      return c.redirect(new URL("/", c.req.url).toString(), 302);
+    } catch (error: any) {
+      console.error("[oauth] callback failed", error?.message || error);
+      return errorRedirect("exchange_failed", error?.message);
     }
-    if (!sessionToken) {
-      return c.json({ error: "GOOGLE_OAUTH_NOT_CONFIGURED", message: "Google sign-in is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET." }, 503);
-    }
-    c.header("Set-Cookie", `session=${sessionToken}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`);
-    return c.redirect("/");
-  });
-  app.get("/api/auth/user", (c) => {
-    const user = gatedGetUserFromCookie(c);
+  };
+  app.get("/api/auth/callback", handleGoogleCallback);
+  app.get("/api/auth/callback/google", handleGoogleCallback);
+  app.get("/api/auth/user", async (c) => {
+    c.header("Cache-Control", "no-store");
+    const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ id: null, channelName: null, channelAvatar: null, isGuest: true });
     return c.json({ ...user, isGuest: false });
   });
   app.get("/api/user/feed", async (c) => {
-    const user = gatedGetUserFromCookie(c);
+    const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ feed: [], isGuest: true });
     try {
       const env: any = c.env || {};
-      if (user.channelId && user.accessToken) {
-        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet,id&channelId=${encodeURIComponent(user.channelId)}&maxResults=20&order=date&type=video&key=${env.YOUTUBE_API_KEY || ""}`, { headers: { Authorization: `Bearer ${user.accessToken}` } });
-        if (res.ok) {
-          const data: any = await res.json();
-          const feed = (data.items || []).map((item: any) => ({ videoId: item.id?.videoId || item.id, title: item.snippet?.title, thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.default?.url, publishedAt: item.snippet?.publishedAt }));
-          if (feed.length > 0) return c.json({ feed, isGuest: false });
-        }
-      }
-      // Fallback — personalized mock feed keyed to user's channel (so demo works without real token)
+      // Feed is sourced from the server-side YouTube API key, never user OAuth.
       const channelVideos = await libFetchChannelVideos(env.YOUTUBE_API_KEY || "", 12).catch(()=>[]);
       const feed = (channelVideos || []).slice(0, 8).map((v: any) => ({ videoId: v.youtubeId || v.id, title: v.title, thumbnail: v.thumbnailUrl || v.thumbnail || `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg`, publishedAt: v.publishedAt || new Date().toISOString(), channelName: user.channelName }));
       if (feed.length > 0) return c.json({ feed, isGuest: false, fallback: true });
@@ -670,6 +727,55 @@ function createApiApp() {
   app.get("/api/search/instagram", platformSearch("instagram"));
   app.get("/api/search/twitter", platformSearch("twitter"));
   app.get("/api/search/facebook", platformSearch("facebook"));
+
+  // Real YouTube Shorts feed. YouTube has no Shorts-specific API resource, so
+  // use trending/search discovery and verify duration from video details.
+  app.get("/api/shorts", async (c) => {
+    const apiKey = (c.env as Env)?.YOUTUBE_API_KEY || "";
+    const pageToken = c.req.query("pageToken") || "";
+    const limit = Math.min(Math.max(Number(c.req.query("limit") || "12"), 1), 25);
+    if (!apiKey) return c.json({ videos: [], nextPageToken: "", real: false, error: "YOUTUBE_API_KEY_NOT_CONFIGURED" }, 503);
+    try {
+      let response = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&chart=mostPopular&maxResults=50&regionCode=${encodeURIComponent(c.req.query("region") || "US")}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}&key=${encodeURIComponent(apiKey)}`);
+      let data: any = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(`YouTube trending ${response.status}`);
+      let items = (data.items || []).filter((item: any) => isoDurationSeconds(item.contentDetails?.duration) <= 60);
+      // Trending can contain too few Shorts; supplement with Shorts discovery.
+      if (items.length < limit) {
+        const searchParams = new URLSearchParams({ part: "snippet", type: "video", videoDuration: "short", order: "date", maxResults: "50", q: "shorts", key: apiKey });
+        if (pageToken) searchParams.set("pageToken", pageToken);
+        const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${searchParams}`);
+        const searchData: any = await searchRes.json().catch(() => ({}));
+        if (searchRes.ok) {
+          const ids = (searchData.items || []).map((item: any) => item.id?.videoId).filter(Boolean);
+          if (ids.length) {
+            const detailRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${ids.join(",")}&key=${encodeURIComponent(apiKey)}`);
+            const detailData: any = await detailRes.json().catch(() => ({}));
+            items = [...items, ...(detailData.items || []).filter((item: any) => isoDurationSeconds(item.contentDetails?.duration) <= 60)];
+            data.nextPageToken = data.nextPageToken || searchData.nextPageToken || "";
+          }
+        }
+      }
+      const seen = new Set<string>();
+      const videos = items.filter((item: any) => {
+        if (!item.id || seen.has(item.id)) return false;
+        seen.add(item.id);
+        return true;
+      }).slice(0, limit).map((item: any) => ({
+        source: "youtube", platform: "youtube", id: item.id, youtubeId: item.id,
+        title: item.snippet?.title || "YouTube Short",
+        channelName: item.snippet?.channelTitle || "YouTube Creator",
+        channelId: item.snippet?.channelId || "",
+        thumbnailUrl: item.snippet?.thumbnails?.high?.url || `https://i.ytimg.com/vi/${item.id}/hqdefault.jpg`,
+        views: formatViews(item.statistics?.viewCount), viewsRaw: Number(item.statistics?.viewCount || 0),
+        duration: parseIsoDuration(item.contentDetails?.duration), publishedAt: item.snippet?.publishedAt || "",
+        category: "Shorts"
+      }));
+      return c.json({ videos, nextPageToken: data.nextPageToken || "", real: true });
+    } catch (error: any) {
+      return c.json({ videos: [], nextPageToken: "", real: false, error: error.message || "SHORTS_FETCH_FAILED" }, 502);
+    }
+  });
 
   // === WATCH LATER ===
   app.get("/api/watch-later", (c) => {
@@ -947,7 +1053,7 @@ function createApiApp() {
     return { videoId, title, transcript: description || "No public transcript was provided. Be transparent about uncertainty and use the available title/context." };
   }
   async function runGroq(c: any, feature: "teacher" | "jot" | "workspace", body: any) {
-    const user = gatedGetUserFromCookie(c);
+    const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to use AI features." }, 401);
 
     const subscription = proSubscriptions.get(user.id);
@@ -1035,7 +1141,7 @@ function createApiApp() {
     return runGroq(c, "jot", body);
   });
   app.get("/api/ai-jot", async (c) => {
-    const user = gatedGetUserFromCookie(c);
+    const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to use AI Jot." }, 401);
     const videoId = c.req.query("videoId") || "";
     if (!videoId) return c.json({ success: false, error: "VIDEO_ID_REQUIRED" }, 400);
@@ -1052,14 +1158,14 @@ function createApiApp() {
     return runGroq(c, "workspace", body);
   });
   const workspaceStore = (globalThis as any).__workspaceStore || ((globalThis as any).__workspaceStore = new Map<string, any>());
-  app.get("/api/workspace/saved", (c) => {
-    const user = gatedGetUserFromCookie(c);
+  app.get("/api/workspace/saved", async (c) => {
+    const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED" }, 401);
     const videoId = c.req.query("videoId") || "default";
     return c.json({ success: true, workspace: workspaceStore.get(`${user.id}:${videoId}`) || null });
   });
   app.post("/api/workspace/save", async (c) => {
-    const user = gatedGetUserFromCookie(c);
+    const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED" }, 401);
     let body: any = {};
     try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
@@ -1094,7 +1200,7 @@ function createApiApp() {
   app.get("/api/studio/templates", (c) => c.json({ templates: inMemoryStudioTemplates }));
   app.get("/api/marketplace/apps", (c) => c.json({ apps: (globalThis as any).__marketplaceApps || [] }));
   app.post("/api/marketplace-publish", async (c) => {
-    const user = gatedGetUserFromCookie(c);
+    const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED" }, 401);
     const subscription = proSubscriptions.get(user.id);
     if (!subscription?.active) return c.json({ success: false, error: "PRO_REQUIRED", message: "Marketplace publishing requires Pro.", upgradeUrl: "/pricing" }, 403);
@@ -1165,8 +1271,8 @@ function createApiApp() {
   });
 
   // Paystack subscriptions
-  app.get("/api/subscription/status", (c) => {
-    const user = gatedGetUserFromCookie(c);
+  app.get("/api/subscription/status", async (c) => {
+    const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ authenticated: false, isPro: false });
     const subscription = proSubscriptions.get(user.id);
     const isPro = Boolean(subscription?.active);
@@ -1178,7 +1284,7 @@ function createApiApp() {
     return c.json({ authenticated: true, isPro, plan: subscription?.plan || null, usage });
   });
   app.post("/api/paystack/initialize", async (c) => {
-    const user = gatedGetUserFromCookie(c);
+    const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ error: "SIGNIN_REQUIRED" }, 401);
     const secret = (c.env as Env)?.PAYSTACK_SECRET_KEY;
     if (!secret) return c.json({ error: "PAYSTACK_NOT_CONFIGURED" }, 503);
@@ -1188,7 +1294,14 @@ function createApiApp() {
     if (!email || !email.includes("@")) return c.json({ error: "ACCOUNT_EMAIL_REQUIRED" }, 400);
     const planCode = plan === "yearly" ? (c.env as Env)?.PAYSTACK_PLAN_YEARLY : (c.env as Env)?.PAYSTACK_PLAN_MONTHLY;
     const amount = plan === "yearly" ? 9900 : 1900;
-    const payload: Record<string, unknown> = { email, amount, currency: "USD", metadata: { userId: user.id, plan } };
+    const origin = new URL(c.req.url).origin;
+    const payload: Record<string, unknown> = {
+      email,
+      amount,
+      currency: "USD",
+      callback_url: `${origin}/pricing?paystack=success`,
+      metadata: { userId: user.id, plan },
+    };
     if (planCode) payload.plan = planCode;
     const response = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
@@ -1201,6 +1314,32 @@ function createApiApp() {
     }
     return c.json({ authorization_url: data.data.authorization_url, reference: data.data.reference, plan });
   });
+  app.get("/api/paystack/verify", async (c) => {
+    const user = await gatedGetUserFromCookie(c);
+    if (!user) return c.json({ error: "SIGNIN_REQUIRED" }, 401);
+    const reference = String(c.req.query("reference") || "").trim();
+    const secret = (c.env as Env)?.PAYSTACK_SECRET_KEY;
+    if (!reference) return c.json({ error: "REFERENCE_REQUIRED" }, 400);
+    if (!secret) return c.json({ error: "PAYSTACK_NOT_CONFIGURED" }, 503);
+
+    const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    const data: any = await response.json().catch(() => ({}));
+    const transaction = data.data;
+    const transactionUserId = String(transaction?.metadata?.userId || "");
+    const transactionEmail = String(transaction?.customer?.email || "").toLowerCase();
+    if (!response.ok || !data.status || transaction?.status !== "success") {
+      return c.json({ error: data.message || "PAYSTACK_VERIFICATION_FAILED" }, 502);
+    }
+    if ((transactionUserId && transactionUserId !== user.id) || (!transactionUserId && transactionEmail !== String(user.email || "").toLowerCase())) {
+      return c.json({ error: "PAYSTACK_ACCOUNT_MISMATCH" }, 403);
+    }
+
+    const plan = transaction?.metadata?.plan === "yearly" ? "yearly" : "monthly";
+    proSubscriptions.set(user.id, { active: true, plan, reference, updatedAt: Date.now() });
+    return c.json({ success: true, isPro: true, plan });
+  });
   app.post("/api/paystack/webhook", async (c) => {
     const secret = (c.env as Env)?.PAYSTACK_SECRET_KEY;
     const signature = c.req.header("x-paystack-signature") || "";
@@ -1209,7 +1348,12 @@ function createApiApp() {
     const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-512" }, false, ["sign"]);
     const digest = Array.from(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody)))).map(b => b.toString(16).padStart(2, "0")).join("");
     if (digest !== signature) return c.json({ error: "INVALID_SIGNATURE" }, 401);
-    const event: any = JSON.parse(rawBody);
+    let event: any;
+    try {
+      event = JSON.parse(rawBody);
+    } catch {
+      return c.json({ error: "INVALID_WEBHOOK_JSON" }, 400);
+    }
     if (event.event === "charge.success") {
       const userId = event.data?.metadata?.userId;
       if (userId) proSubscriptions.set(userId, { active: true, plan: event.data?.metadata?.plan || "monthly", reference: event.data?.reference, updatedAt: Date.now() });

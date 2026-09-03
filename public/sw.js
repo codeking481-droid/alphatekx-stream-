@@ -1,9 +1,10 @@
-const CACHE_NAME = 'alphatekx-v15-workspace';
+const CACHE_NAME = 'alphatekx-v18-google-signup';
 const STATIC_ASSETS = [
   '/',
   '/manifest.json',
   '/styles.css'
 ];
+const LEGACY_BAD_ASSET_PATH = '/api/auth/app.jsx';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -28,6 +29,12 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
+  // Never fall back to a cached response for the legacy callback asset path.
+  // It must remain a network-only 404 rather than resurrecting the old bundle.
+  if (new URL(event.request.url).pathname === LEGACY_BAD_ASSET_PATH) {
+    event.respondWith(fetch(event.request));
+    return;
+  }
   // Pass-through for dynamic API calls or fallback to network first
   if (event.request.method === 'GET') {
     event.respondWith(

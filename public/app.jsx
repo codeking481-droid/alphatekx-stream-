@@ -225,7 +225,7 @@ const SignInButton = () => {
   };
   return (
     <button onClick={handleSignIn} title="If Google shows an unverified warning, click Advanced → Continue" className="bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold px-8 py-3 rounded-xl hover:scale-105 transition shadow-lg hover:shadow-gold/30">
-      Sign in with YouTube →
+      Sign in with Google →
     </button>
   );
 };
@@ -247,7 +247,7 @@ const SignUpBlock = ({ onSignIn }) => (
     <div className="bg-zinc-900 rounded-2xl p-6 max-w-md w-full text-center border border-white/10">
       <h2 id="signup-block-title" className="text-white text-xl font-bold">🔒 Sign up to continue watching</h2>
       <p className="text-zinc-400 text-sm mt-2">You have watched 1 video free. Sign in free to keep watching unlimited videos and unlock your profile.</p>
-      <button onClick={onSignIn} className="w-full mt-6 bg-[#FFD60A] text-black py-3 rounded-full font-bold">Sign in with YouTube → Continue</button>
+      <button onClick={onSignIn} className="w-full mt-6 bg-[#FFD60A] text-black py-3 rounded-full font-bold">Sign in with Google → Continue</button>
       <p className="text-zinc-500 text-xs mt-2">Free — unlimited video after signup</p>
       <GoogleUnverifiedNotice />
     </div>
@@ -367,18 +367,6 @@ function App() {
   };
   const allowVideoForUser = (video) => {
     if (!video) return;
-    if (!isGuest) {
-      setActiveVideo(normalizeVideo(video));
-      setActiveTab("watch");
-      if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-      return;
-    }
-    const count = Number.parseInt(localStorage.getItem("alphatekx_anon_watch_count") || "0", 10);
-    if (count >= 1) {
-      setShowSignUpBlock(true);
-      return;
-    }
-    localStorage.setItem("alphatekx_anon_watch_count", "1");
     setActiveVideo(normalizeVideo(video));
     setActiveTab("watch");
     if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
@@ -391,8 +379,6 @@ function App() {
         if (!videos.length) return;
         const realVideos = uniqueVideos(videos.map(normalizeVideo));
         setVideoCatalog(realVideos);
-        const realShorts = realVideos.filter(isShortFormVideo);
-        if (realShorts.length) setShortsVideos(realShorts);
       })
       .catch(() => {});
   }, []);
@@ -402,6 +388,20 @@ function App() {
       else if(d && d.channelName) setAuthUser(d);
       else setAuthUser(null);
     }).catch(()=>setAuthUser(null)).finally(()=>setAuthLoading(false));
+  }, []);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const error = params.get("auth_error");
+    if (!error) return;
+    const detail = params.get("details");
+    const messages = {
+      access_denied: "Google sign-in was cancelled.",
+      token_exchange_failed: "Google sign-in could not be completed.",
+      profile_failed: "Google did not return a usable profile.",
+      oauth_not_configured: "Google sign-in is not configured.",
+    };
+    window.setTimeout(() => window.alert(`${messages[error] || "Google sign-in failed."}${detail ? ` (${detail})` : ""}`), 0);
+    window.history.replaceState({}, "", window.location.pathname);
   }, []);
   // Navigation & Drawer State
   const [activeTab, setActiveTab] = useState(() => {
@@ -971,7 +971,7 @@ function App() {
         email: authUser.email || `${(authUser.channelName||"youtube").toLowerCase().replace(/\s+/g,"")}@youtube.local`,
         avatar: authUser.channelAvatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(authUser.channelName||"You")}&background=FFD700&color=000&size=200&bold=true`,
         banner: authUser.banner || "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1000&q=80",
-        bio: `YouTube Channel • ${authUser.channelName || "You"} • Signed in via YouTube — full access unlocked ✓`,
+        bio: `Alphatekx profile • ${authUser.channelName || "You"} • Signed in with Google — full access unlocked ✓`,
         subscribers: authUser.subscribers || (authUser.subscribersCount ? String(authUser.subscribersCount) : "—"),
         subscribersCount: authUser.subscribersCount || 0,
         verified: true,
@@ -983,13 +983,6 @@ function App() {
       setProfileForm({ name: ytProfile.name, handle: ytProfile.handle, bio: ytProfile.bio, avatar: ytProfile.avatar, banner: ytProfile.banner, email: ytProfile.email });
     }
   }, [authUser]);
-  useEffect(() => {
-    if (!authLoading && isGuest && activeTab === "watch" && window.location.pathname === "/watch") {
-      const count = Number.parseInt(localStorage.getItem("alphatekx_anon_watch_count") || "0", 10);
-      if (count >= 1) setShowSignUpBlock(true);
-      else localStorage.setItem("alphatekx_anon_watch_count", "1");
-    }
-  }, [activeTab, authLoading, isGuest]);
   useEffect(() => {
     if (!isGuest) setShowSignUpBlock(false);
   }, [isGuest]);
@@ -1131,6 +1124,31 @@ function App() {
   };
   const homeLoadingMoreRef = useRef(false);
   const [shortsVideos, setShortsVideos] = useState([]);
+  const [shortsPageToken, setShortsPageToken] = useState("");
+  const shortsIdsRef = useRef(new Set());
+  const loadShortsPage = async (reset = false) => {
+    if (shortsLoadingMoreRef.current || (!reset && !shortsPageToken)) return;
+    shortsLoadingMoreRef.current = true;
+    try {
+      const token = reset ? "" : shortsPageToken;
+      const response = await fetch(`/api/shorts?limit=12${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Shorts unavailable");
+      const incoming = uniqueVideos((data.videos || []).map(normalizeVideo)).filter(video => {
+        const id = video.youtubeId || video.id;
+        if (!id || shortsIdsRef.current.has(id)) return false;
+        shortsIdsRef.current.add(id);
+        return true;
+      });
+      if (reset) setShortsIndex(0);
+      setShortsVideos(prev => reset ? incoming : uniqueVideos([...prev, ...incoming]));
+      setShortsPageToken(data.nextPageToken || "");
+    } catch (error) {
+      if (reset) setShortsVideos([]);
+    } finally {
+      shortsLoadingMoreRef.current = false;
+    }
+  };
   const currentShort = shortsVideos[shortsIndex] || shortsVideos[0];
   const [miniPlayerActive, setMiniPlayerActive] = useState(false); // REMOVED — no float
   const [isMiniPlaying, setIsMiniPlaying] = useState(true);
@@ -1240,9 +1258,9 @@ function App() {
         if (parts.length < 2 || parts.some(Number.isNaN)) return Infinity;
         return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
       };
-      const shorts = real.filter(isShortFormVideo);
-      if (shorts.length) setShortsVideos(shorts);
+      // Shorts are fetched from the dedicated real/trending endpoint below.
     }).catch(()=>{});
+    loadShortsPage(true);
   }, []);
 
   // Active Video State — also track watched history real-time + real likes/views (no mock)
@@ -1363,7 +1381,7 @@ function App() {
   }, [activeVideo?.youtubeId, activeVideo?.id]);
   // Fetch real views/likes for catalog + shorts — no mock nonsense, real YouTube stats
   useEffect(() => {
-    const allIds = [...new Set([...videoCatalog.map(v=>v.youtubeId), ...shortsVideos.map(s=>s.youtubeId)])].filter(id=>!String(id).startsWith("mock"));
+    const allIds = [...new Set([...videoCatalog.map(v=>v.youtubeId || v.id), ...shortsVideos.map(s=>s.youtubeId || s.id)])].filter(id=>id && !String(id).startsWith("mock"));
     allIds.forEach(id=>{
       fetch(`/api/video/${encodeURIComponent(id)}`).then(r=>r.ok?r.json():null).then(d=>{
         if (d && d.video) {
@@ -1551,6 +1569,7 @@ function App() {
   const [checkoutProduct, setCheckoutProduct] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
   const [cartCount, setCartCount] = useState(0);
+  const [landscapeMode, setLandscapeMode] = useState(false);
 
   // Refs
   const iframeRef = useRef(null);
@@ -1561,6 +1580,21 @@ function App() {
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+  const toggleLandscape = async () => {
+    const next = !landscapeMode;
+    setLandscapeMode(next);
+    try {
+      if (next) {
+        if (mainPlayerRef.current?.requestFullscreen) await mainPlayerRef.current.requestFullscreen();
+        if (screen.orientation?.lock) await screen.orientation.lock("landscape");
+      } else {
+        if (document.fullscreenElement && document.exitFullscreen) await document.exitFullscreen();
+        if (screen.orientation?.unlock) await screen.orientation.unlock();
+      }
+    } catch {
+      showToast("Landscape mode is controlled by your device");
+    }
   };
   const saveWorkspace = async () => {
     const videoId = activeVideo?.youtubeId || activeVideo?.id || "default";
@@ -1608,11 +1642,32 @@ function App() {
       showToast(error.message || "Unable to start checkout");
     }
   };
+  const refreshSubscription = async () => {
+    const response = await fetch("/api/subscription/status", { credentials: "include" });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) setIsProUser(Boolean(data?.isPro));
+    return data;
+  };
   useEffect(() => {
-    fetch("/api/subscription/status", { credentials: "include" })
-      .then(response => response.ok ? response.json() : null)
-      .then(data => { if (data?.isPro) setIsProUser(true); })
-      .catch(() => {});
+    refreshSubscription().catch(() => {});
+  }, [authUser?.id]);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("paystack") !== "success" || !authUser) return;
+    const reference = params.get("trxref") || params.get("reference");
+    if (!reference) {
+      showToast("Payment returned without a transaction reference");
+      return;
+    }
+    fetch(`/api/paystack/verify?reference=${encodeURIComponent(reference)}`, { credentials: "include" })
+      .then(async response => {
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok || !data.success) throw new Error(data.error || "Payment verification failed");
+        await refreshSubscription();
+        showToast("Payment confirmed — Pro is now unlocked");
+        window.history.replaceState({}, "", "/pricing");
+      })
+      .catch(error => showToast(error.message || "Payment verification failed"));
   }, [authUser?.id]);
 
   // YouTube Keyboard Shortcuts (k, f, m, t, c, /)
@@ -2314,7 +2369,7 @@ function App() {
           <button onClick={()=>showToast("Notifications")} className="hidden sm:flex w-9 h-9 rounded-full hover:bg-white/10 items-center justify-center text-gray-300 hover:text-white"><Icon name="bell" className="w-5 h-5" /></button>
           <button onClick={()=>setActiveTab("profile")} className="w-9 h-9 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-300 hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 009 15a1.65 1.65 0 001-1.51V13a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 9a1.65 1.65 0 001-1.51V7a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 9a1.65 1.65 0 00-1 1.51V13a1.65 1.65 0 001 1.51z"/></svg></button>
           {isGuest ? (
-            <button onClick={async()=>{ try{const r=await fetch('/api/auth/url');const d=await r.json(); if(d.url) window.location.href=d.url;}catch{window.location.href='/api/auth/url';}}} className="hidden sm:flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold text-xs hover:scale-105 transition">Sign in with YouTube →</button>
+            <button onClick={async()=>{ try{const r=await fetch('/api/auth/url');const d=await r.json(); if(d.url) window.location.href=d.url;}catch{window.location.href='/api/auth/url';}}} className="hidden sm:flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold text-xs hover:scale-105 transition">Sign in with Google →</button>
           ) : (
             <button onClick={()=>setActiveTab("profile")} className="w-9 h-9 rounded-full bg-[#7c3aed] text-white font-bold flex items-center justify-center border-2 border-white/10">A</button>
           )}
@@ -2474,7 +2529,7 @@ function App() {
                 <span className="text-[11px] font-bold text-[#7a7a9e] uppercase tracking-[0.12em]">Subscribed Channels</span>
                 {isGuest ? (
                   <div className="space-y-2">
-                    <p className="text-xs text-gray-500 leading-relaxed">No fake channels. Sign in with YouTube to load real subscriptions via YouTube API.</p>
+                    <p className="text-xs text-gray-500 leading-relaxed">Sign in with Google to personalize your Alphatekx feed and save your history.</p>
                     <button onClick={async()=>{ try{const r=await fetch('/api/auth/url');const d=await r.json(); if(d.url) window.location.href=d.url;}catch{window.location.href='/api/auth/url';}}} className="text-xs text-[#FFD700] font-bold hover:underline">Sign in →</button>
                   </div>
                 ) : (
@@ -2541,8 +2596,9 @@ function App() {
             <div className="max-w-[1600px] mx-auto px-0 sm:px-6 py-3 sm:py-6 space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-8 space-y-4">
-                  <div className="watch-video-player sticky top-0 z-20 w-full aspect-video bg-black">
+                  <div ref={mainPlayerRef} className={`watch-video-player relative sticky top-0 z-20 w-full aspect-video bg-black ${landscapeMode ? "ring-2 ring-[#FFD700]" : ""}`}>
                     <iframe ref={iframeRef} src={`https://www.youtube-nocookie.com/embed/${activeVideo.youtubeId || activeVideo.id}?autoplay=1&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&iv_load_policy=3&cc_load_policy=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowFullScreen />
+                    <button onClick={toggleLandscape} className="absolute right-3 top-3 z-30 rounded-full bg-black/75 px-3 py-2 text-xs font-bold text-white border border-white/20 hover:bg-black" aria-label="View video in landscape 16:9">{landscapeMode ? "[x] 16:9" : "[ ] 16:9"}</button>
                   </div>
                   <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight px-4 sm:px-0">{activeVideo.title}</h1>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4 px-4 sm:px-0">
@@ -2633,7 +2689,7 @@ function App() {
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 min-w-0">
                 {/* Video — ONLY real YouTube iframe, no fake overlays */}
-                <div className={`${activeTab === "workspace" ? "hidden" : "lg:col-span-6"} space-y-3`}>
+                <div className="lg:col-span-6 space-y-3">
                   <div className="relative bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.25)]">
                     <div className="aspect-video relative bg-black">
                       <iframe src={`https://www.youtube-nocookie.com/embed/${activeVideo.youtubeId || activeVideo.id}?autoplay=1&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&iv_load_policy=3&cc_load_policy=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowFullScreen />
@@ -2645,7 +2701,7 @@ function App() {
                   </div>
                 </div>
                 {/* Code panel — responsive */}
-                <div className={`${activeTab === "workspace" ? "lg:col-span-12" : "lg:col-span-6"} min-w-0`}>
+                <div className="lg:col-span-6 min-w-0">
                   <div className="bg-[#0f0f1f] border border-white/10 rounded-2xl overflow-hidden shadow-xl flex flex-col h-[55vh] lg:h-[58vh] min-h-[420px]">
                     <div className="flex border-b border-white/10 bg-[#0f0f1f] overflow-x-auto scrollbar-hide">
                       <button onClick={()=>setWatchPanelTab("code")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="code"?"bg-[#FFD700] text-black":"text-gray-400"}`}>Code &lt;/&gt;</button>
@@ -2945,7 +3001,7 @@ function App() {
                     </div>
                     <div className="flex gap-2 sm:gap-3 overflow-x-auto scrollbar-hide pb-2 snap-x snap-mandatory px-0">
                       {shortsVideos.map((s, idx)=>
-                      <div key={s.id} onClick={()=>{ if (isGuest && Number.parseInt(localStorage.getItem("alphatekx_anon_watch_count") || "0", 10) >= 1) { setShowSignUpBlock(true); return; } if (isGuest) localStorage.setItem("alphatekx_anon_watch_count", "1"); setShortsIndex(idx); setShortsMuted(false); setActiveTab("shorts"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing Short: ${s.title}`); }} className="flex-shrink-0 w-[140px] sm:w-[160px] cursor-pointer snap-start group">
+                      <div key={s.id} onClick={()=>{ setShortsIndex(idx); setShortsMuted(false); setActiveTab("shorts"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing Short: ${s.title}`); }} className="flex-shrink-0 w-[140px] sm:w-[160px] cursor-pointer snap-start group">
                           <div className="aspect-[9/16] rounded-xl overflow-hidden bg-black border border-white/10 relative group-hover:border-[#FF0000]/40 transition-colors">
                             <img src={`https://img.youtube.com/vi/${s.youtubeId}/hqdefault.jpg`} alt={s.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
@@ -3023,17 +3079,13 @@ function App() {
                     const height = e.currentTarget.clientHeight || 1;
                     const next = Math.round(e.currentTarget.scrollTop / height);
                     if (next !== shortsIndex && next >= 0 && next < shortsVideos.length) setShortsIndex(next);
-                    if (e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < height * 2 && shortsVideos.length && !shortsLoadingMoreRef.current) {
-                      shortsLoadingMoreRef.current = true;
-                      setShortsVideos(prev => [...prev, ...prev.slice(0, Math.min(8, prev.length)).map((video, copyIndex) => ({ ...video, feedInstance: Date.now() + copyIndex }))]);
-                      window.setTimeout(() => { shortsLoadingMoreRef.current = false; }, 500);
-                    }
+                    if (e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < height * 2) loadShortsPage();
                   }}
                   className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   style={{ touchAction: "pan-y" }}
                 >
                   {shortsVideos.filter(isShortFormVideo).map((short, idx) => (
-                   <article key={`${short.youtubeId}-${short.feedInstance || "initial"}`} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-screen min-h-full snap-start snap-always bg-black overflow-hidden" style={{ scrollSnapStop: "always" }}>
+                   <article key={short.youtubeId || short.id} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-screen min-h-full snap-start snap-always bg-black overflow-hidden" style={{ scrollSnapStop: "always" }}>
                       <div className="absolute inset-0 flex justify-center bg-black">
                         <div className="relative h-[min(92vh,900px)] aspect-[9/16] max-w-[min(92vw,520px)] overflow-hidden rounded-2xl">
                           {idx === shortsIndex ? (

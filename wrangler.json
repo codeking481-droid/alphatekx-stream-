@@ -7,5 +7,20 @@
     "html_handling": "auto-trailing-slash",
     "not_found_handling": "single-page-application"
   },
-  "vars": {}
+  "vars": {
+    "GOOGLE_REDIRECT_URI": "https://alphatekx.name.ng/api/auth/callback"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "alphatekx-db",
+      "database_id": "a8e11a3b-b228-47dc-8c15-7cf35d13d80f"
+    }
+  ],
+  "kv_namespaces": [
+    {
+      "binding": "KV",
+      "id": "919050b7c88c493f9c26312b6cd7a4cd"
+    }
+  ]
 }
