@@ -20,6 +20,9 @@ interface Env {
   TWITTER_BEARER_TOKEN?: string;
   FACEBOOK_ACCESS_TOKEN?: string;
   STRIPE_SECRET_KEY?: string;
+  PAYSTACK_SECRET_KEY?: string;
+  PAYSTACK_PLAN_MONTHLY?: string;
+  PAYSTACK_PLAN_YEARLY?: string;
 }
 
 function parseIsoDuration(iso?: string): string {
@@ -407,6 +410,7 @@ function createApiApp() {
     let channelName = "Alphatekx User";
     let channelAvatar = "https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000&size=200&bold=true";
     let channelId = "";
+    let email = "";
     try {
       if (clientId && clientSecret) {
         // Real OAuth exchange
@@ -417,6 +421,9 @@ function createApiApp() {
         });
         const tokens: any = await tokenRes.json();
         if (tokens.access_token) {
+          const userRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+          const userInfo: any = await userRes.json();
+          email = userInfo.email || "";
           const chRes = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
           const chData: any = await chRes.json();
           const ch = chData.items?.[0];
@@ -426,14 +433,14 @@ function createApiApp() {
             channelAvatar = ch.snippet?.thumbnails?.default?.url || channelAvatar;
           }
           sessionToken = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : Math.random().toString(36).slice(2);
-          gatedSessions.set(sessionToken, { id: channelId || sessionToken, channelId, channelName, channelAvatar, accessToken: tokens.access_token, refreshToken: tokens.refresh_token || "", expiresAt: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), isGuest: false });
+          gatedSessions.set(sessionToken, { id: channelId || sessionToken, channelId, channelName, channelAvatar, email, accessToken: tokens.access_token, refreshToken: tokens.refresh_token || "", expiresAt: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), isGuest: false });
         }
       }
     } catch {}
     if (!sessionToken) {
       // Mock fallback — gated demo still unlocks
       sessionToken = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : Math.random().toString(36).slice(2);
-      gatedSessions.set(sessionToken, { id: sessionToken, channelId, channelName, channelAvatar, isGuest: false });
+      gatedSessions.set(sessionToken, { id: sessionToken, channelId, channelName, channelAvatar, email: "", isGuest: false });
     }
     c.header("Set-Cookie", `session=${sessionToken}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`);
     return c.redirect("/");
@@ -1014,15 +1021,54 @@ function createApiApp() {
     });
   });
 
-  // Subscription & Profile
-  app.post("/api/subscription/checkout", (c) => {
-    return c.json({
-      url: "#",
-      success: true,
-      message: "Pro Subscription Activated! Unlimited AI summaries, Naija Translator, AI Teacher & Memory Chat unlocked.",
-      tier: "pro"
-    });
+  // Paystack subscriptions
+  const proSubscriptions = (globalThis as any).__proSubscriptions || ((globalThis as any).__proSubscriptions = new Map<string, any>());
+  app.get("/api/subscription/status", (c) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ authenticated: false, isPro: false });
+    const subscription = proSubscriptions.get(user.id);
+    return c.json({ authenticated: true, isPro: Boolean(subscription?.active), plan: subscription?.plan || null });
   });
+  app.post("/api/paystack/initialize", async (c) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ error: "SIGNIN_REQUIRED" }, 401);
+    const secret = (c.env as Env)?.PAYSTACK_SECRET_KEY;
+    if (!secret) return c.json({ error: "PAYSTACK_NOT_CONFIGURED" }, 503);
+    const body = await c.req.json<{ plan?: "monthly" | "yearly"; email?: string }>();
+    const plan = body.plan === "yearly" ? "yearly" : "monthly";
+    const email = String(body.email || user.email || "").trim();
+    if (!email || !email.includes("@")) return c.json({ error: "ACCOUNT_EMAIL_REQUIRED" }, 400);
+    const planCode = plan === "yearly" ? (c.env as Env)?.PAYSTACK_PLAN_YEARLY : (c.env as Env)?.PAYSTACK_PLAN_MONTHLY;
+    const amount = plan === "yearly" ? 9900 : 1900;
+    const payload: Record<string, unknown> = { email, amount: amount * 100, currency: "USD", metadata: { userId: user.id, plan } };
+    if (planCode) payload.plan = planCode;
+    const response = await fetch("https://api.paystack.co/transaction/initialize", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${secret}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data: any = await response.json();
+    if (!response.ok || !data.status || !data.data?.authorization_url) {
+      return c.json({ error: data.message || "PAYSTACK_INITIALIZATION_FAILED" }, 502);
+    }
+    return c.json({ authorization_url: data.data.authorization_url, reference: data.data.reference, plan });
+  });
+  app.post("/api/paystack/webhook", async (c) => {
+    const secret = (c.env as Env)?.PAYSTACK_SECRET_KEY;
+    const signature = c.req.header("x-paystack-signature") || "";
+    const rawBody = await c.req.text();
+    if (!secret || !signature) return c.json({ error: "INVALID_WEBHOOK" }, 401);
+    const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-512" }, false, ["sign"]);
+    const digest = Array.from(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(rawBody)))).map(b => b.toString(16).padStart(2, "0")).join("");
+    if (digest !== signature) return c.json({ error: "INVALID_SIGNATURE" }, 401);
+    const event: any = JSON.parse(rawBody);
+    if (event.event === "charge.success") {
+      const userId = event.data?.metadata?.userId;
+      if (userId) proSubscriptions.set(userId, { active: true, plan: event.data?.metadata?.plan || "monthly", reference: event.data?.reference, updatedAt: Date.now() });
+    }
+    return c.json({ received: true });
+  });
+  app.post("/api/subscription/checkout", (c) => c.json({ error: "Use /api/paystack/initialize" }, 410));
 
   // === NEW: Categories ===
   app.get("/api/categories", (c) => {

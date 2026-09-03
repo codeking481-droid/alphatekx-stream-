@@ -1454,6 +1454,34 @@ function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
+  const startProCheckout = async (plan = "monthly") => {
+    if (isGuest) {
+      showToast("Sign in first to start your Pro subscription");
+      const response = await fetch("/api/auth/url");
+      const data = await response.json();
+      if (data?.url) window.location.href = data.url;
+      return;
+    }
+    try {
+      const response = await fetch("/api/paystack/initialize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ plan, email: authUser?.email }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Unable to start checkout");
+      window.location.href = data.authorization_url;
+    } catch (error) {
+      showToast(error.message || "Unable to start checkout");
+    }
+  };
+  useEffect(() => {
+    fetch("/api/subscription/status", { credentials: "include" })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => { if (data?.isPro) setIsProUser(true); })
+      .catch(() => {});
+  }, [authUser?.id]);
 
   // YouTube Keyboard Shortcuts (k, f, m, t, c, /)
   useEffect(() => {
@@ -2073,6 +2101,7 @@ function App() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
+          {!isProUser && <button onClick={() => startProCheckout("monthly")} className="hidden sm:flex min-h-[36px] items-center rounded-full bg-[#FFD700] px-4 py-2 text-xs font-extrabold text-black hover:brightness-110">Go Pro $19</button>}
           <button onClick={()=>showToast("Notifications")} className="hidden sm:flex w-9 h-9 rounded-full hover:bg-white/10 items-center justify-center text-gray-300 hover:text-white"><Icon name="bell" className="w-5 h-5" /></button>
           <button onClick={()=>setActiveTab("profile")} className="w-9 h-9 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-300 hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 009 15a1.65 1.65 0 001-1.51V13a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 9a1.65 1.65 0 001-1.51V7a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 9a1.65 1.65 0 00-1 1.51V13a1.65 1.65 0 001 1.51z"/></svg></button>
           {isGuest ? (
@@ -3190,12 +3219,11 @@ function App() {
                   </div>
 
                   <ul className="space-y-3 text-xs text-gray-300">
-                    <li className="flex items-center gap-2">✓ 5 AI Summaries per day</li>
-                    <li className="flex items-center gap-2">✓ Standard YouTube Iframe Player</li>
-                    <li className="flex items-center gap-2">✓ Community Live Chat access</li>
-                    <li className="text-gray-600 line-through">✗ Naija Translator (Pidgin/Yoruba/Igbo)</li>
-                    <li className="text-gray-600 line-through">✗ AI Teacher Course Builder</li>
-                    <li className="text-gray-600 line-through">✗ AI Memory Watch History Chat</li>
+                    <li className="flex items-center gap-2">✓ Unlimited video watching</li>
+                    <li className="flex items-center gap-2">✓ 5 AI Teacher chats / month</li>
+                    <li className="flex items-center gap-2">✓ 5 AI Jot uses / month</li>
+                    <li className="flex items-center gap-2">✓ 3 AI Workspace builds / month</li>
+                    <li className="text-gray-600 line-through">✗ Marketplace publishing</li>
                   </ul>
 
                   <button disabled className="w-full py-3 bg-white/10 text-gray-400 font-bold text-xs rounded-xl">
@@ -3214,28 +3242,24 @@ function App() {
                       <Icon name="crown" className="w-5 h-5 text-[#00FF88]" />
                     </h3>
                     <div className="text-3xl font-extrabold text-[#00D9FF]">
-                      $5 <span className="text-xs font-normal text-gray-300">/ month or ₦1,500/mo</span>
+                      $19 <span className="text-xs font-normal text-gray-300">/ month or $99 / year</span>
                     </div>
                   </div>
 
                   <ul className="space-y-3 text-xs text-gray-200">
-                    <li className="flex items-center gap-2 text-[#00FF88]">✓ Unlimited AI Summaries</li>
-                    <li className="flex items-center gap-2 text-[#00FF88]">✓ Naija Translator (Pidgin, Yoruba, Igbo, Hausa)</li>
-                    <li className="flex items-center gap-2 text-[#00FF88]">✓ Enhanced Cinema Mode Ambient Glow</li>
-                    <li className="flex items-center gap-2 text-[#00FF88]">✓ AI Teacher Course Builder</li>
-                    <li className="flex items-center gap-2 text-[#00FF88]">✓ AI Memory Watch History Vector Chat</li>
-                    <li className="flex items-center gap-2 text-[#00FF88]">✓ AI Studio Clip Maker & 4K Enhancer</li>
+                    <li className="flex items-center gap-2 text-[#00FF88]">✓ Unlimited AI across all tools</li>
+                    <li className="flex items-center gap-2 text-[#00FF88]">✓ AI Teacher, Jot, Workspace & Memory</li>
+                    <li className="flex items-center gap-2 text-[#00FF88]">✓ Naija Translator and AI Studio</li>
+                    <li className="flex items-center gap-2 text-[#00FF88]">✓ Marketplace publishing and earnings</li>
                   </ul>
 
                   <button 
-                    onClick={() => {
-                      setIsProUser(true);
-                      showToast("Pro Subscription Activated! All superpowers unlocked. 🎉");
-                    }} 
+                    onClick={() => startProCheckout("monthly")}
                     className="w-full py-3.5 bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black font-extrabold text-sm rounded-xl shadow-[0_0_25px_rgba(0,217,255,0.4)] hover:opacity-90 active:scale-95"
                   >
-                    {isProUser ? "You are Pro ✓" : "Upgrade to Pro ($5 / ₦1,500)"}
+                    {isProUser ? "You are Pro ✓" : "Upgrade to Pro — $19/month"}
                   </button>
+                  {!isProUser && <button onClick={() => startProCheckout("yearly")} className="w-full py-3 rounded-xl border border-[#00D9FF]/40 text-[#00D9FF] text-sm font-bold hover:bg-[#00D9FF]/10">Choose annual — $99/year</button>}
                 </div>
               </div>
             </div>
