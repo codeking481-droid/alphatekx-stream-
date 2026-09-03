@@ -2620,7 +2620,7 @@ function App() {
 
           {/* ------------------- 3. YOUTUBE SHORTS — BEST ABSOLUTE, SIMPLE LIKE YOUTUBE, EASY VOLUME ------------------- */}
           {activeTab === "shorts" && (
-            <section className="relative h-full w-full overflow-hidden bg-[#0B0215]">
+            <section className="fixed inset-x-0 bottom-0 top-[56px] z-20 w-full overflow-hidden bg-[#0B0215] md:static md:h-full">
               <div className="mx-auto flex h-full w-full max-w-[760px] flex-col">
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3">
                   <div className="flex items-center gap-2">
