@@ -36,7 +36,7 @@ export function getMockYouTubeCatalog() {
 
 function toUnified(v: any) {
   // Prompt 1: thumbnail MUST be built from videoId in same object, never separate array — guarantees no mix
-  const thumb = v.thumbnailUrl || (v.youtubeId ? `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg` : "");
+  const thumb = v.youtubeId ? `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg` : "";
   return {
     source: "youtube",
     platform: "youtube",

@@ -139,19 +139,19 @@ const PlatformBadge = ({ platform = "youtube", size = "xs" }) => {
   const border = platform==="tiktok" ? "border border-white/40" : "";
   return <span className={`${cls} font-bold rounded-full ${border}`} style={{ background: s.bg, color: s.text }}>{s.label}</span>;
 };
-const VideoCard = ({ video, onPlay, onSave, isSaved, onAi }) => {
+const VideoCard = ({ video, onPlay, onSave, isSaved, onAi, cleanHome = false }) => {
   const v = normalizeVideo(video);
   const platform = video.platform || v.platform || "youtube";
   return (
-    <div onClick={()=>onPlay&&onPlay(v)} className="glass-card overflow-hidden hover:border-[#FFD700]/50 hover:shadow-[0_0_15px_rgba(255,215,0,0.15)] transition-all cursor-pointer group flex flex-col justify-between rounded-xl sm:rounded-2xl">
+    <div onClick={()=>cleanHome ? (window.location.href=`/watch?v=${v.youtubeId}`) : (onPlay&&onPlay(v))} className="glass-card overflow-hidden hover:border-[#FFD700]/50 hover:shadow-[0_0_15px_rgba(255,215,0,0.15)] transition-all cursor-pointer group flex flex-col justify-between rounded-xl sm:rounded-2xl">
       <div className="relative aspect-video w-full bg-gray-900 overflow-hidden rounded-t-xl sm:rounded-t-2xl">
-        <img src={v.img || v.thumbnailUrl} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+        <img src={cleanHome ? `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg` : (v.img || v.thumbnailUrl)} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
         <span className="absolute bottom-2 right-2 bg-black/80 text-[10px] font-mono px-1.5 py-0.5 rounded text-white">{v.duration}</span>
-        <span className="absolute top-2 left-2"><PlatformBadge platform={platform} /></span>
-        {onAi && (
+        {!cleanHome && <span className="absolute top-2 left-2"><PlatformBadge platform={platform} /></span>}
+        {onAi && !cleanHome && (
           <button onClick={(e)=>{e.stopPropagation(); onAi(v);}} className="absolute bottom-2 left-2 w-7 h-7 rounded-full bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black font-black text-[11px] flex items-center justify-center border border-white/30 shadow-md hover:scale-110 transition-transform" title="AI Help — real-time">A</button>
         )}
-        {onSave && (
+        {onSave && !cleanHome && (
           <button onClick={(e)=>{e.stopPropagation(); onSave(video);}} className={`absolute top-2 right-2 w-9 h-9 min-w-[36px] min-h-[36px] rounded-full flex items-center justify-center text-sm font-bold ${isSaved ? "bg-[#FFD700] text-black" : "bg-black/70 text-white hover:bg-black/90"} border border-white/20`}>
             {isSaved ? "✓" : "+"}
           </button>
@@ -2506,7 +2506,7 @@ function App() {
                     searchFiltered.length>0 ? (
                       <div className="grid grid-cols-2 gap-2 px-2 sm:px-0 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
                         {searchFiltered.map((vid) => (
-                          <VideoCard key={vid.id || vid.youtubeId} video={vid} onPlay={(norm)=>{ setActiveVideo({...norm, platform: vid.platform || "youtube"}); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing: ${norm.title}`); }} onSave={toggleWatchLater} isSaved={isSavedWatchLater(vid.youtubeId||vid.id)} onAi={openAiHelper} />
+                          <VideoCard key={vid.youtubeId || vid.id} video={vid} cleanHome />
                         ))}
                       </div>
                     ) : (
@@ -2568,7 +2568,7 @@ function App() {
                   <>
                   <div className="grid grid-cols-1 gap-5 px-3 sm:px-0 sm:grid-cols-2 sm:gap-4 md:gap-6 md:grid-cols-3 lg:grid-cols-4">
                     {homeFiltered.map((vid) => (
-                      <VideoCard key={vid.id} video={{...vid, platform: vid.platform||"youtube"}} onPlay={(norm)=>{ setActiveVideo({...norm, platform: vid.platform||"youtube"}); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} onSave={toggleWatchLater} isSaved={isSavedWatchLater(vid.id)} onAi={openAiHelper} />
+                      <VideoCard key={vid.youtubeId || vid.id} video={{...vid, platform:  vid.platform||"youtube"}} cleanHome />
                     ))}
                   </div>
                   {marketplaceProducts.length>0 && (

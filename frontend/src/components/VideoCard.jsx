@@ -7,9 +7,7 @@ import React from "react";
 
 export default function VideoCard({ video }) {
   const videoId = video?.videoId || video?.youtubeId || video?.id || "";
-  const thumb = video?.thumbnail || video?.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
-  // enforce videoId-based thumb — never from separate array
-  const thumbUrl = thumb && thumb.includes("i.ytimg.com/vi/") ? thumb : `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+  const thumbUrl = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
   const title = video?.title || "Untitled";
   const channel = video?.channelName || video?.channel?.name || video?.channel || "";
   const views = video?.viewsFormatted || video?.views || "";
