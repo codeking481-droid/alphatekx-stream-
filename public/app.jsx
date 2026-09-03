@@ -307,6 +307,15 @@ function uniqueVideos(videos) {
     return true;
   });
 }
+function durationInSeconds(duration) {
+  const parts = String(duration || "").split(":").map(Number);
+  if (!duration || parts.length < 2 || parts.some(Number.isNaN)) return null;
+  return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+}
+function isLongFormVideo(video) {
+  const seconds = durationInSeconds(video?.duration);
+  return seconds === null || seconds > 60;
+}
 
 // --- Main App Component ---
 function App() {
@@ -1777,9 +1786,9 @@ function App() {
     const matchesChip = activeChip === "All" || video.tag === activeChip || (activeChip === "PyTorch" && video.title.includes("Neural")) || (activeChip === "Live Chat" && video.tag === "Cloudflare Workers");
     return matchesSearch && matchesChip;
   });
-  const searchFiltered = activePlatform==="all" ? searchResults : searchResults.filter(v=> (v.platform||"youtube")===activePlatform);
-  const homeFiltered = activePlatform==="all" ? filteredVideos : filteredVideos.filter(v=> (v.platform||"youtube")===activePlatform);
-  const featuredVideo = videoCatalog[0] || DEFAULT_VIDEO;
+  const searchFiltered = (activePlatform==="all" ? searchResults : searchResults.filter(v=> (v.platform||"youtube")===activePlatform)).filter(isLongFormVideo);
+  const homeFiltered = (activePlatform==="all" ? filteredVideos : filteredVideos.filter(v=> (v.platform||"youtube")===activePlatform)).filter(isLongFormVideo);
+  const featuredVideo = videoCatalog.find(isLongFormVideo) || DEFAULT_VIDEO;
 
     return (
     <div className="h-screen w-full max-w-[100vw] overflow-hidden flex flex-col bg-[#08080f] p-0 sm:p-3 text-white font-sans selection:bg-[#FFD700] selection:text-black">
