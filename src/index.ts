@@ -68,6 +68,18 @@ let inMemoryProducts = [
 
 // PROMPT #6: Marketplace Sales store — tracks purchases with 20% fee
 export let inMemorySales: Array<any> = [];
+export const inMemoryStudioTemplates = [
+  { id: "avatar-generator", name: "Avatar Generator", description: "Build an AI avatar generator interface.", code: "<div class='app'><h1>Avatar Generator</h1><input placeholder='Upload a photo' type='file'><button>Generate Avatar</button></div>" },
+  { id: "video-summarizer", name: "Video Summarizer", description: "Summarize a video with a clean reading view.", code: "<div class='app'><h1>Video Summarizer</h1><textarea placeholder='Paste a video URL'></textarea><button>Summarize</button><pre id='summary'>Your summary appears here.</pre></div>" },
+  { id: "quiz-builder", name: "Quiz Builder", description: "Create an interactive quiz from learning content.", code: "<div class='app'><h1>Quiz Builder</h1><p>What did you learn?</p><button onclick='this.textContent=\"Correct!\"'>Answer quiz</button></div>" },
+  { id: "landing-page", name: "Product Landing Page", description: "Launch a polished product landing page.", code: "<div class='app'><h1>Build something people love</h1><p>A focused landing page for your next idea.</p><button>Get started</button></div>" },
+  { id: "chat-assistant", name: "Chat Assistant", description: "Start with a conversational assistant UI.", code: "<div class='app'><h1>Chat Assistant</h1><input placeholder='Ask a question'><button>Send</button></div>" },
+  { id: "expense-tracker", name: "Expense Tracker", description: "Track spending in a simple dashboard.", code: "<div class='app'><h1>Expense Tracker</h1><input placeholder='Expense amount' type='number'><button>Add expense</button></div>" },
+  { id: "course-dashboard", name: "Course Dashboard", description: "Organize lessons and progress.", code: "<div class='app'><h1>My Course</h1><progress value='35' max='100'></progress><p>35% complete</p></div>" },
+  { id: "portfolio", name: "Creator Portfolio", description: "Showcase work and skills.", code: "<div class='app'><h1>Creator Portfolio</h1><p>Selected projects and experiments.</p></div>" },
+  { id: "link-in-bio", name: "Link in Bio", description: "Collect important links in one place.", code: "<div class='app'><h1>@creator</h1><a href='#'>My latest project</a><a href='#'>Contact me</a></div>" },
+  { id: "data-dashboard", name: "Data Dashboard", description: "Present key metrics clearly.", code: "<div class='app'><h1>Metrics</h1><div><strong>1,248</strong><span> visitors this week</span></div></div>" },
+];
 
 let inMemoryQueue = [
   { id: 1, userEmail: 'user@alphatekx.com', platform: 'youtube', videoId: 'dQw4w9WgXcQ', title: 'How to Build Neural Networks from Scratch | Full AI Tutorial', thumbnail: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600&q=80', duration: '22:45', position: 0, isPlayed: 0, createdAt: Date.now() },
@@ -438,11 +450,11 @@ function createApiApp() {
           gatedSessions.set(sessionToken, { id: channelId || sessionToken, channelId, channelName, channelAvatar, email, accessToken: tokens.access_token, refreshToken: tokens.refresh_token || "", expiresAt: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), isGuest: false });
         }
       }
-    } catch {}
+    } catch {
+      return c.json({ error: "OAUTH_EXCHANGE_FAILED", message: "Google sign-in could not be completed. Please try again." }, 502);
+    }
     if (!sessionToken) {
-      // Mock fallback — gated demo still unlocks
-      sessionToken = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : Math.random().toString(36).slice(2);
-      gatedSessions.set(sessionToken, { id: sessionToken, channelId, channelName, channelAvatar, email: "", isGuest: false });
+      return c.json({ error: "GOOGLE_OAUTH_NOT_CONFIGURED", message: "Google sign-in is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET." }, 503);
     }
     c.header("Set-Cookie", `session=${sessionToken}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`);
     return c.redirect("/");
@@ -917,6 +929,23 @@ function createApiApp() {
   // when persistent billing storage is available.
   const aiUsage = (globalThis as any).__aiUsage || ((globalThis as any).__aiUsage = new Map<string, number>());
   const aiLimits: Record<string, number> = { teacher: 5, jot: 5, workspace: 3 };
+  async function getVideoContext(c: any, body: any) {
+    const videoId = String(body.videoId || "").trim();
+    let title = String(body.title || "this video").trim();
+    let description = String(body.description || body.transcript || "").trim();
+    if (videoId && (c.env as Env)?.YOUTUBE_API_KEY) {
+      try {
+        const response = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet&id=${encodeURIComponent(videoId)}&key=${encodeURIComponent((c.env as Env).YOUTUBE_API_KEY as string)}`);
+        const data: any = await response.json();
+        const snippet = data.items?.[0]?.snippet;
+        if (snippet) {
+          title = snippet.title || title;
+          description = [snippet.description, description].filter(Boolean).join("\n").slice(0, 12000);
+        }
+      } catch {}
+    }
+    return { videoId, title, transcript: description || "No public transcript was provided. Be transparent about uncertainty and use the available title/context." };
+  }
   async function runGroq(c: any, feature: "teacher" | "jot" | "workspace", body: any) {
     const user = gatedGetUserFromCookie(c);
     if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to use AI features." }, 401);
@@ -944,11 +973,21 @@ function createApiApp() {
     const apiKey = (c.env as Env)?.GROQ_API_KEY;
     if (!apiKey) return c.json({ success: false, error: "GROQ_NOT_CONFIGURED" }, 503);
 
+    const context = await getVideoContext(c, body);
+    const question = String(body.question || "").trim();
     const instructions = feature === "teacher"
-      ? "You are an AI teacher. Return a concise course plan as JSON with goal and steps. Each step must have title, description, and searchQuery."
+      ? question
+        ? "You are an AI teacher answering questions about a video. Answer directly and concisely. Cite timestamps only when they are present in the supplied transcript/context; never invent timestamps."
+        : "You are an AI teacher. Return a concise course plan as JSON with goal and steps. Each step must have title, description, and searchQuery."
       : feature === "jot"
-        ? "You are AI Jot. Turn the user's input into a concise useful note. Return JSON with title, summary, bullets, and actionItems."
-        : "You are an AI workspace assistant. Turn the user's request into a practical workspace plan. Return JSON with title, summary, tasks, and nextSteps.";
+        ? "You are AI Jot. Extract 5 concise notes from the supplied video context. Return JSON with jots, where each item has time, seconds, text, and summary. If timestamps are unavailable, use 0 and say so rather than inventing them."
+        : "You are an expert frontend builder. Return JSON with title, summary, and code. Code must be a complete self-contained HTML document with inline CSS and JavaScript that can run in an iframe. Do not return markdown fences.";
+    const enrichedInput = [
+      input,
+      context.videoId ? `Video ID: ${context.videoId}` : "",
+      `Video title: ${context.title}`,
+      `Video context/transcript: ${context.transcript.slice(0, 12000)}`,
+    ].filter(Boolean).join("\n\n");
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -956,7 +995,7 @@ function createApiApp() {
         model: (c.env as Env)?.GROQ_MODEL || "llama-3.1-8b-instant",
         temperature: 0.2,
         response_format: { type: "json_object" },
-        messages: [{ role: "system", content: instructions }, { role: "user", content: input }],
+        messages: [{ role: "system", content: instructions }, { role: "user", content: enrichedInput }],
       }),
     });
     if (!response.ok) {
@@ -967,7 +1006,8 @@ function createApiApp() {
     const content = data.choices?.[0]?.message?.content;
     if (!content) return c.json({ success: false, error: "GROQ_EMPTY_RESPONSE" }, 502);
     let result: any;
-    try { result = JSON.parse(content); } catch { result = { text: content }; }
+    try { result = JSON.parse(content); } catch { result = { answer: content, text: content }; }
+    if (feature === "teacher" && question && !result.answer) result.answer = result.text || content;
     aiUsage.set(usageKey, used + 1);
     return c.json({ success: true, feature, result, message: content, usage: { used: used + 1, limit: isPro ? null : limit, isPro } });
   }
@@ -993,6 +1033,13 @@ function createApiApp() {
     let body: any = {};
     try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
     return runGroq(c, "jot", body);
+  });
+  app.get("/api/ai-jot", async (c) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to use AI Jot." }, 401);
+    const videoId = c.req.query("videoId") || "";
+    if (!videoId) return c.json({ success: false, error: "VIDEO_ID_REQUIRED" }, 400);
+    return runGroq(c, "jot", { videoId, prompt: "Create timestamped memory jots for this video." });
   });
   app.post("/api/workspace", async (c) => {
     let body: any = {};
@@ -1024,6 +1071,24 @@ function createApiApp() {
     let body: any = {};
     try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
     return runGroq(c, "workspace", body);
+  });
+  app.get("/api/studio/templates", (c) => c.json({ templates: inMemoryStudioTemplates }));
+  app.get("/api/marketplace/apps", (c) => c.json({ apps: (globalThis as any).__marketplaceApps || [] }));
+  app.post("/api/marketplace-publish", async (c) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED" }, 401);
+    const subscription = proSubscriptions.get(user.id);
+    if (!subscription?.active) return c.json({ success: false, error: "PRO_REQUIRED", message: "Marketplace publishing requires Pro.", upgradeUrl: "/pricing" }, 403);
+    let body: any;
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    const title = String(body.title || "").trim();
+    const code = String(body.appCode || body.code || "").trim();
+    const price = Number(body.price);
+    if (!title || !code || !Number.isFinite(price) || price < 5 || price > 50) return c.json({ success: false, error: "TITLE_CODE_AND_PRICE_REQUIRED" }, 400);
+    const apps = (globalThis as any).__marketplaceApps || ((globalThis as any).__marketplaceApps = []);
+    const app = { id: `ai_app_${Date.now()}`, title, code, price, creatorId: user.id, creatorName: user.channelName || user.email || "Creator", createdAt: Date.now() };
+    apps.unshift(app);
+    return c.json({ success: true, app });
   });
 
   // Watch History & Vector Search Memory

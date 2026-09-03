@@ -1478,6 +1478,7 @@ function App() {
     { id: 2, name: "Stream Platform Course Bundle", description: "Complete 6-hr video course with certificate & full source code repo.", price: 24.99, badge: "HOT", iconType: "video", category: "course", salesCount: 189, sellerEmail: "academy@alphatekx.ai" },
     { id: 3, name: "Naija Speech Translation Engine", description: "Pidgin, Yoruba & Igbo TTS audio translation API plugin.", price: 14.99, badge: "NEW", iconType: "sparkles", category: "plugin", salesCount: 95, sellerEmail: "nigeria-ai@alphatekx.ai" }
   ]);
+  const [marketplaceApps, setMarketplaceApps] = useState([]);
   const [marketplaceCategory, setMarketplaceCategory] = useState("all");
   const [sellerSales, setSellerSales] = useState({ sales: [], summary: { totalSales:0, totalRevenue:0, totalFees:0, totalSellerRevenue:0 } });
   const [sellerEmailInput, setSellerEmailInput] = useState("creator@alphatekx.ai");
@@ -1485,6 +1486,10 @@ function App() {
   useEffect(() => {
     fetch(`/api/marketplace/products?category=${marketplaceCategory}`).then(r=>r.ok?r.json():null).then(d=>{ if(d && Array.isArray(d.products)) setMarketplaceProducts(d.products); }).catch(()=>{});
   }, [marketplaceCategory]);
+  useEffect(() => {
+    if (activeTab !== "marketplace") return;
+    fetch("/api/marketplace/apps").then(r => r.ok ? r.json() : null).then(d => setMarketplaceApps(Array.isArray(d?.apps) ? d.apps : [])).catch(() => {});
+  }, [activeTab]);
   const loadSellerSales = async (email) => {
     const res = await fetch(`/api/marketplace/sales?sellerEmail=${encodeURIComponent(email || sellerEmailInput)}`);
     const data = await res.json().catch(()=>null);
@@ -1504,6 +1509,9 @@ function App() {
   const [teacherGoal, setTeacherGoal] = useState("Build a streaming app like Alphatekx");
   const [teacherCourse, setTeacherCourse] = useState(null);
   const [isBuildingCourse, setIsBuildingCourse] = useState(false);
+  const [teacherQuestion, setTeacherQuestion] = useState("");
+  const [teacherAnswer, setTeacherAnswer] = useState("");
+  const [isAskingTeacher, setIsAskingTeacher] = useState(false);
 
   // Superpower 8: AI Memory & Chat with History
   const [memoryQuery, setMemoryQuery] = useState("");
@@ -1523,6 +1531,9 @@ function App() {
   const [voiceLang, setVoiceLang] = useState("Pidgin");
   const [voiceResult, setVoiceResult] = useState(null);
   const [isVoiceTranslating, setIsVoiceTranslating] = useState(false);
+  const [studioTemplates, setStudioTemplates] = useState([]);
+  const [videoJots, setVideoJots] = useState([]);
+  const [jotsLoading, setJotsLoading] = useState(false);
 
   // Superpower 10: Monetization Pro Subscription
   const [isProUser, setIsProUser] = useState(false);
@@ -1858,6 +1869,29 @@ function App() {
       showToast(error.message || "AI Teacher request failed");
     } finally { setIsBuildingCourse(false); }
   };
+  const handleAskTeacher = async () => {
+    const question = teacherQuestion.trim();
+    if (!question) return;
+    setIsAskingTeacher(true);
+    try {
+      const response = await fetch("/api/ai/teacher", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ videoId: activeVideo?.youtubeId || activeVideo?.id, title: activeVideo?.title, description: activeVideo?.description, question }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) setShowPaywall(true);
+        throw new Error(data.message || data.error || "AI Teacher request failed");
+      }
+      setTeacherAnswer(data.result?.answer || data.result?.text || data.answer || data.message || "AI Teacher returned no answer.");
+    } catch (error) {
+      showToast(error.message || "AI Teacher request failed");
+    } finally {
+      setIsAskingTeacher(false);
+    }
+  };
 
   // Memory Search — real /api/memory/search with fallback
   const handleMemorySearch = async (e) => {
@@ -1881,6 +1915,26 @@ function App() {
       ]);
     }
   };
+  useEffect(() => {
+    if (activeTab !== "studio") return;
+    fetch("/api/studio/templates")
+      .then(response => response.ok ? response.json() : null)
+      .then(data => setStudioTemplates(Array.isArray(data?.templates) ? data.templates : []))
+      .catch(() => showToast("Unable to load Studio templates"));
+  }, [activeTab]);
+  useEffect(() => {
+    const videoId = activeVideo?.youtubeId || activeVideo?.id;
+    if (activeTab !== "watch" || !videoId || isGuest) {
+      setVideoJots([]);
+      return;
+    }
+    setJotsLoading(true);
+    fetch(`/api/ai-jot?videoId=${encodeURIComponent(videoId)}`, { credentials: "include" })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => setVideoJots(Array.isArray(data?.result?.jots) ? data.result.jots : []))
+      .catch(() => setVideoJots([]))
+      .finally(() => setJotsLoading(false));
+  }, [activeTab, activeVideo?.youtubeId, activeVideo?.id, isGuest]);
 
   // Filtered Video Catalog + Unified aggregator filtered helpers (platform filter)
   const filteredVideos = videoCatalog.filter(video => {
@@ -2444,6 +2498,10 @@ function App() {
                       <button key={idx} onClick={()=>handleSeek(chap.seconds, chap.timestamp)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border ${activeTimestamp===chap.timestamp||(idx===0&&!activeTimestamp)?"bg-[#FFD700] text-black border-[#FFD700]":"bg-[#1a1a2e] border-white/10 text-gray-300"}`}>{chap.timestamp} {chap.title}</button>
                     ))}
                   </div>
+                  <section className="rounded-2xl border border-[#FFD700]/20 bg-[#18131f] p-4">
+                    <h3 className="font-bold text-white">🧠 AI Jot — Captures video context</h3>
+                    {isGuest ? <p className="mt-2 text-xs text-gray-400">Sign in to generate timestamped notes.</p> : jotsLoading ? <p className="mt-2 text-xs text-gray-400">Generating timestamped notes…</p> : videoJots.length ? <div className="mt-3 space-y-2">{videoJots.map((jot, index) => <button key={`${jot.time}-${index}`} onClick={() => handleSeek(Number(jot.seconds || 0), jot.time || "0:00")} className="block w-full rounded-xl bg-black/30 p-3 text-left hover:bg-white/5"><span className="text-xs font-bold text-[#FFD700]">{jot.time || "0:00"}</span><span className="ml-3 text-sm text-gray-200">{jot.text || jot.summary}</span></button>)}</div> : <p className="mt-2 text-xs text-gray-500">No timestamped notes were returned for this video.</p>}
+                  </section>
                 </div>
               </div>
             </div>
@@ -2497,6 +2555,16 @@ function App() {
                             <button onClick={()=>{ setCodeValue(''); showToast('Cleared — ready to code!'); }} className="min-h-[32px] px-3 rounded-full bg-[#FFD700]/10 text-[#FFD700] hover:bg-[#FFD700]/20 text-xs font-bold">Clear</button>
                           </div>
                           <button onClick={()=>{ setWatchPanelTab('preview'); showToast('Running → Preview'); }} className="m-3 py-3.5 rounded-xl bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-extrabold text-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition flex items-center justify-center gap-2">▶ Run</button>
+                          <button onClick={async () => {
+                            if (!isProUser) { setShowPaywall(true); return; }
+                            const title = window.prompt("Marketplace app title", activeVideo?.title || "My AI app");
+                            const price = Number(window.prompt("Price in USD (5-50)", "10"));
+                            if (!title || !Number.isFinite(price)) return;
+                            const response = await fetch("/api/marketplace-publish", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ title, price, appCode: codeValue }) });
+                            const data = await response.json().catch(() => ({}));
+                            if (!response.ok) { showToast(data.message || data.error || "Publish failed"); return; }
+                            showToast("Published to Marketplace ✓");
+                          }} className="mx-3 mb-3 py-2.5 rounded-xl border border-[#00FF88]/40 text-[#00FF88] font-bold text-sm">Publish to Marketplace</button>
                         </div>
                       )}
                       {watchPanelTab==="preview" && (()=>{ const raw=(codeValue||'').trim(); const decoded = raw.includes('&lt;')||raw.includes('&gt;') ? raw.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&') : raw; const isFull = decoded.toLowerCase().startsWith('<!doctype')||decoded.toLowerCase().startsWith('<html'); const doc = isFull ? decoded : `<!DOCTYPE html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{margin:0;padding:24px;font-family:system-ui,sans-serif;background:#0B0215;color:#fff}</style></head><body>${decoded}</body></html>`; return (<iframe key={doc} title="Live Preview" srcDoc={doc} sandbox="allow-scripts allow-same-origin allow-modals allow-forms" className="flex-1 w-full border-0 bg-white" />); })()}
@@ -2983,6 +3051,14 @@ function App() {
                     {isBuildingCourse ? "Building Course..." : "Build Course ✨"}
                   </button>
                 </div>
+                <div className="max-w-xl mx-auto pt-5 border-t border-white/10 space-y-3 text-left">
+                  <p className="text-xs font-bold text-[#FFD700]">Ask about the current video</p>
+                  <div className="flex gap-2">
+                    <input value={teacherQuestion} onChange={e => setTeacherQuestion(e.target.value)} placeholder="What is this video about?" className="min-w-0 flex-1 bg-black/80 border border-white/20 rounded-xl px-4 py-3 text-sm text-white" />
+                    <button onClick={handleAskTeacher} disabled={isAskingTeacher} className="px-4 py-3 bg-[#FFD700] text-black font-bold text-xs rounded-xl">{isAskingTeacher ? "Asking…" : "Ask"}</button>
+                  </div>
+                  {teacherAnswer && <div className="rounded-xl bg-black/50 border border-[#FFD700]/30 p-4 text-sm text-gray-200 whitespace-pre-wrap">{teacherAnswer}</div>}
+                </div>
               </div>
 
               {teacherCourse && (
@@ -3096,6 +3172,15 @@ function App() {
                     <h1 className="text-2xl font-bold text-white">AI Studio Superpowers</h1>
                     <p className="text-xs text-gray-400">Clip Maker, 4K Thumbnail Enhancer & Voice Over Translator</p>
                   </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  {studioTemplates.map(template => (
+                    <div key={template.id} className="rounded-xl border border-white/10 bg-black/30 p-4 space-y-2">
+                      <h2 className="font-bold text-white">{template.name}</h2>
+                      <p className="text-xs text-gray-400">{template.description}</p>
+                      <button onClick={() => { setCodeValue(template.code); setWatchPanelOpen(true); setWatchPanelTab("preview"); setActiveTab("watch"); }} className="px-3 py-2 rounded-lg bg-[#FFD700] text-black text-xs font-bold">Use Template</button>
+                    </div>
+                  ))}
                 </div>
 
                 <div className="flex items-center gap-2 border-b border-white/10 pb-4">
@@ -3362,6 +3447,17 @@ function App() {
                   <button key={c} onClick={()=>setMarketplaceCategory(c)} className={`min-h-[44px] px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap ${marketplaceCategory===c ? "bg-[#FFD700] text-black" : "bg-[#272727] text-gray-300 border border-white/10"}`}>{c}</button>
                 ))}
               </div>
+              {marketplaceApps.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {marketplaceApps.map(item => (
+                    <div key={item.id} className="glass-card p-4 border border-[#00FF88]/30 space-y-2">
+                      <h3 className="font-bold text-white">{item.title}</h3>
+                      <p className="text-xs text-gray-400">By {item.creatorName} • ${item.price}</p>
+                      <button onClick={() => { setCodeValue(item.code); setWatchPanelOpen(true); setWatchPanelTab("preview"); setActiveTab("watch"); }} className="w-full py-2 rounded-lg bg-[#00FF88] text-black text-xs font-bold">Preview App</button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {marketplaceView === "dashboard" ? (
                 <div className="space-y-4">
