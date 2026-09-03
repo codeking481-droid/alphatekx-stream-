@@ -375,8 +375,11 @@ function App() {
   };
   const allowVideoForUser = (video) => {
     if (!video) return;
-    setActiveVideo(normalizeVideo(video));
+    const next = normalizeVideo(video);
+    setActiveVideo(next);
     setActiveTab("watch");
+    const videoId = next.youtubeId || next.id;
+    if (videoId) window.history.pushState({}, "", `/watch/${encodeURIComponent(videoId)}`);
     if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
   };
   useEffect(() => {
@@ -415,7 +418,7 @@ function App() {
   const [activeTab, setActiveTab] = useState(() => {
     const path = window.location.pathname.replace(/\/+$/, "") || "/";
     if (path === "/shorts") return "shorts";
-    if (path === "/watch") return "watch";
+    if (path === "/watch" || path.startsWith("/watch/")) return "watch";
     if (path === "/workspace") return "workspace";
     if (path === "/home") return "home";
     return "home";
@@ -424,7 +427,15 @@ function App() {
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false); // Mobile drawer slide-over toggle
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false); // REMOVED — popup off
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
+  const [searchResults, setSearchResults] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("alphatekx_last_search_results") || "[]"); } catch { return []; }
+  });
+  const [recentSearches, setRecentSearches] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("alphatekx_recent_searches") || "[]"); } catch { return []; }
+  });
+  const [continueHistory, setContinueHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("alphatekx_history") || "[]"); } catch { return []; }
+  });
   const [isSearching, setIsSearching] = useState(false);
   const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
   const [activeChip, setActiveChip] = useState("All");
@@ -455,6 +466,15 @@ function App() {
       try { localStorage.setItem("alphatekx_watched_history", JSON.stringify(next)); } catch {}
       // also fire to server for real-time sync
       fetch("/api/history/save", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ videoId: entry.youtubeId, title: entry.title }) }).catch(()=>{});
+      return next;
+    });
+  };
+  const rememberSearch = (query) => {
+    const value = query.trim();
+    if (!value) return;
+    setRecentSearches(previous => {
+      const next = [value, ...previous.filter(item => item.toLowerCase() !== value.toLowerCase())].slice(0, 10);
+      try { localStorage.setItem("alphatekx_recent_searches", JSON.stringify(next)); } catch {}
       return next;
     });
   };
@@ -1321,7 +1341,8 @@ function App() {
     try { localStorage.setItem(`alphatekx_files_${videoId}`, JSON.stringify(agentFiles || {})); } catch {}
   }, [agentFiles, activeVideo?.youtubeId, activeVideo?.id]);
   useEffect(() => {
-    const requestedId = new URLSearchParams(window.location.search).get("v");
+    const pathMatch = window.location.pathname.match(/^\/watch\/([^/]+)/);
+    const requestedId = pathMatch ? decodeURIComponent(pathMatch[1]) : new URLSearchParams(window.location.search).get("v");
     if (!requestedId) return;
     const match = videoCatalog.find(video => (video.youtubeId || video.id) === requestedId);
     if (match) {
@@ -1350,6 +1371,23 @@ function App() {
   useEffect(() => {
     if (activeVideo?.id || activeVideo?.youtubeId) pushWatched(activeVideo);
   }, [activeVideo?.id, activeVideo?.youtubeId]);
+  useEffect(() => {
+    if (activeTab !== "watch" || !activeVideo) return;
+    const timer = setInterval(() => {
+      const videoId = activeVideo.youtubeId || activeVideo.id;
+      if (!videoId) return;
+      let progress = 0;
+      try { progress = ytPlayerRef.current?.getCurrentTime?.() || 0; } catch {}
+      const entry = { videoId, title: activeVideo.title, thumbnail: activeVideo.thumbnailUrl || activeVideo.img, progress, lastWatched: Date.now() };
+      try {
+        const current = JSON.parse(localStorage.getItem("alphatekx_history") || "[]");
+        const next = [entry, ...current.filter(item => item.videoId !== videoId)].slice(0, 50);
+        localStorage.setItem("alphatekx_history", JSON.stringify(next));
+        setContinueHistory(next);
+      } catch {}
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [activeTab, activeVideo?.youtubeId, activeVideo?.id, activeVideo?.title]);
   // Notebook auto-save/load per video
   useEffect(() => {
     const vid = activeVideo?.youtubeId || activeVideo?.id || "default";
@@ -1505,6 +1543,8 @@ function App() {
           }
           // NEVER vanish: persist to server + localStorage
           if (vids.length>0) {
+            rememberSearch(searchQuery);
+            try { localStorage.setItem("alphatekx_last_search_results", JSON.stringify(vids)); } catch {}
             persistSearchHistory(vids, searchQuery);
             // fire-and-forget POST to server for persistent history
             fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ videos: vids, searchedQuery: searchQuery }) }).catch(()=>{});
@@ -1521,6 +1561,8 @@ function App() {
           const vids = filtered.map(normalizeVideo);
           setSearchResults(vids);
           setSearchIsMock(true);
+          rememberSearch(searchQuery);
+          try { localStorage.setItem("alphatekx_last_search_results", JSON.stringify(vids)); } catch {}
           persistSearchHistory(vids, searchQuery);
           fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ videos: vids, searchedQuery: searchQuery }) }).catch(()=>{});
         })
@@ -2491,7 +2533,7 @@ function App() {
         <div className="hidden sm:flex flex-1 max-w-[560px] mx-6">
           <div className="relative w-full">
             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500"><Icon name="search" className="w-4 h-4" /></span>
-            <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onFocus={()=>setSearchSuggestionsOpen(true)} onBlur={()=>setTimeout(()=>setSearchSuggestionsOpen(false),200)} onKeyDown={e=>{if(e.key==="Enter"){setActiveTab("home"); setSearchSuggestionsOpen(false);}}} placeholder="Search videos, AI tools, channels..." className="w-full bg-[#1a1a2e]/80 border border-[#2a2a4a] rounded-full pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]/50 focus:bg-[#1a1a2e]" />
+            <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onFocus={()=>setSearchSuggestionsOpen(true)} onBlur={()=>setTimeout(()=>setSearchSuggestionsOpen(false),200)} onKeyDown={e=>{if(e.key==="Enter"){rememberSearch(searchQuery); setActiveTab("home"); setSearchSuggestionsOpen(false);}}} placeholder="Search videos, AI tools, channels..." className="w-full bg-[#1a1a2e]/80 border border-[#2a2a4a] rounded-full pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]/50 focus:bg-[#1a1a2e]" />
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
@@ -2534,6 +2576,7 @@ function App() {
             )}
           </div>
           <div className="flex-1 overflow-auto bg-[#0B0215] p-2 space-y-1">
+            {!searchQuery && recentSearches.length > 0 && <div className="px-2 py-2"><p className="px-2 pb-2 text-[11px] font-bold uppercase tracking-wider text-gray-500">Recent searches</p><div className="flex flex-wrap gap-2">{recentSearches.map(query => <button key={query} onClick={()=>{ setSearchQuery(query); setMobileSearchOpen(false); setActiveTab("home"); }} className="rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-gray-200">{query}</button>)}</div></div>}
             <p className="text-[11px] font-mono text-gray-500 uppercase px-3 py-2">
               {searchQuery ? `Suggestions for "${searchQuery}"` : "Trending Searches"}
             </p>
@@ -2810,8 +2853,8 @@ function App() {
             <div className="max-w-[1600px] mx-auto px-0 sm:px-4 py-3 lg:py-0 space-y-4">
               {/* Back + Title bar */}
               <div className="flex items-center gap-3 px-4 sm:px-0">
-                <button onClick={()=>{ setWatchPanelOpen(false); setActiveTab("watch"); window.history.pushState({}, "", `/watch?v=${activeVideo.youtubeId || activeVideo.id}`); }} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10">
-                  <span>←</span> <span className="hidden sm:inline">Back to Stream</span><span className="sm:hidden">Back</span>
+                <button onClick={()=>{ setWatchPanelOpen(false); setActiveTab("home"); window.history.pushState({}, "", "/"); if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0; }} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10">
+                  <span>←</span> <span className="hidden sm:inline">Back to Results</span><span className="sm:hidden">Back</span>
                 </button>
                 <h2 className="flex-1 text-center text-xl font-extrabold text-white truncate px-4">{activeTab === "workspace" ? "Alphatekx Workspace" : activeVideo.title}</h2>
                 {activeTab === "workspace" && <button onClick={saveWorkspace} className="px-4 py-2 rounded-full bg-[#00FF88] text-black text-sm font-bold">Save</button>}
@@ -3091,6 +3134,8 @@ function App() {
                 </div>
               ) : (
                 <div className="space-y-6">
+                  {continueHistory.length > 0 && <section className="space-y-3 px-3 sm:px-0"><div className="flex items-center justify-between"><h2 className="text-lg font-extrabold text-white">Continue Watching</h2><span className="text-xs text-gray-500">Saved on this device</span></div><div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">{continueHistory.slice(0, 10).map(item => <button key={item.videoId} onClick={() => allowVideoForUser({ id: item.videoId, youtubeId: item.videoId, title: item.title, img: item.thumbnail, thumbnailUrl: item.thumbnail })} className="w-56 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5 text-left"><div className="relative aspect-video bg-black"><img src={item.thumbnail} alt="" className="h-full w-full object-cover" /><div className="absolute inset-x-0 bottom-0 h-1 bg-white/20"><div className="h-full bg-[#FFD700]" style={{ width: `${Math.min(100, Number(item.progress || 0) / 60)}%` }} /></div></div><p className="p-3 text-sm font-bold text-white line-clamp-2">{item.title}</p></button>)}</div></section>}
+                  {recentSearches.length > 0 && <section className="space-y-2 px-3 sm:px-0"><h2 className="text-lg font-extrabold text-white">Recent Searches</h2><div className="flex flex-wrap gap-2">{recentSearches.map(query => <button key={query} onClick={() => { setSearchQuery(query); setActiveTab("home"); }} className="rounded-full border border-[#FFD700]/30 bg-[#FFD700]/10 px-3 py-2 text-xs text-[#FFD700]">{query}</button>)}</div></section>}
                   {/* Featured Hero — discovery is thumbnail-only; playback belongs on Watch */}
                   <div className="glass-card overflow-hidden border-0 sm:border border-[#FFD700]/30 p-0 sm:p-4 space-y-0 sm:space-y-4 rounded-none sm:rounded-2xl">
                     <div className="flex items-center gap-2 flex-wrap px-4 sm:px-0 pt-3 sm:pt-0">
