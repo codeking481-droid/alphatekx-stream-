@@ -316,6 +316,10 @@ function isLongFormVideo(video) {
   const seconds = durationInSeconds(video?.duration);
   return seconds === null || seconds > 60;
 }
+function isShortFormVideo(video) {
+  const seconds = durationInSeconds(video?.duration);
+  return seconds !== null && seconds <= 60;
+}
 
 // --- Main App Component ---
 function App() {
@@ -331,12 +335,7 @@ function App() {
         if (!videos.length) return;
         const realVideos = uniqueVideos(videos.map(normalizeVideo));
         setVideoCatalog(realVideos);
-        const toSeconds = (duration) => {
-          const parts = String(duration || "").split(":").map(Number);
-          if (parts.some(Number.isNaN)) return Infinity;
-          return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
-        };
-        const realShorts = realVideos.filter(video => toSeconds(video.duration) <= 60);
+        const realShorts = realVideos.filter(isShortFormVideo);
         if (realShorts.length) setShortsVideos(realShorts);
       })
       .catch(() => {});
@@ -1145,7 +1144,7 @@ function App() {
         if (parts.length < 2 || parts.some(Number.isNaN)) return Infinity;
         return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
       };
-      const shorts = real.filter(v => toSeconds(v.duration) <= 60);
+      const shorts = real.filter(isShortFormVideo);
       if (shorts.length) setShortsVideos(shorts);
     }).catch(()=>{});
   }, []);
@@ -1792,7 +1791,7 @@ function App() {
 
     return (
     <div className="h-screen w-full max-w-[100vw] overflow-hidden flex flex-col bg-[#08080f] p-0 sm:p-3 text-white font-sans selection:bg-[#FFD700] selection:text-black">
-      <div className="flex-1 flex flex-col overflow-hidden rounded-none sm:rounded-2xl bg-[#0f0f1f] border-0 sm:border border-white/10 shadow-2xl">
+      <div className={`flex-1 flex flex-col overflow-hidden rounded-none ${activeTab === "shorts" ? "bg-black" : "sm:rounded-2xl bg-[#0f0f1f] border-0 sm:border border-white/10 shadow-2xl"}`}>
       {/* Toast Notification Banner */}
       {toastMessage && (
         <div className="fixed top-4 right-4 z-50 bg-[#00D9FF] text-black font-semibold px-4 py-3 rounded-xl shadow-[0_0_25px_rgba(0,217,255,0.6)] flex items-center gap-3 animate-fade-in">
@@ -2054,7 +2053,7 @@ function App() {
       )}
 
       {/* HEADER — exact like image 100% + hamburger for sidebar */}
-      <header className="h-[56px] flex-shrink-0 bg-[#0f0f1f] border-b border-white/10 px-2 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 z-40 relative">
+      <header className={`${activeTab === "shorts" ? "hidden" : "h-[56px] flex-shrink-0 bg-[#0f0f1f] border-b border-white/10 px-2 sm:px-6 flex items-center justify-between gap-2 sm:gap-4 z-40 relative"}`}>
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
           <button onClick={handleHamburgerClick} className="w-9 h-9 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-300 hover:text-white transition" title="Toggle sidebar">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
@@ -2158,7 +2157,7 @@ function App() {
 
         {/* ------------------- FIXED YOUTUBE SIDEBAR ------------------- */}
         <aside 
-          className={`bg-[#0f0f0f] border-r border-[#272727] transition-all duration-300 flex-col justify-between hidden md:flex flex-shrink-0 z-30 ${
+          className={`${activeTab === "shorts" ? "hidden" : "bg-[#0f0f0f] border-r border-[#272727] transition-all duration-300 flex-col justify-between hidden md:flex flex-shrink-0 z-30"} ${
             sidebarOpen ? "w-64" : "w-18 items-center"
           }`}
         >
@@ -2251,7 +2250,7 @@ function App() {
         </aside>
 
         {/* ------------------- INDEPENDENT MAIN SCROLL CONTENT AREA ------------------- */}
-        <main ref={mainScrollRef} className={`flex-1 scroll-smooth h-full ${activeTab === "shorts" ? "overflow-hidden pb-0" : "overflow-y-auto pb-24 md:pb-12"}`}>
+        <main ref={mainScrollRef} className={`flex-1 scroll-smooth ${activeTab === "shorts" ? "h-screen overflow-hidden pb-0" : "h-full overflow-y-auto pb-24 md:pb-12"}`}>
 
           {/* TOP TOPIC CHIPS BAR — REMOVED for mobile fit */}
           {false && activeTab === "home" && (
@@ -2721,7 +2720,7 @@ function App() {
 
           {/* ------------------- 3. YOUTUBE SHORTS — BEST ABSOLUTE, SIMPLE LIKE YOUTUBE, EASY VOLUME ------------------- */}
           {activeTab === "shorts" && (
-            <section className="fixed inset-x-0 bottom-0 top-[56px] z-20 w-full overflow-hidden bg-[#0B0215] md:static md:h-full">
+            <section className="fixed inset-0 z-20 h-screen w-full overflow-hidden bg-black md:static md:h-full">
               <div className="mx-auto flex h-full w-full max-w-[760px] flex-col">
                 <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3">
                   <div className="flex items-center gap-2">
@@ -2741,17 +2740,17 @@ function App() {
                     if (next !== shortsIndex && next >= 0 && next < shortsVideos.length) setShortsIndex(next);
                     if (e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < height * 2 && shortsVideos.length && !shortsLoadingMoreRef.current) {
                       shortsLoadingMoreRef.current = true;
-                      setShortsVideos(prev => [...prev, ...prev.slice(0, Math.min(8, prev.length))]);
+                      setShortsVideos(prev => [...prev, ...prev.slice(0, Math.min(8, prev.length)).map((video, copyIndex) => ({ ...video, feedInstance: Date.now() + copyIndex }))]);
                       window.setTimeout(() => { shortsLoadingMoreRef.current = false; }, 500);
                     }
                   }}
                   className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   style={{ touchAction: "pan-y" }}
                 >
-                  {shortsVideos.map((short, idx) => (
-                   <article key={`${short.youtubeId}-${idx}`} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-full min-h-full snap-start snap-always bg-black sm:my-2 sm:rounded-2xl sm:border sm:border-white/10 sm:shadow-2xl overflow-hidden" style={{ scrollSnapStop: "always" }}>
+                  {shortsVideos.filter(isShortFormVideo).map((short, idx) => (
+                   <article key={`${short.youtubeId}-${short.feedInstance || "initial"}`} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-screen min-h-full snap-start snap-always bg-black overflow-hidden" style={{ scrollSnapStop: "always" }}>
                       <div className="absolute inset-0 flex justify-center bg-black">
-                        <div className="relative h-full aspect-[9/16] max-w-full overflow-hidden">
+                        <div className="relative h-[min(92vh,900px)] aspect-[9/16] max-w-[min(92vw,520px)] overflow-hidden rounded-2xl">
                           {idx === shortsIndex ? (
                             <iframe
                               key={`${short.youtubeId}-${shortsMuted}-${shortsPlaying}`}
