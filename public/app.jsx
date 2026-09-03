@@ -184,7 +184,7 @@ const VideoPlayer = ({ video, autoplay = false }) => {
     }
     return (
       <div className="relative aspect-video w-full bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-[#272727] shadow-2xl">
-        <iframe src={`https://www.youtube.com/embed/${v.youtubeId}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&rel=0&modestbranding=1&autoplay=0`} title={v.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" allowFullScreen />
+        <iframe src={`https://www.youtube.com/embed/${v.youtubeId}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&rel=0&modestbranding=1&autoplay=0`} title={v.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" />
       </div>
     );
   }
@@ -2717,7 +2717,7 @@ function App() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-8 space-y-4">
                   <div ref={mainPlayerRef} className={`watch-video-player relative sticky top-0 z-20 w-full aspect-video bg-black ${landscapeMode ? "ring-2 ring-[#FFD700]" : ""}`}>
-                    <iframe ref={iframeRef} src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" allowFullScreen />
+                    <iframe ref={iframeRef} src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" />
                     <button onClick={toggleLandscape} className="absolute right-3 top-3 z-30 rounded-full bg-black/75 px-3 py-2 text-xs font-bold text-white border border-white/20 hover:bg-black" aria-label="View video in landscape 16:9">{landscapeMode ? "[x] 16:9" : "[ ] 16:9"}</button>
                   </div>
                   <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight px-4 sm:px-0">{activeVideo.title}</h1>
@@ -2812,7 +2812,7 @@ function App() {
                 <div className="lg:col-span-6 space-y-3">
                   <div className="relative bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.25)]">
                     <div className="aspect-video relative bg-black">
-                      <iframe src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" allowFullScreen />
+                      <iframe src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" />
                     </div>
                   </div>
                   <div className="px-4 sm:px-0">
@@ -3213,7 +3213,6 @@ function App() {
                               title={short.title}
                               className="h-full w-full border-0"
                               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-                              allowFullScreen
                             />
                           ) : (
                             <img src={`https://i.ytimg.com/vi/${short.youtubeId}/hqdefault.jpg`} alt="" className="h-full w-full object-contain" loading="lazy" />
