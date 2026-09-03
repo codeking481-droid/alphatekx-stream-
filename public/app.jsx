@@ -170,9 +170,17 @@ const VideoPlayer = ({ video, autoplay = false }) => {
   const platform = video?.platform || "youtube";
   if (!v) return null;
   if (platform === "youtube") {
+    if (!autoplay) {
+      return (
+        <button type="button" onClick={() => { window.location.href = `/watch?v=${v.youtubeId}`; }} className="relative block aspect-video w-full bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-[#272727] shadow-2xl text-left">
+          <img src={`https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg`} alt={v.title} className="h-full w-full object-cover" loading="lazy" />
+          <span className="absolute bottom-2 right-2 rounded bg-black/80 px-1.5 py-0.5 text-xs text-white">{v.duration}</span>
+        </button>
+      );
+    }
     return (
       <div className="relative aspect-video w-full bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-[#272727] shadow-2xl">
-        <iframe src={`https://www.youtube.com/embed/${v.youtubeId}?autoplay=0`} title={v.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+        <iframe src={`https://www.youtube.com/embed/${v.youtubeId}?autoplay=1&playsinline=1&rel=0`} title={v.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="autoplay; accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
       </div>
     );
   }
