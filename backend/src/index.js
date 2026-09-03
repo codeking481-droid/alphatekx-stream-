@@ -21,7 +21,7 @@ let backendProducts = [
   { id: 1, name: 'AI Neural Net Model Pack', description: 'Pre-trained PyTorch checkpoint & CUDA optimized dataset', price: 2500, badge: 'BESTSELLER', iconType: 'cpu', sellerEmail: 'dev@alphatekx.ai', fileUrl: 'https://github.com/alphatekx/model-pack.zip', salesCount: 342, category: 'app', tags: 'python,pytorch,ai', createdAt: Date.now() },
   { id: 2, name: 'Stream Platform Course Bundle', description: 'Complete 6-hour video masterclass', price: 8000, badge: 'HOT', iconType: 'video', sellerEmail: 'academy@alphatekx.ai', fileUrl: 'https://alphatekx.ai/course-bundle.zip', salesCount: 189, category: 'course', tags: 'react,streaming,ai', createdAt: Date.now() },
   { id: 3, name: 'Naija AI Speech Translator Engine', description: 'Pidgin, Yoruba, Igbo & Hausa TTS & STT API wrapper', price: 5000, badge: 'NEW', iconType: 'sparkles', sellerEmail: 'nigeria-ai@alphatekx.ai', fileUrl: 'https://github.com/alphatekx/naija-tts.zip', salesCount: 95, category: 'plugin', tags: 'pidgin,translation,audio', createdAt: Date.now() },
-  { id: 4, name: 'TikTok & YouTube Unified Queue SDK', description: 'JS library to sync queue states & embeds', price: 4.99, badge: 'PRO', iconType: 'layers', sellerEmail: 'sdk@alphatekx.ai', fileUrl: 'https://github.com/alphatekx/queue-sdk.zip', salesCount: 521, category: 'plugin', tags: 'queue,tiktok,youtube', createdAt: Date.now() }
+  { id: 4, name: 'TikTok & YouTube Unified Queue SDK', description: 'JS library to sync queue states & embeds', price: 2500, badge: 'PRO', iconType: 'layers', sellerEmail: 'sdk@alphatekx.ai', fileUrl: 'https://github.com/alphatekx/queue-sdk.zip', salesCount: 521, category: 'plugin', tags: 'queue,tiktok,youtube', createdAt: Date.now() }
 ];
 let backendSales = [];
 
