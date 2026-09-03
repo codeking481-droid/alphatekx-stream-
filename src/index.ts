@@ -1114,6 +1114,41 @@ function createApiApp() {
           contentDetails: v.contentDetails,
         }
       });
+
+      app.get("/api/video/:id/comments", async (c) => {
+        const id = c.req.param("id");
+        const apiKey = (c.env as Env)?.YOUTUBE_API_KEY || "";
+        const maxResults = Math.min(Math.max(Number(c.req.query("max") || "20"), 1), 100);
+        if (!id || id.startsWith("mock")) return c.json({ comments: [], real: false, error: "Mock ID, no real comments" }, 400);
+        if (!apiKey) return c.json({ comments: [], real: false, error: "No YouTube API key configured" }, 503);
+        try {
+          const url = new URL("https://www.googleapis.com/youtube/v3/commentThreads");
+          url.searchParams.set("part", "snippet");
+          url.searchParams.set("videoId", id);
+          url.searchParams.set("maxResults", String(maxResults));
+          url.searchParams.set("order", "relevance");
+          url.searchParams.set("textFormat", "plainText");
+          url.searchParams.set("key", apiKey);
+          const res = await fetch(url.toString());
+          if (!res.ok) throw new Error(`YouTube comments ${res.status}`);
+          const data: any = await res.json();
+          const comments = (data.items || []).map((item: any) => {
+            const top = item.snippet?.topLevelComment?.snippet || {};
+            return {
+              id: item.id,
+              author: top.authorDisplayName || "YouTube user",
+              authorPhoto: top.authorProfileImageUrl || "",
+              text: top.textDisplay || "",
+              likeCount: Number(top.likeCount || 0),
+              publishedAt: top.publishedAt || "",
+              updatedAt: top.updatedAt || "",
+            };
+          });
+          return c.json({ comments, real: true, nextPageToken: data.nextPageToken || "" });
+        } catch (e: any) {
+          return c.json({ comments: [], real: false, error: e.message || "Unable to load comments" }, 502);
+        }
+      });
     } catch (e: any) {
       return c.json({ error: e.message }, 500);
     }

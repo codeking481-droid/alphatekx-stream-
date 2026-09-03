@@ -306,7 +306,7 @@ function App() {
           if (parts.some(Number.isNaN)) return Infinity;
           return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
         };
-        const realShorts = realVideos.filter(video => toSeconds(video.duration) <= 180);
+        const realShorts = realVideos.filter(video => toSeconds(video.duration) <= 60);
         if (realShorts.length) setShortsVideos(realShorts);
       })
       .catch(() => {});
@@ -993,6 +993,10 @@ function App() {
   const [shortsCommentsOpen, setShortsCommentsOpen] = useState(false);
   const [shortsCommentText, setShortsCommentText] = useState("");
   const [shortsComments, setShortsComments] = useState({});
+  const [videoComments, setVideoComments] = useState([]);
+  const [commentsLoading, setCommentsLoading] = useState(false);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const shortsLoadingMoreRef = useRef(false);
   const shortsScrollerRef = useRef(null);
   const shortsSlideRefs = useRef([]);
   const scrollToShort = (index) => {
@@ -1000,13 +1004,8 @@ function App() {
     shortsSlideRefs.current[next]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     setShortsIndex(next);
   };
-  const [shortsVideos, setShortsVideos] = useState([
-    { id: "jvXEkm27XOE", youtubeId: "jvXEkm27XOE", title: "This AI Avatar BEATS HeyGen 10 TIMES! 🤯 #viral #trending", channel: "ALPHATEKX", handle: "@risewithalphatekx", avatar: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg", subscribers: "3,020", subscribersCount: 3020, likes: "24K", comments: "342", shares: "1.2K", views: "15K" },
-    { id: "dQw4w9WgXcQ", youtubeId: "dQw4w9WgXcQ", title: "How Attention Works in 30s! 🧠 #AI #Shorts", channel: "CodeCraft", handle: "@codecraft", avatar: "https://images.unsplash.com/photos/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80", subscribers: "1.8M", subscribersCount: 1800000, likes: "45.2K", comments: "892", shares: "2.1K", views: "340K" },
-    { id: "L_LUpnjgPso", youtubeId: "L_LUpnjgPso", title: "AI Voice Agents in 15s ⚡ Edge GPU Magic", channel: "Edge AI Lab", handle: "@edgeailab", avatar: "https://images.unsplash.com/photos/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=120&q=80", subscribers: "890K", subscribersCount: 890000, likes: "18K", comments: "412", shares: "890", views: "185K" },
-    { id: "M576WGiDBdQ", youtubeId: "M576WGiDBdQ", title: "Cloudflare Workers Tip: 60s Deploy 🚀", channel: "Serverless Pro", handle: "@serverlesspro", avatar: "https://images.unsplash.com/photos/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=120&q=80", subscribers: "456K", subscribersCount: 456000, likes: "12K", comments: "210", shares: "560", views: "92K" },
-    { id: "fJ9rUzIMcZQ", youtubeId: "fJ9rUzIMcZQ", title: "Naija AI in Pidgin — try it! 🇳🇬 #Shorts", channel: "Naija Tech Hub", handle: "@naijatech", avatar: "https://images.unsplash.com/photos/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80", subscribers: "230K", subscribersCount: 230000, likes: "31K", comments: "523", shares: "1.5K", views: "512K" },
-  ]);
+  const homeLoadingMoreRef = useRef(false);
+  const [shortsVideos, setShortsVideos] = useState([]);
   const currentShort = shortsVideos[shortsIndex] || shortsVideos[0];
   const [miniPlayerActive, setMiniPlayerActive] = useState(false); // REMOVED — no float
   const [isMiniPlaying, setIsMiniPlaying] = useState(true);
@@ -1116,7 +1115,7 @@ function App() {
         if (parts.length < 2 || parts.some(Number.isNaN)) return Infinity;
         return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
       };
-      const shorts = real.filter(v => toSeconds(v.duration) <= 180);
+      const shorts = real.filter(v => toSeconds(v.duration) <= 60);
       if (shorts.length) setShortsVideos(shorts);
     }).catch(()=>{});
   }, []);
@@ -1132,6 +1131,24 @@ function App() {
     const key = `notes_${vid}`;
     try { const saved = localStorage.getItem(key); if (saved !== null) setNotebookNotes(saved); else setNotebookNotes(""); } catch {}
   }, [activeVideo?.youtubeId, activeVideo?.id]);
+  const loadVideoComments = async (videoId) => {
+    if (!videoId) return;
+    setCommentsLoading(true);
+    try {
+      const res = await fetch(`/api/video/${encodeURIComponent(videoId)}/comments?max=30`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || "Unable to load comments");
+      setVideoComments(Array.isArray(data.comments) ? data.comments : []);
+    } catch (error) {
+      setVideoComments([]);
+      showToast(error.message || "Comments unavailable");
+    } finally {
+      setCommentsLoading(false);
+    }
+  };
+  useEffect(() => {
+    if (commentsOpen) loadVideoComments(activeVideo?.youtubeId || activeVideo?.id);
+  }, [commentsOpen, activeVideo?.youtubeId, activeVideo?.id]);
   useEffect(() => {
     const vid = activeVideo?.youtubeId || activeVideo?.id || "default";
     const key = `notes_${vid}`;
@@ -2177,7 +2194,14 @@ function App() {
         </aside>
 
         {/* ------------------- INDEPENDENT MAIN SCROLL CONTENT AREA ------------------- */}
-        <main ref={mainScrollRef} className={`flex-1 scroll-smooth h-full ${activeTab === "shorts" ? "overflow-hidden pb-0" : "overflow-y-auto pb-24 md:pb-12"}`}>
+        <main ref={mainScrollRef} onScroll={(e) => {
+          if (activeTab !== "home" || !videoCatalog.length || homeLoadingMoreRef.current) return;
+          if (e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < 900) {
+            homeLoadingMoreRef.current = true;
+            setVideoCatalog(prev => [...prev, ...prev.slice(0, Math.min(10, prev.length))]);
+            window.setTimeout(() => { homeLoadingMoreRef.current = false; }, 500);
+          }
+        }} className={`flex-1 scroll-smooth h-full ${activeTab === "shorts" ? "overflow-hidden pb-0" : "overflow-y-auto pb-24 md:pb-12"}`}>
 
           {/* TOP TOPIC CHIPS BAR — REMOVED for mobile fit */}
           {false && activeTab === "home" && (
@@ -2230,7 +2254,7 @@ function App() {
                 <div className="lg:col-span-8 space-y-4">
                   <div className="relative bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-[#FFD700]/20 shadow-[0_0_40px_rgba(255,215,0,0.15)]">
                     <div className="aspect-video relative bg-black">
-                      <iframe ref={iframeRef} src={`https://www.youtube.com/embed/${activeVideo.id}?autoplay=0`} title={activeVideo.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+                      <iframe ref={iframeRef} src={`https://www.youtube.com/embed/${activeVideo.id}?autoplay=1&playsinline=1&rel=0`} title={activeVideo.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="autoplay; accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
                       {activeCheckpoint && (<div className="absolute inset-0 bg-[#0B0215]/92 backdrop-blur-md flex flex-col items-center justify-center p-6 text-center z-30 rounded-none sm:rounded-2xl"><div className="w-14 h-14 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center text-2xl mb-3 animate-pulse">🔒</div><h3 className="text-white font-extrabold text-lg">{activeCheckpoint.title}</h3><p className="text-[#FFD700] text-sm mt-1">Creator paused at {activeCheckpoint.time}s</p><p className="text-gray-300 text-sm mt-2">{activeCheckpoint.task}</p><button onClick={()=>{setWatchPanelOpen(true);setWatchPanelTab("code");}} className="mt-4 px-6 py-2.5 rounded-full bg-[#FFD700] text-black font-bold text-sm animate-pulse">Go to Code →</button></div>)}
                     </div>
                   </div>
@@ -2247,8 +2271,16 @@ function App() {
                       <div><p className="text-sm font-bold text-white">{typeof activeVideo.channel === "string" ? activeVideo.channel : (activeVideo.channelName || "")} • {channelData?.subscribers || activeVideo.subscribers || ""} subscribers</p><p className="text-xs text-gray-400">{activeVideo.views} • {activeVideo.timeAgo} • {activeVideo.description ? activeVideo.description.slice(0,110) : ""}</p></div>
                       <button onClick={()=>setIsSubscribed(!isSubscribed)} className={`ml-3 px-5 py-2 rounded-full font-bold text-xs ${isSubscribed?"bg-white/10 text-white":"bg-white text-black"}`}>{isSubscribed?"Subscribed ✓":"Subscribe"}</button>
                     </div>
-                    <div className="flex gap-2"><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Like {likeCount ? likeCount.toLocaleString() : (activeVideo.likes || "0")}</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Save</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Share</button></div>
+                    <div className="flex flex-wrap gap-2"><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Like {likeCount ? likeCount.toLocaleString() : (activeVideo.likes || "0")}</button><button onClick={()=>setCommentsOpen(true)} className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Comments {activeVideo.comments || ""}</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Save</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Share</button></div>
                   </div>
+                  <section className="px-4 sm:px-0">
+                    <button onClick={()=>setCommentsOpen(true)} className="mb-3 text-left text-lg font-bold text-white">Comments {activeVideo.comments ? `(${activeVideo.comments})` : ""}</button>
+                    {commentsOpen && (
+                      <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                        {commentsLoading ? <p className="text-sm text-gray-400">Loading real YouTube comments…</p> : videoComments.length === 0 ? <p className="text-sm text-gray-400">No public comments available for this video.</p> : <div className="space-y-4">{videoComments.map(comment => <div key={comment.id} className="flex gap-3"><img src={comment.authorPhoto || "https://ui-avatars.com/api/?name=YT&background=272727&color=fff"} alt="" className="h-8 w-8 rounded-full" /><div><p className="text-xs font-bold text-white">{comment.author}</p><p className="mt-1 text-sm text-gray-200 whitespace-pre-wrap">{comment.text}</p><p className="mt-1 text-[11px] text-gray-500">{comment.likeCount ? `${comment.likeCount} likes` : ""}</p></div></div>)}</div>}
+                      </div>
+                    )}
+                  </section>
                 </div>
                 <div className="lg:col-span-4 space-y-4">
                   <h3 className="font-bold text-xl text-white">Up Next • Real</h3>
@@ -2603,8 +2635,8 @@ function App() {
                   {homeFiltered.length>0 ? (
                   <>
                   <div className="grid grid-cols-1 gap-5 px-3 sm:px-0 sm:grid-cols-2 sm:gap-4 md:gap-6 md:grid-cols-3 lg:grid-cols-4">
-                    {homeFiltered.map((vid) => (
-                      <VideoCard key={vid.youtubeId || vid.id} video={{...vid, platform:  vid.platform||"youtube"}} cleanHome />
+                    {homeFiltered.map((vid, idx) => (
+                      <VideoCard key={`${vid.youtubeId || vid.id}-${idx}`} video={{...vid, platform:  vid.platform||"youtube"}} cleanHome />
                     ))}
                   </div>
                   {marketplaceProducts.length>0 && (
@@ -2659,12 +2691,17 @@ function App() {
                     const height = e.currentTarget.clientHeight || 1;
                     const next = Math.round(e.currentTarget.scrollTop / height);
                     if (next !== shortsIndex && next >= 0 && next < shortsVideos.length) setShortsIndex(next);
+                    if (e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < height * 2 && shortsVideos.length && !shortsLoadingMoreRef.current) {
+                      shortsLoadingMoreRef.current = true;
+                      setShortsVideos(prev => [...prev, ...prev.slice(0, Math.min(8, prev.length))]);
+                      window.setTimeout(() => { shortsLoadingMoreRef.current = false; }, 500);
+                    }
                   }}
                   className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   style={{ touchAction: "pan-y" }}
                 >
                   {shortsVideos.map((short, idx) => (
-                    <article key={short.youtubeId} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-full min-h-full snap-start snap-always bg-black sm:my-2 sm:rounded-2xl sm:border sm:border-white/10 sm:shadow-2xl overflow-hidden" style={{ scrollSnapStop: "always" }}>
+                   <article key={`${short.youtubeId}-${idx}`} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-full min-h-full snap-start snap-always bg-black sm:my-2 sm:rounded-2xl sm:border sm:border-white/10 sm:shadow-2xl overflow-hidden" style={{ scrollSnapStop: "always" }}>
                       {idx === shortsIndex ? (
                         <iframe
                           key={`${short.youtubeId}-${shortsMuted}-${shortsPlaying}`}
@@ -2696,7 +2733,7 @@ function App() {
                       </div>
                       <div className="absolute bottom-4 right-3 z-10 flex flex-col items-center gap-3">
                         <button onClick={() => setShortsLiked(s => ({ ...s, [short.id]: !s[short.id] }))} aria-label="Like short" className={`flex h-11 w-11 items-center justify-center rounded-full bg-black/60 ${shortsLiked[short.id] ? "text-[#FFD700]" : "text-white"}`}><Icon name="like" className="h-6 w-6" /></button>
-                        <button onClick={() => setShortsCommentsOpen(true)} aria-label={`Comments on ${short.title}`} className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="chat" className="h-6 w-6" /></button>
+                        <button onClick={() => { setShortsCommentsOpen(true); loadVideoComments(short.youtubeId); }} aria-label={`Comments on ${short.title}`} className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="chat" className="h-6 w-6" /></button>
                         <button onClick={() => { navigator.clipboard?.writeText(`https://youtu.be/${short.youtubeId}`); showToast("Link copied"); }} aria-label="Share short" className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="share" className="h-6 w-6" /></button>
                       </div>
                     </article>
@@ -2717,15 +2754,26 @@ function App() {
                   <button onClick={() => setShortsCommentsOpen(false)} aria-label="Close comments" className="rounded-full px-3 py-1 text-xl text-gray-400 hover:text-white">×</button>
                 </div>
                 <div className="min-h-0 flex-1 space-y-3 overflow-y-auto py-3">
-                  {(shortsComments[currentShort.youtubeId] || []).length === 0 ? (
-                    <p className="py-8 text-center text-sm text-gray-400">Be the first to comment.</p>
+                  {commentsLoading ? (
+                    <p className="py-8 text-center text-sm text-gray-400">Loading real YouTube comments…</p>
+                  ) : videoComments.length === 0 && (shortsComments[currentShort.youtubeId] || []).length === 0 ? (
+                    <p className="py-8 text-center text-sm text-gray-400">No public comments available for this Short.</p>
                   ) : (
-                    shortsComments[currentShort.youtubeId].map(comment => (
-                      <div key={comment.id} className="rounded-xl bg-white/5 p-3">
-                        <p className="text-xs font-bold text-[#FFD700]">{comment.author}</p>
-                        <p className="mt-1 text-sm text-white">{comment.text}</p>
-                      </div>
-                    ))
+                    <>
+                      {videoComments.map(comment => (
+                        <div key={comment.id} className="rounded-xl bg-white/5 p-3">
+                          <p className="text-xs font-bold text-[#FFD700]">{comment.author}</p>
+                          <p className="mt-1 text-sm text-white">{comment.text}</p>
+                          <p className="mt-1 text-[11px] text-gray-500">{comment.likeCount ? `${comment.likeCount} likes` : ""}</p>
+                        </div>
+                      ))}
+                      {(shortsComments[currentShort.youtubeId] || []).map(comment => (
+                        <div key={comment.id} className="rounded-xl bg-white/5 p-3">
+                          <p className="text-xs font-bold text-[#FFD700]">{comment.author}</p>
+                          <p className="mt-1 text-sm text-white">{comment.text}</p>
+                        </div>
+                      ))}
+                    </>
                   )}
                 </div>
                 <form onSubmit={e => {
