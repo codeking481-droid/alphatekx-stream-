@@ -298,6 +298,15 @@ function normalizeVideo(v) {
     featured: v.featured || false,
   };
 }
+function uniqueVideos(videos) {
+  const seen = new Set();
+  return (videos || []).filter(video => {
+    const id = video.youtubeId || video.id;
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
 
 // --- Main App Component ---
 function App() {
@@ -311,7 +320,7 @@ function App() {
       .then(data => {
         const videos = Array.isArray(data?.videos) ? data.videos : [];
         if (!videos.length) return;
-        const realVideos = videos.map(normalizeVideo);
+        const realVideos = uniqueVideos(videos.map(normalizeVideo));
         setVideoCatalog(realVideos);
         const toSeconds = (duration) => {
           const parts = String(duration || "").split(":").map(Number);
@@ -1119,7 +1128,7 @@ function App() {
   // Load the official channel feed so Home and Shorts use the same live catalog.
   useEffect(() => {
     fetch("/api/channel/videos?max=30").then(r=>r.ok?r.json():null).then(d=>{
-      const real = Array.isArray(d?.videos) ? d.videos.map(normalizeVideo) : [];
+      const real = uniqueVideos(Array.isArray(d?.videos) ? d.videos.map(normalizeVideo) : []);
       if (!real.length) return;
       setVideoCatalog(real);
       const toSeconds = (duration) => {
@@ -2233,14 +2242,7 @@ function App() {
         </aside>
 
         {/* ------------------- INDEPENDENT MAIN SCROLL CONTENT AREA ------------------- */}
-        <main ref={mainScrollRef} onScroll={(e) => {
-          if (activeTab !== "home" || !videoCatalog.length || homeLoadingMoreRef.current) return;
-          if (e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < 900) {
-            homeLoadingMoreRef.current = true;
-            setVideoCatalog(prev => [...prev, ...prev.slice(0, Math.min(10, prev.length))]);
-            window.setTimeout(() => { homeLoadingMoreRef.current = false; }, 500);
-          }
-        }} className={`flex-1 scroll-smooth h-full ${activeTab === "shorts" ? "overflow-hidden pb-0" : "overflow-y-auto pb-24 md:pb-12"}`}>
+        <main ref={mainScrollRef} className={`flex-1 scroll-smooth h-full ${activeTab === "shorts" ? "overflow-hidden pb-0" : "overflow-y-auto pb-24 md:pb-12"}`}>
 
           {/* TOP TOPIC CHIPS BAR — REMOVED for mobile fit */}
           {false && activeTab === "home" && (
@@ -2600,7 +2602,7 @@ function App() {
                   ) : (
                     searchFiltered.length>0 ? (
                       <div className="grid grid-cols-2 gap-2 px-2 sm:px-0 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
-                        {searchFiltered.map((vid) => (
+                        {uniqueVideos(searchFiltered).map((vid) => (
                           <VideoCard key={vid.youtubeId || vid.id} video={vid} onChannel={(v) => navigateToChannel(v.channelId || channelIdFromVideo(v))} cleanHome />
                         ))}
                       </div>
@@ -2674,7 +2676,7 @@ function App() {
                   {homeFiltered.length>0 ? (
                   <>
                   <div className="grid grid-cols-1 gap-5 px-3 sm:px-0 sm:grid-cols-2 sm:gap-4 md:gap-6 md:grid-cols-3 lg:grid-cols-4">
-                    {homeFiltered.map((vid) => (
+                    {uniqueVideos(homeFiltered).map((vid) => (
                       <VideoCard key={vid.youtubeId || vid.id} video={{...vid, platform:  vid.platform||"youtube"}} onChannel={(v) => navigateToChannel(v.channelId || channelIdFromVideo(v))} cleanHome />
                     ))}
                   </div>
