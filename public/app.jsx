@@ -143,7 +143,7 @@ const VideoCard = ({ video, onPlay, onSave, isSaved, onAi, onChannel, cleanHome 
   const v = normalizeVideo(video);
   const platform = video.platform || v.platform || "youtube";
   return (
-    <div onClick={()=>cleanHome ? (window.location.href=`/watch?v=${v.youtubeId}`) : (onPlay&&onPlay(v))} className="glass-card overflow-hidden hover:border-[#FFD700]/50 hover:shadow-[0_0_15px_rgba(255,215,0,0.15)] transition-all cursor-pointer group flex flex-col justify-between rounded-xl sm:rounded-2xl">
+    <div onClick={()=>cleanHome ? (window.location.href=`/watch?v=${v.youtubeId}&autoplay=1`) : (onPlay&&onPlay(v))} className="glass-card overflow-hidden hover:border-[#FFD700]/50 hover:shadow-[0_0_15px_rgba(255,215,0,0.15)] transition-all cursor-pointer group flex flex-col justify-between rounded-xl sm:rounded-2xl">
       <div className="relative aspect-video w-full bg-gray-900 overflow-hidden rounded-t-xl sm:rounded-t-2xl">
         <img src={cleanHome ? `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg` : (v.img || v.thumbnailUrl)} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
         <span className="absolute bottom-2 right-2 bg-black/80 text-[10px] font-mono px-1.5 py-0.5 rounded text-white">{v.duration}</span>
@@ -2674,8 +2674,8 @@ function App() {
                   {homeFiltered.length>0 ? (
                   <>
                   <div className="grid grid-cols-1 gap-5 px-3 sm:px-0 sm:grid-cols-2 sm:gap-4 md:gap-6 md:grid-cols-3 lg:grid-cols-4">
-                    {homeFiltered.map((vid, idx) => (
-                      <VideoCard key={`${vid.youtubeId || vid.id}-${idx}`} video={{...vid, platform:  vid.platform||"youtube"}} onChannel={(v) => navigateToChannel(v.channelId || channelIdFromVideo(v))} cleanHome />
+                    {homeFiltered.map((vid) => (
+                      <VideoCard key={vid.youtubeId || vid.id} video={{...vid, platform:  vid.platform||"youtube"}} onChannel={(v) => navigateToChannel(v.channelId || channelIdFromVideo(v))} cleanHome />
                     ))}
                   </div>
                   {marketplaceProducts.length>0 && (
