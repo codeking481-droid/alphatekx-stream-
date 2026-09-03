@@ -1450,6 +1450,18 @@ function App() {
   }, []);
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [likeCount, setLikeCount] = useState(0); // Will fetch real from API
+  const [videoLiked, setVideoLiked] = useState(false);
+  const toggleVideoLike = () => {
+    if (isGuest) {
+      setShowSignUpBlock(true);
+      return;
+    }
+    setVideoLiked(value => {
+      const next = !value;
+      setLikeCount(count => Math.max(0, count + (next ? 1 : -1)));
+      return next;
+    });
+  };
   const [userLiked, setUserLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
   const [showDescriptionMore, setShowDescriptionMore] = useState(false);
@@ -2713,7 +2725,7 @@ function App() {
             <div className="max-w-[1600px] mx-auto px-0 sm:px-6 py-3 sm:py-6 space-y-6">
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-8 space-y-4">
-                  <div ref={mainPlayerRef} className={`watch-video-player relative sticky top-0 z-20 w-full aspect-video bg-black ${landscapeMode ? "ring-2 ring-[#FFD700]" : ""}`}>
+                  <div ref={mainPlayerRef} className={`watch-video-player relative w-full aspect-video bg-black ${landscapeMode ? "ring-2 ring-[#FFD700]" : ""}`}>
                     <iframe ref={iframeRef} src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" />
                     <button onClick={toggleLandscape} className="absolute right-3 top-3 z-30 rounded-full bg-black/75 px-3 py-2 text-xs font-bold text-white border border-white/20 hover:bg-black" aria-label="View video in landscape 16:9">{landscapeMode ? "[x] 16:9" : "[ ] 16:9"}</button>
                   </div>
@@ -2724,7 +2736,7 @@ function App() {
                       <div><button onClick={()=>navigateToChannel(activeVideo.channelId || channelIdFromVideo(activeVideo))} className="text-left text-sm font-bold text-white hover:text-[#00D9FF]">{typeof activeVideo.channel === "string" ? activeVideo.channel : (activeVideo.channelName || "")} • {channelData?.subscribers || activeVideo.subscribers || ""} subscribers</button><p className="text-xs text-gray-400">{activeVideo.views} • {activeVideo.timeAgo} • {activeVideo.description ? activeVideo.description.slice(0,110) : ""}</p></div>
                       <button onClick={()=>setIsSubscribed(!isSubscribed)} className={`ml-3 px-5 py-2 rounded-full font-bold text-xs ${isSubscribed?"bg-white/10 text-white":"bg-white text-black"}`}>{isSubscribed?"Subscribed ✓":"Subscribe"}</button>
                     </div>
-                    <div className="flex flex-wrap gap-2"><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Like {likeCount ? likeCount.toLocaleString() : (activeVideo.likes || "0")}</button><button onClick={()=>setCommentsOpen(true)} className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Comments {activeVideo.comments || ""}</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Save</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Share</button></div>
+                    <div className="flex flex-wrap gap-2"><button onClick={toggleVideoLike} aria-pressed={videoLiked} className={`px-4 py-2 rounded-full border text-sm font-bold ${videoLiked ? "bg-[#FFD700] text-black border-[#FFD700]" : "bg-[#1a1a2e] text-white border-white/10"}`}>Like {likeCount ? likeCount.toLocaleString() : (activeVideo.likes || "0")}</button><button onClick={()=>{ setCommentsOpen(true); loadVideoComments(activeVideo.youtubeId || activeVideo.id); }} className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Comments {activeVideo.comments || ""}</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Save</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Share</button></div>
                   </div>
                   <section className="watch-ai-buttons px-4 sm:px-0 space-y-3">
                     <div className="flex flex-wrap gap-2">
@@ -2766,7 +2778,7 @@ function App() {
                     <button onClick={()=>setCommentsOpen(true)} className="mb-3 text-left text-lg font-bold text-white">Comments {activeVideo.comments ? `(${activeVideo.comments})` : ""}</button>
                     {commentsOpen && (
                       <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                        {commentsLoading ? <p className="text-sm text-gray-400">Loading real YouTube comments…</p> : videoComments.length === 0 ? <p className="text-sm text-gray-400">No public comments available for this video.</p> : <div className="space-y-4">{videoComments.map(comment => <div key={comment.id} className="flex gap-3"><img src={comment.authorPhoto || "https://ui-avatars.com/api/?name=YT&background=272727&color=fff"} alt="" className="h-8 w-8 rounded-full" /><div><p className="text-xs font-bold text-white">{comment.author}</p><p className="mt-1 text-sm text-gray-200 whitespace-pre-wrap">{comment.text}</p><p className="mt-1 text-[11px] text-gray-500">{comment.likeCount ? `${comment.likeCount} likes` : ""}</p></div></div>)}</div>}
+                        {commentsLoading ? <p className="text-sm text-gray-400">Loading real YouTube comments…</p> : videoComments.length === 0 ? <div className="space-y-2"><p className="text-sm text-gray-400">No public comments are available for this video.</p><a href={`https://www.youtube.com/watch?v=${activeVideo.youtubeId || activeVideo.id}`} target="_blank" rel="noreferrer" className="inline-block text-xs font-bold text-[#FFD700]">See comments on YouTube ↗</a></div> : <div className="space-y-4">{videoComments.map(comment => <div key={comment.id} className="flex gap-3"><img src={comment.authorPhoto || "https://ui-avatars.com/api/?name=YT&background=272727&color=fff"} alt="" className="h-8 w-8 rounded-full" /><div><p className="text-xs font-bold text-white">{comment.author}</p><p className="mt-1 text-sm text-gray-200 whitespace-pre-wrap">{comment.text}</p><p className="mt-1 text-[11px] text-gray-500">{comment.likeCount ? `${comment.likeCount} likes` : ""}</p></div></div>)}</div>}
                       </div>
                     )}
                   </section>
