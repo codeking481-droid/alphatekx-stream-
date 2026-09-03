@@ -1188,7 +1188,7 @@ function createApiApp() {
             const uploadsPlaylistId = "UU" + info.id.slice(2);
             let uploads: any[] = [];
             try {
-              const plRes = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${uploadsPlaylistId}&maxResults=30&key=${apiKey}`);
+              const plRes = await fetch(`https://www.googleapis.com/youtube/v3/playlistItems?part=snippet,contentDetails&playlistId=${uploadsPlaylistId}&maxResults=50&key=${apiKey}`);
               if (plRes.ok) {
                 const plData: any = await plRes.json();
                 uploads = (plData.items || []).map((it: any) => ({

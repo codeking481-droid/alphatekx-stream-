@@ -139,7 +139,7 @@ const PlatformBadge = ({ platform = "youtube", size = "xs" }) => {
   const border = platform==="tiktok" ? "border border-white/40" : "";
   return <span className={`${cls} font-bold rounded-full ${border}`} style={{ background: s.bg, color: s.text }}>{s.label}</span>;
 };
-const VideoCard = ({ video, onPlay, onSave, isSaved, onAi, cleanHome = false }) => {
+const VideoCard = ({ video, onPlay, onSave, isSaved, onAi, onChannel, cleanHome = false }) => {
   const v = normalizeVideo(video);
   const platform = video.platform || v.platform || "youtube";
   return (
@@ -159,7 +159,11 @@ const VideoCard = ({ video, onPlay, onSave, isSaved, onAi, cleanHome = false }) 
       </div>
       <div className="p-3 sm:p-4 space-y-1.5 flex-1 min-w-0">
         <h3 className="font-bold text-[13px] sm:text-sm leading-snug text-white group-hover:text-[#FFD700] line-clamp-2 min-w-0 break-words">{v.title}</h3>
-        <p className="text-xs text-gray-400 truncate">{v.channel || v.channelName}</p>
+        {onChannel ? (
+          <button type="button" onClick={(event) => { event.stopPropagation(); onChannel(v); }} className="text-left text-xs text-gray-400 truncate hover:text-[#00D9FF]">
+            {v.channel || v.channelName}
+          </button>
+        ) : <p className="text-xs text-gray-400 truncate">{v.channel || v.channelName}</p>}
         <p className="text-xs text-gray-500">{v.views} • {v.timeAgo}</p>
       </div>
     </div>
@@ -892,7 +896,7 @@ function App() {
     setIsChannelLoading(true);
     const isOfficial = activeChannelId === OFFICIAL_CHANNEL_ID || activeChannelId.toLowerCase() === "alphatekx" || activeChannelId.toLowerCase() === "risewithalphatekx" || activeChannelId.toLowerCase().includes("ucgm89z31syxeu9peq");
     const channelFetch = fetch(`/api/channel/${encodeURIComponent(activeChannelId)}`).then(r=>r.ok?r.json():null);
-    const videosFetch = isOfficial ? fetch(`/api/channel/videos`).then(r=>r.ok?r.json():null).catch(()=>null) : Promise.resolve(null);
+    const videosFetch = isOfficial ? fetch(`/api/channel/videos?max=50`).then(r=>r.ok?r.json():null).catch(()=>null) : Promise.resolve(null);
     Promise.all([channelFetch, videosFetch]).then(([d, vData]) => {
       if(d && d.channel){
         setChannelData(d.channel);
@@ -2579,7 +2583,7 @@ function App() {
                               </div>
                               <div className="p-4 space-y-1.5">
                                 <h3 className="font-bold text-sm text-white group-hover:text-[#00FF88] line-clamp-2">{vid.title}</h3>
-                                <p className="text-xs text-gray-400">{vid.channel||vid.channelName}</p>
+                                <button type="button" onClick={(event)=>{ event.stopPropagation(); navigateToChannel(vid.channelId || channelIdFromVideo(vid)); }} className="text-left text-xs text-gray-400 truncate hover:text-[#00D9FF]">{vid.channel||vid.channelName}</button>
                                 <p className="text-[11px] text-gray-500">{vid.views} • {vid.searchedQuery?`query:"${vid.searchedQuery}"`:vid.timeAgo}</p>
                               </div>
                             </div>
@@ -2597,7 +2601,7 @@ function App() {
                     searchFiltered.length>0 ? (
                       <div className="grid grid-cols-2 gap-2 px-2 sm:px-0 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
                         {searchFiltered.map((vid) => (
-                          <VideoCard key={vid.youtubeId || vid.id} video={vid} cleanHome />
+                          <VideoCard key={vid.youtubeId || vid.id} video={vid} onChannel={(v) => navigateToChannel(v.channelId || channelIdFromVideo(v))} cleanHome />
                         ))}
                       </div>
                     ) : (
@@ -2633,7 +2637,7 @@ function App() {
                     </button>
                     <div className="space-y-1 px-4 sm:px-0 pb-3 sm:pb-0">
                       <h3 className="font-bold text-sm sm:text-base text-white line-clamp-2">{featuredVideo.title}</h3>
-                      <p className="text-xs text-gray-400">{featuredVideo.channelName || featuredVideo.channel} • {featuredVideo.handle || ""} • Featured</p>
+                      <button type="button" onClick={(event)=>{ event.stopPropagation(); navigateToChannel(featuredVideo.channelId || channelIdFromVideo(featuredVideo)); }} className="text-left text-xs text-gray-400 hover:text-[#00D9FF]">{featuredVideo.channelName || featuredVideo.channel} • {featuredVideo.handle || ""} • Featured</button>
                       <div className="flex gap-2 pt-1">
                         <button onClick={()=>{ window.location.href = `/watch?v=${featuredVideo.youtubeId}`; }} className="min-h-[44px] px-5 py-2.5 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Watch Now</button>
                         <a href={`https://youtu.be/${featuredVideo.youtubeId}`} target="_blank" rel="noreferrer" className="min-h-[44px] px-5 py-2.5 bg-[#272727] text-white font-bold text-xs rounded-xl flex items-center">Open on YouTube ↗</a>
@@ -2671,7 +2675,7 @@ function App() {
                   <>
                   <div className="grid grid-cols-1 gap-5 px-3 sm:px-0 sm:grid-cols-2 sm:gap-4 md:gap-6 md:grid-cols-3 lg:grid-cols-4">
                     {homeFiltered.map((vid, idx) => (
-                      <VideoCard key={`${vid.youtubeId || vid.id}-${idx}`} video={{...vid, platform:  vid.platform||"youtube"}} cleanHome />
+                      <VideoCard key={`${vid.youtubeId || vid.id}-${idx}`} video={{...vid, platform:  vid.platform||"youtube"}} onChannel={(v) => navigateToChannel(v.channelId || channelIdFromVideo(v))} cleanHome />
                     ))}
                   </div>
                   {marketplaceProducts.length>0 && (
@@ -2765,8 +2769,10 @@ function App() {
                       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black via-black/50 to-transparent" />
                       <div className="absolute bottom-0 left-0 right-16 z-10 space-y-2 p-4">
                         <div className="flex items-center gap-2">
-                          <img src={short.avatar} alt="" className="h-8 w-8 rounded-full border-2 border-white object-cover" />
-                          <span className="text-sm font-bold text-white">{short.handle}</span>
+                          <button type="button" onClick={(event)=>{ event.stopPropagation(); navigateToChannel(short.channelId || channelIdFromVideo(short)); }} className="flex items-center gap-2">
+                            <img src={short.avatar} alt="" className="h-8 w-8 rounded-full border-2 border-white object-cover" />
+                            <span className="text-sm font-bold text-white">{short.handle || short.channelName}</span>
+                          </button>
                           <button onClick={() => showToast(`Subscribed to ${short.channel}!`)} className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-black">Subscribe</button>
                         </div>
                         <p className="line-clamp-2 text-sm leading-snug text-white">{short.title}</p>
