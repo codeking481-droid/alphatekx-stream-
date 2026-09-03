@@ -398,10 +398,10 @@ function createApiApp() {
   function gatedGetAuthUrl(c: any): string {
     const env: any = c.env || {};
     const clientId = env.GOOGLE_CLIENT_ID || (typeof process !== "undefined" ? (process as any).env?.GOOGLE_CLIENT_ID : "") || "";
-    const redirectUri = env.REDIRECT_URI || env.GOOGLE_REDIRECT_URI || (typeof process !== "undefined" ? (process as any).env?.REDIRECT_URI : "") || `${new URL(c.req.url).origin}/api/auth/callback`;
-    // If no client configured, still return a usable placeholder URL so frontend button works in dev
+    const redirectUri = `${new URL(c.req.url).origin}/api/auth/callback`;
     const scopes = "https://www.googleapis.com/auth/youtube.readonly";
-    const cid = clientId || "YOUR_GOOGLE_CLIENT_ID";
+    if (!clientId) throw new Error("GOOGLE_OAUTH_NOT_CONFIGURED");
+    const cid = clientId;
     return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(cid)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`;
   }
   app.get("/api/auth/url", (c) => {
@@ -419,7 +419,7 @@ function createApiApp() {
     // Try real token exchange if secrets present, else create mock session for gated demo
     const clientId = env.GOOGLE_CLIENT_ID || "";
     const clientSecret = env.GOOGLE_CLIENT_SECRET || "";
-    const redirectUri = env.REDIRECT_URI || env.GOOGLE_REDIRECT_URI || `${new URL(c.req.url).origin}/api/auth/callback`;
+    const redirectUri = `${new URL(c.req.url).origin}/api/auth/callback`;
     let sessionToken = "";
     let channelName = "Alphatekx User";
     let channelAvatar = "https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000&size=200&bold=true";
@@ -1188,7 +1188,7 @@ function createApiApp() {
     if (!email || !email.includes("@")) return c.json({ error: "ACCOUNT_EMAIL_REQUIRED" }, 400);
     const planCode = plan === "yearly" ? (c.env as Env)?.PAYSTACK_PLAN_YEARLY : (c.env as Env)?.PAYSTACK_PLAN_MONTHLY;
     const amount = plan === "yearly" ? 9900 : 1900;
-    const payload: Record<string, unknown> = { email, amount: amount * 100, currency: "USD", metadata: { userId: user.id, plan } };
+    const payload: Record<string, unknown> = { email, amount, currency: "USD", metadata: { userId: user.id, plan } };
     if (planCode) payload.plan = planCode;
     const response = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
