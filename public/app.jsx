@@ -2749,9 +2749,7 @@ function App() {
                             <div
                               key={`hist-${vid.youtubeId||vid.id}-${vid.searchedAt||""}`}
                               onClick={()=>{
-                                setActiveVideo(normalizeVideo(vid));
-                                setActiveTab("watch");
-                                if(mainScrollRef.current) mainScrollRef.current.scrollTop=0;
+                                allowVideoForUser(vid);
                                 showToast(`Playing from history: ${vid.title}`);
                               }}
                               className="glass-card overflow-hidden hover:border-[#00FF88] transition-all cursor-pointer group flex flex-col justify-between border-[#00FF88]/20"
@@ -2781,7 +2779,7 @@ function App() {
                     searchFiltered.length>0 ? (
                       <div className="grid grid-cols-2 gap-2 px-2 sm:px-0 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
                         {uniqueVideos(searchFiltered).map((vid) => (
-                          <VideoCard key={vid.youtubeId || vid.id} video={vid} onChannel={(v) => navigateToChannel(v.channelId || channelIdFromVideo(v))} cleanHome />
+                          <VideoCard key={vid.youtubeId || vid.id} video={vid} onPlay={allowVideoForUser} onChannel={(v) => navigateToChannel(v.channelId || channelIdFromVideo(v))} cleanHome />
                         ))}
                       </div>
                     ) : (
@@ -2803,7 +2801,7 @@ function App() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => { window.location.href = `/watch?v=${featuredVideo.youtubeId}`; }}
+                      onClick={() => allowVideoForUser(featuredVideo)}
                       className="group relative block w-full aspect-video bg-black overflow-hidden sm:rounded-xl text-left"
                       aria-label={`Watch ${featuredVideo.title}`}
                     >
@@ -2819,7 +2817,7 @@ function App() {
                       <h3 className="font-bold text-sm sm:text-base text-white line-clamp-2">{featuredVideo.title}</h3>
                       <button type="button" onClick={(event)=>{ event.stopPropagation(); navigateToChannel(featuredVideo.channelId || channelIdFromVideo(featuredVideo)); }} className="text-left text-xs text-gray-400 hover:text-[#00D9FF]">{featuredVideo.channelName || featuredVideo.channel} • {featuredVideo.handle || ""} • Featured</button>
                       <div className="flex gap-2 pt-1">
-                        <button onClick={()=>{ window.location.href = `/watch?v=${featuredVideo.youtubeId}`; }} className="min-h-[44px] px-5 py-2.5 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Watch Now</button>
+                        <button onClick={()=>allowVideoForUser(featuredVideo)} className="min-h-[44px] px-5 py-2.5 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Watch Now</button>
                         <a href={`https://youtu.be/${featuredVideo.youtubeId}`} target="_blank" rel="noreferrer" className="min-h-[44px] px-5 py-2.5 bg-[#272727] text-white font-bold text-xs rounded-xl flex items-center">Open on YouTube ↗</a>
                       </div>
                     </div>
