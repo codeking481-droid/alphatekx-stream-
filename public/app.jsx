@@ -143,7 +143,7 @@ const VideoCard = ({ video, onPlay, onSave, isSaved, onAi, onChannel, cleanHome 
   const v = normalizeVideo(video);
   const platform = video.platform || v.platform || "youtube";
   return (
-    <div onClick={()=>cleanHome ? (window.location.href=`/watch?v=${v.youtubeId}&autoplay=1`) : (onPlay&&onPlay(v))} className="glass-card overflow-hidden hover:border-[#FFD700]/50 hover:shadow-[0_0_15px_rgba(255,215,0,0.15)] transition-all cursor-pointer group flex flex-col justify-between rounded-xl sm:rounded-2xl">
+    <div onClick={()=>onPlay ? onPlay(v) : cleanHome ? (window.location.href=`/watch?v=${v.youtubeId}&autoplay=1`) : null} className="glass-card overflow-hidden hover:border-[#FFD700]/50 hover:shadow-[0_0_15px_rgba(255,215,0,0.15)] transition-all cursor-pointer group flex flex-col justify-between rounded-xl sm:rounded-2xl">
       <div className="relative aspect-video w-full bg-gray-900 overflow-hidden rounded-t-xl sm:rounded-t-2xl">
         <img src={cleanHome ? `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg` : (v.img || v.thumbnailUrl)} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
         <span className="absolute bottom-2 right-2 bg-black/80 text-[10px] font-mono px-1.5 py-0.5 rounded text-white">{v.duration}</span>
@@ -224,11 +224,35 @@ const SignInButton = () => {
     window.location.href = '/api/auth/url';
   };
   return (
-    <button onClick={handleSignIn} className="bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold px-8 py-3 rounded-xl hover:scale-105 transition shadow-lg hover:shadow-gold/30">
+    <button onClick={handleSignIn} title="If Google shows an unverified warning, click Advanced → Continue" className="bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold px-8 py-3 rounded-xl hover:scale-105 transition shadow-lg hover:shadow-gold/30">
       Sign in with YouTube →
     </button>
   );
 };
+const GoogleUnverifiedNotice = () => (
+  <div className="bg-[#1a1a1a] border border-yellow-600/50 rounded-xl p-4 mt-4 text-left">
+    <p className="text-yellow-300 text-sm font-bold">⚠️ Google has not verified this app yet</p>
+    <p className="text-zinc-300 text-xs mt-1">The app is under review. If Google shows this warning, you can continue safely:</p>
+    <div className="mt-3 bg-black rounded-lg p-3 space-y-2 text-xs">
+      <p className="text-white font-bold">Follow the arrow ↘️</p>
+      <p className="text-zinc-300"><b className="text-white">1. Click “Advanced”</b> at the bottom left <span className="text-yellow-400">↘️</span></p>
+      <p className="text-zinc-300"><b className="text-white">2. Click “Go to alphatekx.name.ng”</b> <span className="text-yellow-400">→</span></p>
+      <p className="text-zinc-300"><b className="text-white">3. Click “Continue”</b> to finish signing in ✅</p>
+    </div>
+    <p className="text-zinc-500 text-[11px] mt-2">This warning appears for new OAuth apps while Google reviews them.</p>
+  </div>
+);
+const SignUpBlock = ({ onSignIn }) => (
+  <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="signup-block-title">
+    <div className="bg-zinc-900 rounded-2xl p-6 max-w-md w-full text-center border border-white/10">
+      <h2 id="signup-block-title" className="text-white text-xl font-bold">🔒 Sign up to continue watching</h2>
+      <p className="text-zinc-400 text-sm mt-2">You have watched 1 video free. Sign in free to keep watching unlimited videos and unlock your profile.</p>
+      <button onClick={onSignIn} className="w-full mt-6 bg-[#FFD60A] text-black py-3 rounded-full font-bold">Sign in with YouTube → Continue</button>
+      <p className="text-zinc-500 text-xs mt-2">Free — unlimited video after signup</p>
+      <GoogleUnverifiedNotice />
+    </div>
+  </div>
+);
 const GuestOverlay = ({ children, message }) => {
   const handle = async () => {
     try { const r = await fetch('/api/auth/url'); const d = await r.json(); if(d.url) { window.location.href=d.url; return; } } catch {}
@@ -327,6 +351,36 @@ function App() {
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const isGuest = !authUser;
+  const [showSignUpBlock, setShowSignUpBlock] = useState(false);
+  const signIn = async () => {
+    try {
+      const response = await fetch("/api/auth/url", { credentials: "include" });
+      const data = await response.json();
+      if (data.url) {
+        window.location.href = data.url;
+        return;
+      }
+    } catch {}
+    window.location.href = "/api/auth/url";
+  };
+  const allowVideoForUser = (video) => {
+    if (!video) return;
+    if (!isGuest) {
+      setActiveVideo(normalizeVideo(video));
+      setActiveTab("watch");
+      if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+      return;
+    }
+    const count = Number.parseInt(localStorage.getItem("alphatekx_anon_watch_count") || "0", 10);
+    if (count >= 1) {
+      setShowSignUpBlock(true);
+      return;
+    }
+    localStorage.setItem("alphatekx_anon_watch_count", "1");
+    setActiveVideo(normalizeVideo(video));
+    setActiveTab("watch");
+    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+  };
   useEffect(() => {
     fetch("/api/channel/videos?max=50")
       .then(r => r.ok ? r.json() : null)
@@ -919,6 +973,16 @@ function App() {
       setProfileForm({ name: ytProfile.name, handle: ytProfile.handle, bio: ytProfile.bio, avatar: ytProfile.avatar, banner: ytProfile.banner, email: ytProfile.email });
     }
   }, [authUser]);
+  useEffect(() => {
+    if (!authLoading && isGuest && activeTab === "watch" && window.location.pathname === "/watch") {
+      const count = Number.parseInt(localStorage.getItem("alphatekx_anon_watch_count") || "0", 10);
+      if (count >= 1) setShowSignUpBlock(true);
+      else localStorage.setItem("alphatekx_anon_watch_count", "1");
+    }
+  }, [activeTab, authLoading, isGuest]);
+  useEffect(() => {
+    if (!isGuest) setShowSignUpBlock(false);
+  }, [isGuest]);
   // Personalized feed — fetch user's videos when signed in
   const [userFeed, setUserFeed] = useState([]);
   useEffect(() => {
@@ -2699,8 +2763,8 @@ function App() {
                       <button onClick={()=>setActiveTab("shorts")} className="text-xs font-bold text-[#FFD700] hover:underline min-h-[44px] px-3 flex items-center">View all →</button>
                     </div>
                     <div className="flex gap-2 sm:gap-3 overflow-x-auto scrollbar-hide pb-2 snap-x snap-mandatory px-0">
-                      {shortsVideos.map((s, idx)=>(
-                        <div key={s.id} onClick={()=>{ setShortsIndex(idx); setShortsMuted(false); setActiveTab("shorts"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing Short: ${s.title}`); }} className="flex-shrink-0 w-[140px] sm:w-[160px] cursor-pointer snap-start group">
+                      {shortsVideos.map((s, idx)=>
+                      <div key={s.id} onClick={()=>{ if (isGuest && Number.parseInt(localStorage.getItem("alphatekx_anon_watch_count") || "0", 10) >= 1) { setShowSignUpBlock(true); return; } if (isGuest) localStorage.setItem("alphatekx_anon_watch_count", "1"); setShortsIndex(idx); setShortsMuted(false); setActiveTab("shorts"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing Short: ${s.title}`); }} className="flex-shrink-0 w-[140px] sm:w-[160px] cursor-pointer snap-start group">
                           <div className="aspect-[9/16] rounded-xl overflow-hidden bg-black border border-white/10 relative group-hover:border-[#FF0000]/40 transition-colors">
                             <img src={`https://img.youtube.com/vi/${s.youtubeId}/hqdefault.jpg`} alt={s.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
@@ -2716,14 +2780,14 @@ function App() {
                           <p className="text-xs font-bold text-white line-clamp-2 mt-1.5 leading-tight">{s.title}</p>
                           <p className="text-[11px] text-gray-500">{s.handle} • {s.likes} likes</p>
                         </div>
-                      ))}
+                      )}
                     </div>
                   </div>
                   {homeFiltered.length>0 ? (
                   <>
                   <div className="grid grid-cols-1 gap-5 px-3 sm:px-0 sm:grid-cols-2 sm:gap-4 md:gap-6 md:grid-cols-3 lg:grid-cols-4">
                     {uniqueVideos(homeFiltered).map((vid) => (
-                      <VideoCard key={vid.youtubeId || vid.id} video={{...vid, platform:  vid.platform||"youtube"}} onChannel={(v) => navigateToChannel(v.channelId || channelIdFromVideo(v))} cleanHome />
+                    <VideoCard key={vid.youtubeId || vid.id} video={{...vid, platform:  vid.platform||"youtube"}} onPlay={allowVideoForUser} onChannel={(v) => navigateToChannel(v.channelId || channelIdFromVideo(v))} cleanHome />
                     ))}
                   </div>
                   {marketplaceProducts.length>0 && (
@@ -3849,6 +3913,8 @@ function App() {
           </div>
         </div>
       )}
+
+      {showSignUpBlock && isGuest && <SignUpBlock onSignIn={signIn} />}
 
       {/* MOBILE BOTTOM NAVIGATION BAR — YouTube fit h-16 */}
       <nav className={`fixed bottom-0 left-0 right-0 z-40 bg-[#0f0f0f] border-t border-[#272727] px-4 h-16 items-center justify-around md:hidden ${activeTab === "shorts" ? "hidden" : "flex"}`}>

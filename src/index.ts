@@ -388,7 +388,7 @@ function createApiApp() {
     const clientId = env.GOOGLE_CLIENT_ID || (typeof process !== "undefined" ? (process as any).env?.GOOGLE_CLIENT_ID : "") || "";
     const redirectUri = env.REDIRECT_URI || env.GOOGLE_REDIRECT_URI || (typeof process !== "undefined" ? (process as any).env?.REDIRECT_URI : "") || `${new URL(c.req.url).origin}/api/auth/callback`;
     // If no client configured, still return a usable placeholder URL so frontend button works in dev
-    const scopes = ["https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/youtube.force-ssl"].join(" ");
+    const scopes = "https://www.googleapis.com/auth/youtube.readonly";
     const cid = clientId || "YOUR_GOOGLE_CLIENT_ID";
     return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(cid)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`;
   }
