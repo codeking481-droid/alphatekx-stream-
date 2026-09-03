@@ -1613,9 +1613,9 @@ function App() {
 
   // PROMPT #6: Marketplace — products with 20% fee, Seller Dashboard, Stripe
   const [marketplaceProducts, setMarketplaceProducts] = useState([
-    { id: 1, name: "AI Neural Net Model Pack", description: "Pre-trained PyTorch weights & vision dataset with puzzle CUDA acceleration.", price: 9.99, badge: "BESTSELLER", iconType: "cpu", category: "app", salesCount: 342, sellerEmail: "dev@alphatekx.ai" },
-    { id: 2, name: "Stream Platform Course Bundle", description: "Complete 6-hr video course with certificate & full source code repo.", price: 24.99, badge: "HOT", iconType: "video", category: "course", salesCount: 189, sellerEmail: "academy@alphatekx.ai" },
-    { id: 3, name: "Naija Speech Translation Engine", description: "Pidgin, Yoruba & Igbo TTS audio translation API plugin.", price: 14.99, badge: "NEW", iconType: "sparkles", category: "plugin", salesCount: 95, sellerEmail: "nigeria-ai@alphatekx.ai" }
+    { id: 1, name: "AI Neural Net Model Pack", description: "Pre-trained PyTorch weights & vision dataset with puzzle CUDA acceleration.", price: 2500, badge: "BESTSELLER", iconType: "cpu", category: "app", salesCount: 342, sellerEmail: "dev@alphatekx.ai" },
+    { id: 2, name: "Stream Platform Course Bundle", description: "Complete 6-hr video course with certificate & full source code repo.", price: 8000, badge: "HOT", iconType: "video", category: "course", salesCount: 189, sellerEmail: "academy@alphatekx.ai" },
+    { id: 3, name: "Naija Speech Translation Engine", description: "Pidgin, Yoruba & Igbo TTS audio translation API plugin.", price: 5000, badge: "NEW", iconType: "sparkles", category: "plugin", salesCount: 95, sellerEmail: "nigeria-ai@alphatekx.ai" }
   ]);
   const [marketplaceApps, setMarketplaceApps] = useState([]);
   const [marketplaceCategory, setMarketplaceCategory] = useState("all");
