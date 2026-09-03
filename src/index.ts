@@ -1051,6 +1051,25 @@ function createApiApp() {
     try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
     return runGroq(c, "workspace", body);
   });
+  const workspaceStore = (globalThis as any).__workspaceStore || ((globalThis as any).__workspaceStore = new Map<string, any>());
+  app.get("/api/workspace/saved", (c) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED" }, 401);
+    const videoId = c.req.query("videoId") || "default";
+    return c.json({ success: true, workspace: workspaceStore.get(`${user.id}:${videoId}`) || null });
+  });
+  app.post("/api/workspace/save", async (c) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED" }, 401);
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    const videoId = String(body.videoId || "default");
+    const code = String(body.code || "");
+    if (!code.trim()) return c.json({ success: false, error: "CODE_REQUIRED" }, 400);
+    const workspace = { id: `${user.id}:${videoId}`, userId: user.id, videoId, code, updatedAt: new Date().toISOString() };
+    workspaceStore.set(workspace.id, workspace);
+    return c.json({ success: true, workspace });
+  });
   app.post("/api/ai", async (c) => {
     let body: any = {};
     try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }

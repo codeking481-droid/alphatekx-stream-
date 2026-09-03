@@ -330,6 +330,7 @@ function uniqueVideos(videos) {
     seen.add(id);
     return true;
   });
+  setMonacoReady(true);
 }
 function durationInSeconds(duration) {
   const parts = String(duration || "").split(":").map(Number);
@@ -406,6 +407,7 @@ function App() {
     const path = window.location.pathname.replace(/\/+$/, "") || "/";
     if (path === "/shorts") return "shorts";
     if (path === "/watch") return "watch";
+    if (path === "/workspace") return "workspace";
     if (path === "/home") return "home";
     return "home";
   }); // watch, home, shorts, teacher, memory, chat, community, marketplace, sell, studio, pricing, profile
@@ -450,7 +452,9 @@ function App() {
   // MISSION 1 — Premium icon-triggered workspace (video 60% top, icon opens Code/AI 40% below)
   const [watchPanelTab, setWatchPanelTab] = useState("code");
   const [watchPanelOpen, setWatchPanelOpen] = useState(false);
-  const [codeValue, setCodeValue] = useState('');
+  const [codeValue, setCodeValue] = useState(() => {
+    try { return localStorage.getItem("alphatekx_workspace_code") || "<!doctype html>\n<html>\n  <body>\n    <h1>Alphatekx Workspace</h1>\n    <button id=\"hello\">Test interaction</button>\n    <script>document.getElementById('hello').onclick = () => alert('Preview is running');</script>\n  </body>\n</html>"; } catch { return ""; }
+  });
   const [apiKey, setApiKey] = useState(() => localStorage.getItem('alphatekx_api_key') || '');
   const [showPaywall, setShowPaywall] = useState(false);
   const [byokKey, setByokKey] = useState(() => localStorage.getItem('alphatekx_api_key') || '');
@@ -468,6 +472,10 @@ function App() {
   const [notebookSavedView, setNotebookSavedView] = useState(false);
   const monacoRef = useRef(null);
   const monacoEditorRef = useRef(null);
+  const [monacoReady, setMonacoReady] = useState(false);
+  useEffect(() => {
+    try { localStorage.setItem("alphatekx_workspace_code", codeValue || ""); } catch {}
+  }, [codeValue]);
   // Vibe Parser — extracts <edit_file> tags from AI and applies to codeValue
   const vibeParser = (text) => {
     const regex = /<edit_file[^>]*>([\s\S]*?)<\/edit_file>/gi;
@@ -478,7 +486,9 @@ function App() {
       setCodeValue(cleaned);
       if (monacoEditorRef.current) { try { monacoEditorRef.current.setValue(cleaned); } catch {} }
       setWatchPanelTab("preview");
-      setWatchPanelOpen(true);
+      setWatchPanelOpen(false);
+      setActiveTab("workspace");
+      window.history.pushState({}, "", `/workspace?videoId=${activeVideo?.youtubeId || activeVideo?.id || ""}`);
       showToast("✨ Vibe edit applied → Preview");
       return cleaned;
     }
@@ -501,7 +511,8 @@ function App() {
     }
     if (count > 0) {
       setWatchPanelTab("code");
-      setWatchPanelOpen(true);
+      setWatchPanelOpen(false);
+      setActiveTab("workspace");
       setTimeout(() => showToast(`✨ Agent built ${count} file${count>1?'s':''} → Preview`), 300);
     }
     // Command parsing
@@ -536,7 +547,8 @@ function App() {
       setAiChatMessages(prev => [...prev, { role: "ai", text: content }]);
       if (data.result?.code) setCodeValue(data.result.code);
       setWatchPanelTab("preview");
-      setWatchPanelOpen(true);
+      setWatchPanelOpen(false);
+      setActiveTab("workspace");
       showToast("🤖 AI workspace ready");
     } catch (e) {
       setAiChatMessages(prev => [...prev, { role: "ai", text: `AI request failed: ${e.message}` }]);
@@ -630,7 +642,7 @@ function App() {
   const simpleTermRef = useRef(null);
   // Monaco loader — smooth, correct language, live sync
   useEffect(() => {
-    if (watchPanelTab !== "code") return;
+    if (watchPanelTab !== "code" || (!watchPanelOpen && activeTab !== "workspace")) return;
     const container = monacoRef.current;
     if (!container) return;
     // If already created, just update value and layout
@@ -671,11 +683,11 @@ function App() {
       requireFn(["vs/editor/editor.main"], create);
     };
     document.head.appendChild(script);
-  }, [watchPanelTab, codeValue]);
+  }, [watchPanelTab, watchPanelOpen, activeTab, codeValue]);
 
   // MISSION 4 — TERMINAL Xterm + WebContainer (zero-cost, browser only)
   useEffect(() => {
-    if (watchPanelTab !== "terminal" || !watchPanelOpen) return;
+    if (watchPanelTab !== "terminal" || (!watchPanelOpen && activeTab !== "workspace")) return;
     if (xtermRef.current) return;
     const container = terminalRef.current;
     if (!container) return;
@@ -770,7 +782,7 @@ function App() {
       }
     };
     init();
-  }, [watchPanelTab, watchPanelOpen]);
+  }, [watchPanelTab, watchPanelOpen, activeTab]);
 
   // MISSION 2 — SHADOW-CLONE CHECKPOINT SYSTEM (Timeline Hijacking Engine)
   const [checkpoints, setCheckpoints] = useState([]);
@@ -1551,6 +1563,30 @@ function App() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
+  const saveWorkspace = async () => {
+    const videoId = activeVideo?.youtubeId || activeVideo?.id || "default";
+    try {
+      const response = await fetch("/api/workspace/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ videoId, code: codeValue }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || data.error || "Unable to save workspace");
+      showToast("Workspace saved");
+    } catch (error) {
+      showToast(error.message || "Unable to save workspace");
+    }
+  };
+  useEffect(() => {
+    if (activeTab !== "workspace" || !authUser) return;
+    const videoId = activeVideo?.youtubeId || activeVideo?.id || "default";
+    fetch(`/api/workspace/saved?videoId=${encodeURIComponent(videoId)}`, { credentials: "include" })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => { if (data?.workspace?.code) setCodeValue(data.workspace.code); })
+      .catch(() => {});
+  }, [activeTab, authUser?.id, activeVideo?.youtubeId, activeVideo?.id]);
   const startProCheckout = async (plan = "monthly") => {
     if (isGuest) {
       showToast("Sign in first to start your Pro subscription");
@@ -2164,6 +2200,7 @@ function App() {
                 { id: "history", label: "History", icon: "history" },
                 { id: "watchlater", label: "Watch Later", icon: "bookmark" },
                 { id: "shorts", label: "Shorts", icon: "shorts" },
+                { id: "workspace", label: "Workspace", icon: "code" },
                 { id: "channel", label: "Channel", icon: "user" },
                 { id: "upload", label: "Upload", icon: "plus" }
               ].map((item) => (
@@ -2329,6 +2366,7 @@ function App() {
                 { id: "history", label: "History", icon: "history" },
                 { id: "watchlater", label: "Watch Later", icon: "history" },
                 { id: "shorts", label: "Shorts", icon: "shorts" },
+                { id: "workspace", label: "Workspace", icon: "code" },
                 { id: "channel", label: "Channel", icon: "user" },
                 { id: "upload", label: "Upload", icon: "plus" }
               ].map((item) => (
@@ -2364,6 +2402,7 @@ function App() {
                 { id: "teacher", label: "AI Teacher", icon: "sparkles", color: "text-[#FFD700]" },
                 { id: "memory", label: "AI Memory", icon: "brain", color: "text-[#FFD700]" },
                 { id: "marketplace", label: "Marketplace", icon: "shopping-bag", color: "text-gray-400" },
+                { id: "workspace", label: "Workspace", icon: "code", color: "text-[#00FF88]" },
                 { id: "studio", label: "AI Studio", icon: "studio", color: "text-gray-400" },
                 { id: "profile", label: "Profile", icon: "user", color: "text-gray-400" },
                 { id: "pricing", label: "Pro Subscription", icon: "crown", color: "text-[#FFD700]" }
@@ -2492,7 +2531,7 @@ function App() {
                   </div>
                 </div>
                 <div className="space-y-3 px-4 sm:px-0">
-                  <button onClick={()=>setWatchPanelOpen(true)} className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#FFD700] text-black font-extrabold text-sm shadow-lg hover:scale-105 transition">Open AI Workspace →</button>
+                  <button onClick={()=>{ setWatchPanelOpen(false); setActiveTab("workspace"); window.history.pushState({}, "", `/workspace?videoId=${activeVideo.youtubeId || activeVideo.id}`); }} className="w-full sm:w-auto px-5 py-2.5 rounded-full bg-[#FFD700] text-black font-extrabold text-sm shadow-lg hover:scale-105 transition">Open AI Workspace →</button>
                   <div className="flex gap-2 overflow-x-auto scrollbar-hide">
                     {videoChapters.map((chap, idx)=>(
                       <button key={idx} onClick={()=>handleSeek(chap.seconds, chap.timestamp)} className={`px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap border ${activeTimestamp===chap.timestamp||(idx===0&&!activeTimestamp)?"bg-[#FFD700] text-black border-[#FFD700]":"bg-[#1a1a2e] border-white/10 text-gray-300"}`}>{chap.timestamp} {chap.title}</button>
@@ -2507,18 +2546,19 @@ function App() {
             </div>
           )}
           {/* WORKSPACE OPEN — laptop side-by-side (Image 2), mobile stacked (Image 1) */}
-          {activeTab === "watch" && watchPanelOpen && (
+          {((activeTab === "watch" && watchPanelOpen) || activeTab === "workspace") && (
             <div className="max-w-[1600px] mx-auto px-0 sm:px-4 py-3 lg:py-0 space-y-4">
               {/* Back + Title bar */}
               <div className="flex items-center gap-3 px-4 sm:px-0">
-                <button onClick={()=>setWatchPanelOpen(false)} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10">
+                <button onClick={()=>{ setWatchPanelOpen(false); setActiveTab("watch"); window.history.pushState({}, "", `/watch?v=${activeVideo.youtubeId || activeVideo.id}`); }} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10">
                   <span>←</span> <span className="hidden sm:inline">Back to Stream</span><span className="sm:hidden">Back</span>
                 </button>
-                <h2 className="hidden lg:block flex-1 text-center text-xl font-extrabold text-white truncate px-4">{activeVideo.title}</h2>
+                <h2 className="flex-1 text-center text-xl font-extrabold text-white truncate px-4">{activeTab === "workspace" ? "Alphatekx Workspace" : activeVideo.title}</h2>
+                {activeTab === "workspace" && <button onClick={saveWorkspace} className="px-4 py-2 rounded-full bg-[#00FF88] text-black text-sm font-bold">Save</button>}
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6">
                 {/* Video — ONLY real YouTube iframe, no fake overlays */}
-                <div className="lg:col-span-6 space-y-3">
+                <div className={`${activeTab === "workspace" ? "hidden" : "lg:col-span-6"} space-y-3`}>
                   <div className="relative bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.25)]">
                     <div className="aspect-video relative bg-black">
                       <iframe src={`https://www.youtube-nocookie.com/embed/${activeVideo.youtubeId || activeVideo.id}?autoplay=1&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&iv_load_policy=3&cc_load_policy=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowFullScreen />
@@ -2530,7 +2570,7 @@ function App() {
                   </div>
                 </div>
                 {/* Code panel — responsive */}
-                <div className="lg:col-span-6">
+                <div className={activeTab === "workspace" ? "lg:col-span-12" : "lg:col-span-6"}>
                   <div className="bg-[#0f0f1f] border border-white/10 rounded-2xl overflow-hidden shadow-xl flex flex-col h-[55vh] lg:h-[58vh] min-h-[420px]">
                     <div className="flex border-b border-white/10 bg-[#0f0f1f] overflow-x-auto scrollbar-hide">
                       <button onClick={()=>setWatchPanelTab("code")} className={`px-4 py-3 text-sm font-bold whitespace-nowrap ${watchPanelTab==="code"?"bg-[#FFD700] text-black":"text-gray-400"}`}>Code &lt;/&gt;</button>
@@ -2548,8 +2588,8 @@ function App() {
                             <span className="ml-auto text-green-400">● Live</span>
                             <button onClick={()=>{setCodeValue(''); showToast('Cleared');}} className="ml-2 px-2 py-1 rounded-full bg-white/5 hover:bg-white/10 text-[11px]">Clear</button>
                           </div>
-                          <div ref={monacoRef} className="hidden"></div>
-                          <textarea value={(codeValue||'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')} onChange={e=>setCodeValue(e.target.value)} onPaste={e=>{e.preventDefault(); const t=(e.clipboardData||window.clipboardData).getData('text/plain'); const d=t.replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&'); const s=e.target.selectionStart; const en=e.target.selectionEnd; const n=(codeValue||'').slice(0,s)+d+(codeValue||'').slice(en); setCodeValue(n); requestAnimationFrame(()=>{e.target.selectionStart=e.target.selectionEnd=s+d.length;});}} spellCheck={false} placeholder="Paste your HTML here — e.g. Digital Clock code..." className="flex-1 min-h-0 w-full bg-[#0A0A0F] text-white font-mono text-sm p-4 outline-none resize-none leading-6" style={{minHeight:'280px'}} />
+                          <div ref={monacoRef} className="flex-1 min-h-0 w-full bg-[#0A0A0F]" style={{minHeight:"280px"}}></div>
+                          {!monacoReady && <textarea value={(codeValue||'').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&amp;/g,'&')} onChange={e=>setCodeValue(e.target.value)} spellCheck={false} placeholder="Loading Monaco editor..." className="absolute opacity-0 pointer-events-none" aria-hidden="true" />}
                           <div className="px-3 py-2 bg-[#1a1a24] border-t border-white/10 flex items-center justify-between text-xs font-mono text-gray-400">
                             <span>Line {codeValue.split('\n').length} • {codeValue.length} chars</span>
                             <button onClick={()=>{ setCodeValue(''); showToast('Cleared — ready to code!'); }} className="min-h-[32px] px-3 rounded-full bg-[#FFD700]/10 text-[#FFD700] hover:bg-[#FFD700]/20 text-xs font-bold">Clear</button>
@@ -3176,7 +3216,7 @@ function App() {
                     <div key={template.id} className="rounded-xl border border-white/10 bg-black/30 p-4 space-y-2">
                       <h2 className="font-bold text-white">{template.name}</h2>
                       <p className="text-xs text-gray-400">{template.description}</p>
-                      <button onClick={() => { setCodeValue(template.code); setWatchPanelOpen(true); setWatchPanelTab("preview"); setActiveTab("watch"); }} className="px-3 py-2 rounded-lg bg-[#FFD700] text-black text-xs font-bold">Use Template</button>
+                      <button onClick={() => { setCodeValue(template.code); setWatchPanelOpen(false); setWatchPanelTab("preview"); setActiveTab("workspace"); window.history.pushState({}, "", "/workspace"); }} className="px-3 py-2 rounded-lg bg-[#FFD700] text-black text-xs font-bold">Use Template</button>
                     </div>
                   ))}
                 </div>
