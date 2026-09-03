@@ -2710,24 +2710,30 @@ function App() {
                 >
                   {shortsVideos.map((short, idx) => (
                    <article key={`${short.youtubeId}-${idx}`} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-full min-h-full snap-start snap-always bg-black sm:my-2 sm:rounded-2xl sm:border sm:border-white/10 sm:shadow-2xl overflow-hidden" style={{ scrollSnapStop: "always" }}>
-                      {idx === shortsIndex ? (
-                        <iframe
-                          key={`${short.youtubeId}-${shortsMuted}-${shortsPlaying}`}
-                          src={`https://www.youtube-nocookie.com/embed/${short.youtubeId}?autoplay=${shortsPlaying ? 1 : 0}&mute=${shortsMuted ? 1 : 0}&controls=0&rel=0&playsinline=1&loop=1&playlist=${short.youtubeId}&modestbranding=1`}
-                          title={short.title}
-                          className="pointer-events-none h-full w-full border-0"
-                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                          allowFullScreen
-                        />
-                      ) : (
-                        <img src={`https://i.ytimg.com/vi/${short.youtubeId}/hqdefault.jpg`} alt="" className="h-full w-full object-cover" loading="lazy" />
-                      )}
-                      <div
-                        className="absolute inset-0 z-10 touch-pan-y"
-                        aria-hidden="true"
-                        style={{ touchAction: "pan-y" }}
-                        onClick={() => setShortsMuted(m => !m)}
-                      />
+                      <div className="absolute inset-0 flex justify-center bg-black">
+                        <div className="relative h-full aspect-[9/16] max-w-full overflow-hidden">
+                          {idx === shortsIndex ? (
+                            <iframe
+                              key={`${short.youtubeId}-${shortsMuted}-${shortsPlaying}`}
+                              src={`https://www.youtube-nocookie.com/embed/${short.youtubeId}?autoplay=${shortsPlaying ? 1 : 0}&mute=${shortsMuted ? 1 : 0}&controls=0&rel=0&playsinline=1&loop=1&playlist=${short.youtubeId}&modestbranding=1`}
+                              title={short.title}
+                              className="pointer-events-none h-full w-full border-0"
+                              allow="autoplay; accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              allowFullScreen
+                            />
+                          ) : (
+                            <img src={`https://i.ytimg.com/vi/${short.youtubeId}/hqdefault.jpg`} alt="" className="h-full w-full object-contain" loading="lazy" />
+                          )}
+                          <button
+                            type="button"
+                            aria-label={shortsPlaying ? "Pause short" : "Play short"}
+                            onClick={() => setShortsPlaying(playing => !playing)}
+                            className="absolute inset-0 z-10 flex items-center justify-center"
+                          >
+                            {!shortsPlaying && <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/70 text-3xl text-white">▶</span>}
+                          </button>
+                        </div>
+                      </div>
                       <button aria-label={shortsMuted ? "Unmute short" : "Mute short"} onClick={() => setShortsMuted(m => !m)} className="absolute right-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/70 text-lg text-white">{shortsMuted ? "🔇" : "🔊"}</button>
                       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black via-black/50 to-transparent" />
                       <div className="absolute bottom-0 left-0 right-16 z-10 space-y-2 p-4">
