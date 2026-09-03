@@ -184,7 +184,7 @@ const VideoPlayer = ({ video, autoplay = false }) => {
     }
     return (
       <div className="relative aspect-video w-full bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border border-[#272727] shadow-2xl">
-        <iframe src={`https://www.youtube.com/embed/${v.youtubeId}?autoplay=1&playsinline=1&rel=0`} title={v.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="autoplay; accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+        <iframe src={`https://www.youtube.com/embed/${v.youtubeId}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&rel=0&modestbranding=1&autoplay=0`} title={v.title} className="w-full h-full rounded-none sm:rounded-2xl border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" allowFullScreen />
       </div>
     );
   }
@@ -1148,7 +1148,7 @@ function App() {
   const [playerIdle, setPlayerIdle] = useState(false);
   // PROMPT #7+8: Shorts — best absolute, simple, easy volume
   const [shortsIndex, setShortsIndex] = useState(0);
-  const [shortsMuted, setShortsMuted] = useState(true);
+  const [shortsMuted, setShortsMuted] = useState(false);
   const [shortsPlaying, setShortsPlaying] = useState(true);
   const [shortsLiked, setShortsLiked] = useState({});
   const [shortsCommentsOpen, setShortsCommentsOpen] = useState(false);
@@ -2717,7 +2717,7 @@ function App() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-8 space-y-4">
                   <div ref={mainPlayerRef} className={`watch-video-player relative sticky top-0 z-20 w-full aspect-video bg-black ${landscapeMode ? "ring-2 ring-[#FFD700]" : ""}`}>
-                    <iframe ref={iframeRef} src={`https://www.youtube-nocookie.com/embed/${activeVideo.youtubeId || activeVideo.id}?autoplay=1&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&iv_load_policy=3&cc_load_policy=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowFullScreen />
+                    <iframe ref={iframeRef} src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" allowFullScreen />
                     <button onClick={toggleLandscape} className="absolute right-3 top-3 z-30 rounded-full bg-black/75 px-3 py-2 text-xs font-bold text-white border border-white/20 hover:bg-black" aria-label="View video in landscape 16:9">{landscapeMode ? "[x] 16:9" : "[ ] 16:9"}</button>
                   </div>
                   <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight px-4 sm:px-0">{activeVideo.title}</h1>
@@ -2812,7 +2812,7 @@ function App() {
                 <div className="lg:col-span-6 space-y-3">
                   <div className="relative bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.25)]">
                     <div className="aspect-video relative bg-black">
-                      <iframe src={`https://www.youtube-nocookie.com/embed/${activeVideo.youtubeId || activeVideo.id}?autoplay=1&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&iv_load_policy=3&cc_load_policy=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="autoplay; fullscreen; encrypted-media; picture-in-picture" allowFullScreen />
+                      <iframe src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen" allowFullScreen />
                     </div>
                   </div>
                   <div className="px-4 sm:px-0">
@@ -3209,23 +3209,15 @@ function App() {
                           {idx === shortsIndex ? (
                             <iframe
                               key={`${short.youtubeId}-${shortsMuted}-${shortsPlaying}`}
-                              src={`https://www.youtube-nocookie.com/embed/${short.youtubeId}?autoplay=${shortsPlaying ? 1 : 0}&mute=${shortsMuted ? 1 : 0}&controls=0&rel=0&playsinline=1&loop=1&playlist=${short.youtubeId}&modestbranding=1`}
+                              src={`https://www.youtube.com/embed/${short.youtubeId}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&autoplay=0&mute=${shortsMuted ? 1 : 0}`}
                               title={short.title}
-                              className="pointer-events-none h-full w-full border-0"
-                              allow="autoplay; accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                              className="h-full w-full border-0"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
                               allowFullScreen
                             />
                           ) : (
                             <img src={`https://i.ytimg.com/vi/${short.youtubeId}/hqdefault.jpg`} alt="" className="h-full w-full object-contain" loading="lazy" />
                           )}
-                          <button
-                            type="button"
-                            aria-label={shortsPlaying ? "Pause short" : "Play short"}
-                            onClick={() => setShortsPlaying(playing => !playing)}
-                            className="absolute inset-0 z-10 flex items-center justify-center"
-                          >
-                            {!shortsPlaying && <span className="flex h-16 w-16 items-center justify-center rounded-full bg-black/70 text-3xl text-white">▶</span>}
-                          </button>
                         </div>
                       </div>
                       <button aria-label={shortsMuted ? "Unmute short" : "Mute short"} onClick={() => setShortsMuted(m => !m)} className="absolute right-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/70 text-lg text-white">{shortsMuted ? "🔇" : "🔊"}</button>
