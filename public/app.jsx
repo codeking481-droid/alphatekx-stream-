@@ -2554,7 +2554,7 @@ function App() {
                   </div>
                   <section className="watch-ai-buttons px-4 sm:px-0 space-y-3">
                     <div className="flex flex-wrap gap-2">
-                      <button onClick={()=>{ setWatchPanelOpen(false); setActiveTab("workspace"); window.history.pushState({}, "", `/workspace?videoId=${activeVideo.youtubeId || activeVideo.id}`); }} className="min-h-[40px] px-3 py-2 rounded-full bg-[#FFD60A] text-black text-xs font-bold flex items-center gap-1.5">
+                      <button onClick={()=>{ setActiveTab("watch"); setWatchPanelTab("ai"); setWatchPanelOpen(true); }} className="min-h-[40px] px-3 py-2 rounded-full bg-[#FFD60A] text-black text-xs font-bold flex items-center gap-1.5">
                         <span aria-hidden="true">✨</span> Workspace
                       </button>
                       <button onClick={handleActivateJot} className="min-h-[40px] px-3 py-2 rounded-full bg-white text-black text-xs font-bold flex items-center gap-1.5 border border-white">
