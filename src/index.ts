@@ -25,6 +25,10 @@ interface Env {
   PAYSTACK_PLAN_YEARLY?: string;
   GROQ_API_KEY?: string;
   GROQ_MODEL?: string;
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
+  REDIRECT_URI?: string;
+  GOOGLE_REDIRECT_URI?: string;
 }
 
 function parseIsoDuration(iso?: string): string {
@@ -397,12 +401,12 @@ function createApiApp() {
   }
   function gatedGetAuthUrl(c: any): string {
     const env: any = c.env || {};
-    const clientId = env.GOOGLE_CLIENT_ID || (typeof process !== "undefined" ? (process as any).env?.GOOGLE_CLIENT_ID : "") || "";
-    const redirectUri = `${new URL(c.req.url).origin}/api/auth/callback`;
-    const scopes = "https://www.googleapis.com/auth/youtube.readonly";
-    if (!clientId) throw new Error("GOOGLE_OAUTH_NOT_CONFIGURED");
-    const cid = clientId;
-    return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(cid)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`;
+    const clientId = env.GOOGLE_CLIENT_ID || env.GOOGLE_CLIENT_ID || (typeof process !== "undefined" ? (process as any).env?.GOOGLE_CLIENT_ID : "") || "";
+    // Respect explicit REDIRECT_URI env (must match Google Console), fallback to request origin
+    const redirectUri = env.REDIRECT_URI || env.GOOGLE_REDIRECT_URI || (typeof process !== "undefined" ? (process as any).env?.REDIRECT_URI : "") || `${new URL(c.req.url).origin}/api/auth/callback`;
+    const scopes = ["https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/youtube.force-ssl", "openid", "email", "profile"].join(" ");
+    if (!clientId) throw new Error("GOOGLE_OAUTH_NOT_CONFIGURED: Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Cloudflare secrets / .dev.vars");
+    return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`;
   }
   app.get("/api/auth/url", (c) => {
     try {
@@ -413,51 +417,87 @@ function createApiApp() {
     }
   });
   app.get("/api/auth/callback", async (c) => {
+    const url = new URL(c.req.url);
     const code = c.req.query("code");
-    if (!code) return c.json({ error: "Missing code" }, 400);
+    const oauthError = c.req.query("error");
+    const errorDesc = c.req.query("error_description");
     const env: any = c.env || {};
-    // Try real token exchange if secrets present, else create mock session for gated demo
-    const clientId = env.GOOGLE_CLIENT_ID || "";
-    const clientSecret = env.GOOGLE_CLIENT_SECRET || "";
-    const redirectUri = `${new URL(c.req.url).origin}/api/auth/callback`;
-    let sessionToken = "";
-    let channelName = "Alphatekx User";
-    let channelAvatar = "https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000&size=200&bold=true";
-    let channelId = "";
-    let email = "";
+    // 1) User denied or Google returned error — redirect home with visible error instead of JSON
+    if (oauthError) {
+      console.error("[auth/callback] OAuth error:", oauthError, errorDesc);
+      return c.redirect(`/?auth_error=${encodeURIComponent(oauthError)}&error_description=${encodeURIComponent(errorDesc || "")}`);
+    }
+    if (!code) {
+      console.error("[auth/callback] Missing code, query:", url.search);
+      return c.redirect("/?auth_error=missing_code");
+    }
+    const clientId = env.GOOGLE_CLIENT_ID || (typeof process !== "undefined" ? (process as any).env?.GOOGLE_CLIENT_ID : "") || "";
+    const clientSecret = env.GOOGLE_CLIENT_SECRET || (typeof process !== "undefined" ? (process as any).env?.GOOGLE_CLIENT_SECRET : "") || "";
+    const redirectUri = env.REDIRECT_URI || env.GOOGLE_REDIRECT_URI || (typeof process !== "undefined" ? (process as any).env?.REDIRECT_URI : "") || `${new URL(c.req.url).origin}/api/auth/callback`;
+    if (!clientId || !clientSecret) {
+      console.error("[auth/callback] GOOGLE_CLIENT_ID/SECRET not configured");
+      return c.json({ error: "GOOGLE_OAUTH_NOT_CONFIGURED", message: "Google sign-in is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET via wrangler secret put and set REDIRECT_URI to match Google Console." }, 503);
+    }
     try {
-      if (clientId && clientSecret) {
-        // Real OAuth exchange
-        const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" }),
-        });
-        const tokens: any = await tokenRes.json();
-        if (tokens.access_token) {
-          const userRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-          const userInfo: any = await userRes.json();
+      const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ code, client_id: clientId, client_secret: clientSecret, redirect_uri: redirectUri, grant_type: "authorization_code" }),
+      });
+      const tokens: any = await tokenRes.json();
+      if (!tokenRes.ok || tokens.error) {
+        console.error("[auth/callback] token exchange failed:", tokenRes.status, tokens);
+        const err = tokens.error_description || tokens.error || `HTTP ${tokenRes.status}`;
+        // redirect with error so frontend can show toast instead of blank JSON
+        return c.redirect(`/?auth_error=token_exchange_failed&details=${encodeURIComponent(String(err).slice(0, 200))}`);
+      }
+      if (!tokens.access_token) {
+        console.error("[auth/callback] No access_token in response:", tokens);
+        return c.redirect("/?auth_error=no_access_token");
+      }
+      // Fetch user profile + YouTube channel in parallel
+      let channelName = "Alphatekx User";
+      let channelAvatar = "https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000&size=200&bold=true";
+      let channelId = "";
+      let email = "";
+      try {
+        const [userRes, chRes] = await Promise.all([
+          fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${tokens.access_token}` } }),
+          fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true", { headers: { Authorization: `Bearer ${tokens.access_token}` } }),
+        ]);
+        if (userRes.ok) {
+          const userInfo: any = await userRes.json().catch(() => ({}));
           email = userInfo.email || "";
-          const chRes = await fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-          const chData: any = await chRes.json();
+          if (!channelName || channelName === "Alphatekx User") {
+            channelName = userInfo.name || channelName;
+            if (userInfo.picture) channelAvatar = userInfo.picture;
+          }
+        }
+        if (chRes.ok) {
+          const chData: any = await chRes.json().catch(() => ({}));
           const ch = chData.items?.[0];
           if (ch) {
             channelId = ch.id;
             channelName = ch.snippet?.title || channelName;
-            channelAvatar = ch.snippet?.thumbnails?.default?.url || channelAvatar;
+            channelAvatar = ch.snippet?.thumbnails?.default?.url || ch.snippet?.thumbnails?.high?.url || channelAvatar;
           }
-          sessionToken = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : Math.random().toString(36).slice(2);
-          gatedSessions.set(sessionToken, { id: channelId || sessionToken, channelId, channelName, channelAvatar, email, accessToken: tokens.access_token, refreshToken: tokens.refresh_token || "", expiresAt: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), isGuest: false });
+        } else {
+          const chErr = await chRes.text().catch(() => "");
+          console.warn("[auth/callback] channel fetch non-ok:", chRes.status, chErr.slice(0, 300));
         }
+      } catch (fetchErr) {
+        console.warn("[auth/callback] userinfo/channel fetch failed:", fetchErr);
       }
-    } catch {
-      return c.json({ error: "OAUTH_EXCHANGE_FAILED", message: "Google sign-in could not be completed. Please try again." }, 502);
+      const sessionToken = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : Math.random().toString(36).slice(2);
+      gatedSessions.set(sessionToken, { id: channelId || sessionToken, channelId, channelName, channelAvatar, email, accessToken: tokens.access_token, refreshToken: tokens.refresh_token || "", expiresAt: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), isGuest: false });
+      // Secure cookie — add Secure flag when request is https
+      const isHttps = url.protocol === "https:";
+      c.header("Set-Cookie", `session=${sessionToken}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax${isHttps ? "; Secure" : ""}`);
+      return c.redirect("/");
+    } catch (e: any) {
+      console.error("[auth/callback] exchange exception:", e?.message || e);
+      return c.json({ error: "OAUTH_EXCHANGE_FAILED", message: e?.message || "Google sign-in could not be completed. Please try again.", details: String(e).slice(0, 500) }, 502);
     }
-    if (!sessionToken) {
-      return c.json({ error: "GOOGLE_OAUTH_NOT_CONFIGURED", message: "Google sign-in is not configured. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET." }, 503);
-    }
-    c.header("Set-Cookie", `session=${sessionToken}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`);
-    return c.redirect("/");
   });
   app.get("/api/auth/user", (c) => {
     const user = gatedGetUserFromCookie(c);

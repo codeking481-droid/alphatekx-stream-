@@ -43,22 +43,52 @@ export function createApiApp(env = {}) {
 
   app.get("/api/auth/url", (c) => {
     try {
-      return c.json({ url: getAuthUrl() });
+      const origin = new URL(c.req.url).origin;
+      return c.json({ url: getAuthUrl(origin) });
     } catch (e) {
       return c.json({ error: e.message, url: null }, 500);
     }
   });
   app.get("/api/auth/callback", async (c) => {
+    const url = new URL(c.req.url);
     const code = c.req.query("code");
-    if (!code) return c.json({ error: "Missing code" }, 400);
+    const oauthError = c.req.query("error");
+    const errorDesc = c.req.query("error_description");
+    if (oauthError) {
+      console.error("[auth/callback] OAuth error from Google:", oauthError, errorDesc);
+      return c.redirect(`/?auth_error=${encodeURIComponent(oauthError)}&error_description=${encodeURIComponent(errorDesc || "")}`);
+    }
+    if (!code) {
+      console.error("[auth/callback] Missing code, query:", url.search);
+      return c.redirect("/?auth_error=missing_code");
+    }
     try {
       const sessionToken = await handleCallback(code);
-      // store minimal user in session — handleCallback already persists via storeUser/storeSession placeholders
-      sessions.set(sessionToken, { id: sessionToken, channelId: sessionToken, channelName: "Alphatekx User", channelAvatar: `https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000`, isGuest: false });
-      c.header("Set-Cookie", `session=${sessionToken}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax`);
+      // Lookup full user from global store populated by handleCallback
+      const globalUsers = (globalThis).__authUsers;
+      let userObj = globalUsers?.get(sessionToken) || null;
+      if (!userObj && globalUsers) {
+        // handleCallback stores under sessionToken already
+        for (const v of globalUsers.values()) {
+          if (v.channelId === sessionToken) { userObj = v; break; }
+        }
+      }
+      if (userObj) {
+        sessions.set(sessionToken, { id: userObj.channelId || sessionToken, channelId: userObj.channelId, channelName: userObj.channelName, channelAvatar: userObj.channelAvatar, email: userObj.email || "", accessToken: userObj.accessToken, isGuest: false });
+      } else {
+        sessions.set(sessionToken, { id: sessionToken, channelId: sessionToken, channelName: "Alphatekx User", channelAvatar: `https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000`, isGuest: false });
+      }
+      const isHttps = url.protocol === "https:";
+      c.header("Set-Cookie", `session=${sessionToken}; HttpOnly; Path=/; Max-Age=86400; SameSite=Lax${isHttps ? "; Secure" : ""}`);
       return c.redirect("/");
     } catch (e) {
-      return c.json({ error: e.message }, 500);
+      console.error("[auth/callback] handleCallback failed:", e?.message || e);
+      // Return JSON for API clients, redirect for browsers — detect Accept header
+      const accept = c.req.header("accept") || "";
+      if (accept.includes("text/html")) {
+        return c.redirect(`/?auth_error=oauth_failed&details=${encodeURIComponent(String(e.message || e).slice(0,200))}`);
+      }
+      return c.json({ error: "OAUTH_FAILED", message: e.message || "Google sign-in failed", details: String(e).slice(0,500) }, 502);
     }
   });
   app.get("/api/auth/user", (c) => {
