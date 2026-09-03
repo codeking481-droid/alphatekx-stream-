@@ -390,6 +390,18 @@ function App() {
       .catch(() => {});
   }, []);
   useEffect(() => {
+    // Show auth errors from callback redirect (e.g., token_exchange_failed)
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const authErr = params.get("auth_error");
+      if (authErr) {
+        const details = params.get("details") || params.get("error_description") || "";
+        showToast(`Sign-in failed: ${authErr}${details ? " — " + decodeURIComponent(details).slice(0,120) : ""}`);
+        // clean URL
+        const clean = window.location.pathname;
+        window.history.replaceState({}, "", clean);
+      }
+    } catch {}
     fetch('/api/auth/user', { credentials: 'include' }).then(r=>r.ok?r.json():null).then(d=>{
       if(d && !d.isGuest && d.id) setAuthUser(d);
       else if(d && d.channelName) setAuthUser(d);

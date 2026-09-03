@@ -417,7 +417,8 @@ function createApiApp() {
       return c.json({ error: e.message, url: null }, 500);
     }
   });
-  app.get("/api/auth/callback", async (c) => {
+  // Handle both /api/auth/callback and /api/auth/callback/google (NextAuth compat)
+  const authCallbackHandler = async (c: any) => {
     const url = new URL(c.req.url);
     const code = c.req.query("code");
     const oauthError = c.req.query("error");
@@ -486,7 +487,9 @@ function createApiApp() {
       console.error("[auth/callback] exchange exception:", e?.message || e);
       return c.json({ error: "OAUTH_EXCHANGE_FAILED", message: e?.message || "Google sign-in could not be completed. Please try again.", details: String(e).slice(0, 500) }, 502);
     }
-  });
+  };
+  app.get("/api/auth/callback", authCallbackHandler);
+  app.get("/api/auth/callback/google", authCallbackHandler);
   app.get("/api/auth/user", (c) => {
     const user = gatedGetUserFromCookie(c);
     if (!user) return c.json({ id: null, channelName: null, channelAvatar: null, isGuest: true });
