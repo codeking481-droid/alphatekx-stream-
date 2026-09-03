@@ -463,17 +463,39 @@ function App() {
   const handleAiSend = async () => {
     const q = aiChatInput.trim();
     if (!q) return;
-    const storedKey = (typeof window !== 'undefined' ? localStorage.getItem('alphatekx_api_key') : null) || byokKey || apiKey || "";
-    if (!storedKey) {
-      setShowPaywall(true);
-      setAiChatMessages(prev => [...prev, { role: "user", text: q }, { role: "ai", text: "🔑 Add your DeepSeek/OpenAI API key (BYOK) or use Alphatekx Credits ₦500 — stored locally, zero cost to us. Paste key above and Save." }]);
-      setAiChatInput("");
-      return;
-    }
     setAiChatMessages(prev => [...prev, { role: "user", text: q }]);
     setAiChatInput("");
     setBuilding(true);
     showToast("🤖 Agent building…");
+    try {
+      const res = await fetch("/api/workspace", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: q, videoId: activeVideo?.youtubeId || activeVideo?.id, title: activeVideo?.title, transcript: activeVideo?.description || "" })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) setShowPaywall(true);
+        throw new Error(data.message || data.error || `AI ${res.status}`);
+      }
+      const content = data.message || JSON.stringify(data.result || {});
+      setAiChatMessages(prev => [...prev, { role: "ai", text: content }]);
+      if (data.result?.code) setCodeValue(data.result.code);
+      setWatchPanelTab("preview");
+      setWatchPanelOpen(true);
+      showToast("🤖 AI workspace ready");
+    } catch (e) {
+      setAiChatMessages(prev => [...prev, { role: "ai", text: `AI request failed: ${e.message}` }]);
+      showToast(e.message || "AI request failed");
+    } finally {
+      setBuilding(false);
+    }
+  };
+  /*
+    Legacy direct-provider implementation removed. AI requests must go through
+    the authenticated, usage-limited Worker endpoint.
+  */
+  /*
     try {
       const isOpenAI = storedKey.startsWith('sk-');
       const url = isOpenAI ? 'https://api.openai.com/v1/chat/completions' : 'https://api.deepseek.com/chat/completions';
@@ -535,7 +557,7 @@ function App() {
     } finally {
       setBuilding(false);
     }
-  };
+  */
   // Also parse any AI messages that arrive via other means
   useEffect(() => {
     const last = aiChatMessages[aiChatMessages.length - 1];
@@ -1751,36 +1773,25 @@ function App() {
     }
   };
 
-  // Build AI Teacher Course — real /api/teacher/build, fallback guarantees no error
+  // Build AI Teacher Course through the authenticated Groq-backed Worker.
   const handleBuildCourse = async () => {
     if (!teacherGoal.trim()) { showToast("Tell AI what you want to learn first"); return; }
     setIsBuildingCourse(true);
     try {
       const res = await fetch("/api/teacher/build", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ goal: teacherGoal }) });
-      if (!res.ok) throw new Error("build failed");
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) setShowPaywall(true);
+        throw new Error(data.message || data.error || "AI Teacher request failed");
+      }
       // normalize to our UI shape
-      const steps = (data.steps || []).map(s=> ({ step: s.step, title: s.title, desc: s.description || s.desc, videoTitle: s.videoTitle || s.title, videoId: s.videoId, completed: false }));
-      setTeacherCourse({ goal: data.goal || teacherGoal, steps: steps.length?steps:[
-          { step: 1, title: "Foundations & Mathematical Intuition", desc: "Master neurons, activations & loss functions.", videoTitle: "Neural Networks Intro", videoId: "dQw4w9WgXcQ", completed: false },
-          { step: 2, title: "PyTorch & CUDA Setup", desc: "Environment configuration & GPU tensor allocation.", videoTitle: "PyTorch CUDA Mastery", videoId: "L_LUpnjgPso", completed: false },
-          { step: 3, title: "Backpropagation Deep Dive", desc: "Deriving gradients step-by-step with calculus.", videoTitle: "Backprop Masterclass", videoId: "M576WGiDBdQ", completed: false },
-          { step: 4, title: "Transformer & Attention Modules", desc: "Self-attention mechanism and token embeddings.", videoTitle: "Transformers Explained", videoId: "fJ9rUzIMcZQ", completed: false },
-          { step: 5, title: "Edge Deployment & Cloudflare Workers", desc: "Deploying model inferencing API endpoints.", videoTitle: "Workers AI Scale", videoId: "3JZ_D3ELwOQ", completed: false }
-        ] });
+      const teacherResult = data.result || data;
+      const steps = (teacherResult.steps || []).map((s, index)=> ({ step: s.step || index + 1, title: s.title, desc: s.description || s.desc, videoTitle: s.videoTitle || s.title, videoId: s.videoId, completed: false }));
+      if (!steps.length) throw new Error("AI Teacher returned no curriculum steps");
+      setTeacherCourse({ goal: teacherResult.goal || data.goal || teacherGoal, steps });
       showToast("5-Step AI Learning Path Generated!");
-    } catch {
-      setTeacherCourse({
-        goal: teacherGoal,
-        steps: [
-          { step: 1, title: "Foundations & Mathematical Intuition", desc: "Master neurons, activations & loss functions.", videoTitle: "Neural Networks Intro", videoId: "dQw4w9WgXcQ", completed: false },
-          { step: 2, title: "PyTorch & CUDA Setup", desc: "Environment configuration & GPU tensor allocation.", videoTitle: "PyTorch CUDA Mastery", videoId: "L_LUpnjgPso", completed: false },
-          { step: 3, title: "Backpropagation Deep Dive", desc: "Deriving gradients step-by-step with calculus.", videoTitle: "Backprop Masterclass", videoId: "M576WGiDBdQ", completed: false },
-          { step: 4, title: "Transformer & Attention Modules", desc: "Self-attention mechanism and token embeddings.", videoTitle: "Transformers Explained", videoId: "fJ9rUzIMcZQ", completed: false },
-          { step: 5, title: "Edge Deployment & Cloudflare Workers", desc: "Deploying model inferencing API endpoints.", videoTitle: "Workers AI Scale", videoId: "3JZ_D3ELwOQ", completed: false }
-        ]
-      });
-      showToast("5-Step AI Learning Path Generated! (offline)");
+    } catch (error) {
+      showToast(error.message || "AI Teacher request failed");
     } finally { setIsBuildingCourse(false); }
   };
 

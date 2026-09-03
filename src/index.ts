@@ -23,6 +23,8 @@ interface Env {
   PAYSTACK_SECRET_KEY?: string;
   PAYSTACK_PLAN_MONTHLY?: string;
   PAYSTACK_PLAN_YEARLY?: string;
+  GROQ_API_KEY?: string;
+  GROQ_MODEL?: string;
 }
 
 function parseIsoDuration(iso?: string): string {
@@ -908,63 +910,120 @@ function createApiApp() {
     return c.json({ lang, bullets, badge: `Naija Translator ON - ${lang}` });
   });
 
+  const proSubscriptions = (globalThis as any).__proSubscriptions || ((globalThis as any).__proSubscriptions = new Map<string, any>());
+
+  // AI features use the authenticated session and the real Groq API. Usage is
+  // intentionally kept in memory here; replace this map with durable storage
+  // when persistent billing storage is available.
+  const aiUsage = (globalThis as any).__aiUsage || ((globalThis as any).__aiUsage = new Map<string, number>());
+  const aiLimits: Record<string, number> = { teacher: 5, jot: 5, workspace: 3 };
+  async function runGroq(c: any, feature: "teacher" | "jot" | "workspace", body: any) {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to use AI features." }, 401);
+
+    const subscription = proSubscriptions.get(user.id);
+    const isPro = Boolean(subscription?.active);
+    const month = new Date().toISOString().slice(0, 7);
+    const usageKey = `${user.id}:${feature}:${month}`;
+    const used = aiUsage.get(usageKey) || 0;
+    const limit = aiLimits[feature];
+    if (!isPro && used >= limit) {
+      return c.json({
+        success: false,
+        error: "USAGE_LIMIT_EXCEEDED",
+        message: `${feature} limit reached (${limit} per month). Upgrade to Pro for unlimited use.`,
+        feature, used, limit, isPro: false, upgradeUrl: "/pricing",
+      }, 403);
+    }
+
+    const messageInput = Array.isArray(body.messages)
+      ? body.messages.filter((m: any) => m?.role === "user").map((m: any) => m.content).join("\n")
+      : "";
+    const input = String(body.prompt || body.message || body.goal || body.text || body.content || messageInput || "").trim();
+    if (!input) return c.json({ success: false, error: "PROMPT_REQUIRED" }, 400);
+    const apiKey = (c.env as Env)?.GROQ_API_KEY;
+    if (!apiKey) return c.json({ success: false, error: "GROQ_NOT_CONFIGURED" }, 503);
+
+    const instructions = feature === "teacher"
+      ? "You are an AI teacher. Return a concise course plan as JSON with goal and steps. Each step must have title, description, and searchQuery."
+      : feature === "jot"
+        ? "You are AI Jot. Turn the user's input into a concise useful note. Return JSON with title, summary, bullets, and actionItems."
+        : "You are an AI workspace assistant. Turn the user's request into a practical workspace plan. Return JSON with title, summary, tasks, and nextSteps.";
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: (c.env as Env)?.GROQ_MODEL || "llama-3.1-8b-instant",
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [{ role: "system", content: instructions }, { role: "user", content: input }],
+      }),
+    });
+    if (!response.ok) {
+      const detail = await response.text();
+      return c.json({ success: false, error: "GROQ_REQUEST_FAILED", detail: detail.slice(0, 500) }, 502);
+    }
+    const data: any = await response.json();
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return c.json({ success: false, error: "GROQ_EMPTY_RESPONSE" }, 502);
+    let result: any;
+    try { result = JSON.parse(content); } catch { result = { text: content }; }
+    aiUsage.set(usageKey, used + 1);
+    return c.json({ success: true, feature, result, message: content, usage: { used: used + 1, limit: isPro ? null : limit, isPro } });
+  }
+
   // AI Teacher Course Builder
   app.post("/api/teacher/build", async (c) => {
-    const { goal } = await c.req.json<{ goal: string }>();
-    const steps = [
-      {
-        step: 1,
-        title: "Foundations & Architecture",
-        description: `Master core concepts of ${goal || "Modern AI Streaming & Neural Systems"}. Understand weights, biases and graph flows.`,
-        searchQuery: `${goal} foundations tutorial`,
-        videoId: "dQw4w9WgXcQ",
-        thumbnail: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=400&q=80",
-        isCompleted: false
-      },
-      {
-        step: 2,
-        title: "Hands-on Code & Setup",
-        description: "Initialize your project repository with React, Tailwind, Cloudflare Workers & PyTorch models.",
-        searchQuery: `${goal} full implementation code`,
-        videoId: "L_LUpnjgPso",
-        thumbnail: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=400&q=80",
-        isCompleted: false
-      },
-      {
-        step: 3,
-        title: "Optimizing Performance & Edge Delivery",
-        description: "Implement zero-latency streaming buffers, WebSockets fan-out, and GPU inference pipelines.",
-        searchQuery: `${goal} performance optimization high throughput`,
-        videoId: "M576WGiDBdQ",
-        thumbnail: "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=400&q=80",
-        isCompleted: false
-      },
-      {
-        step: 4,
-        title: "Integrating AI Superpowers",
-        description: "Connect real-time translation, dynamic timestamp summaries, and similarity search vectors.",
-        searchQuery: `${goal} AI summary and memory search integration`,
-        videoId: "fJ9rUzIMcZQ",
-        thumbnail: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=400&q=80",
-        isCompleted: false
-      },
-      {
-        step: 5,
-        title: "Production Deployment & Monetization",
-        description: "Set up Stripe subscriptions, digital asset store, and scale to 100k active viewers.",
-        searchQuery: `${goal} SaaS production deployment stripe`,
-        videoId: "3JZ_D3ELwOQ",
-        thumbnail: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=400&q=80",
-        isCompleted: false
-      }
-    ];
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    return runGroq(c, "teacher", body);
+  });
+  app.post("/api/teacher", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    return runGroq(c, "teacher", body);
+  });
 
-    return c.json({
-      id: Date.now(),
-      goal,
-      steps,
-      createdAt: Date.now()
-    });
+  app.post("/api/jot", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    return runGroq(c, "jot", body);
+  });
+  app.post("/api/jot/create", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    return runGroq(c, "jot", body);
+  });
+  app.post("/api/workspace", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    return runGroq(c, "workspace", body);
+  });
+  app.post("/api/workspace/generate", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    return runGroq(c, "workspace", body);
+  });
+  app.post("/api/ai", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    const feature = body.workspaceType === "workspace" ? "workspace" : (body.feature === "jot" ? "jot" : "teacher");
+    return runGroq(c, feature, body);
+  });
+  app.post("/api/ai/teacher", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    return runGroq(c, "teacher", body);
+  });
+  app.post("/api/ai/jot", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    return runGroq(c, "jot", body);
+  });
+  app.post("/api/ai/workspace", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    return runGroq(c, "workspace", body);
   });
 
   // Watch History & Vector Search Memory
@@ -1022,12 +1081,17 @@ function createApiApp() {
   });
 
   // Paystack subscriptions
-  const proSubscriptions = (globalThis as any).__proSubscriptions || ((globalThis as any).__proSubscriptions = new Map<string, any>());
   app.get("/api/subscription/status", (c) => {
     const user = gatedGetUserFromCookie(c);
     if (!user) return c.json({ authenticated: false, isPro: false });
     const subscription = proSubscriptions.get(user.id);
-    return c.json({ authenticated: true, isPro: Boolean(subscription?.active), plan: subscription?.plan || null });
+    const isPro = Boolean(subscription?.active);
+    const month = new Date().toISOString().slice(0, 7);
+    const usage = Object.fromEntries(Object.keys(aiLimits).map(feature => [
+      feature,
+      { used: aiUsage.get(`${user.id}:${feature}:${month}`) || 0, limit: isPro ? null : aiLimits[feature] },
+    ]));
+    return c.json({ authenticated: true, isPro, plan: subscription?.plan || null, usage });
   });
   app.post("/api/paystack/initialize", async (c) => {
     const user = gatedGetUserFromCookie(c);
