@@ -304,8 +304,9 @@ function App() {
   const [activeTab, setActiveTab] = useState(() => {
     const path = window.location.pathname.replace(/\/+$/, "") || "/";
     if (path === "/shorts") return "shorts";
+    if (path === "/watch") return "watch";
     if (path === "/home") return "home";
-    return "watch";
+    return "home";
   }); // watch, home, shorts, teacher, memory, chat, community, marketplace, sell, studio, pricing, profile
   const [sidebarOpen, setSidebarOpen] = useState(true); // Desktop sidebar toggle
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false); // Mobile drawer slide-over toggle
