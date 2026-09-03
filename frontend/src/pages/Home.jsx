@@ -1,20 +1,24 @@
 import React, { useEffect, useState } from "react";
-import VideoPlayer from "../components/VideoPlayer.jsx";
+import VideoCard from "../components/VideoCard.jsx";
 import { getChannelInfo } from "../lib/channel.js";
 
 // PROMPT #3: YOUR VIDEO AS DEFAULT — jvXEkm27XOE plays first for every visitor
 export const DEFAULT_VIDEO = {
   id: 'jvXEkm27XOE',
   youtubeId: 'jvXEkm27XOE',
+  videoId: 'jvXEkm27XOE',
   title: 'This AI Avatar BEATS HeyGen 10 TIMES! 🤯 #viral #trending #viralvideo #aivideo',
   channel: 'ALPHATEKX',
   channelName: 'ALPHATEKX',
   channelId: 'RiseWithAlphatekx',
   handle: '@RiseWithAlphatekx',
-  thumbnail: `https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg`,
-  thumbnailUrl: `https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg`,
+  // 4K crisp thumb: maxresdefault (1280x720) with hq720 fallback — no blur
+  thumbnail: `https://i.ytimg.com/vi/jvXEkm27XOE/hqdefault.jpg`,
+  thumbnailUrl: `https://i.ytimg.com/vi/jvXEkm27XOE/hqdefault.jpg`,
   link: 'https://youtu.be/jvXEkm27XOE',
   featured: true,
+  duration: '2:15',
+  views: 'Featured',
 };
 
 export default function Home({ searchResults, searchQuery }) {
@@ -37,14 +41,22 @@ export default function Home({ searchResults, searchQuery }) {
         <a href="/channel" className="ml-auto text-xs font-bold text-black bg-[#FFD700] px-3 py-1.5 rounded-full">Visit Channel</a>
       </div>
       {showDefault && (
-        <div className="glass-card p-3 space-y-3 border-[#FFD700]/30">
+        <div className="space-y-3">
           <span className="bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black text-[10px] font-extrabold px-2.5 py-1 rounded-full">FEATURED • {channel?.snippet?.title || "ALPHATEKX"}</span>
-          <VideoPlayer video={DEFAULT_VIDEO} autoplay />
-          <h3 className="font-bold text-sm">{DEFAULT_VIDEO.title}</h3>
-          <p className="text-xs text-gray-400">{DEFAULT_VIDEO.channelName} • {channel?.handle || "@risewithalphatekx"} • Featured</p>
+          {/* Prompt 1: Home feed = thumbnail only, click opens /watch . No iframe on Home grid. Featured is still clean VideoCard */}
+          <VideoCard video={DEFAULT_VIDEO} />
         </div>
       )}
-      {!showDefault && <div className="grid grid-cols-2 gap-3">{searchResults.map(v => <div key={v.id}>{v.title}</div>)}</div>}
+      {!showDefault && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {searchResults.map((video) => {
+            const vid = video.videoId || video.youtubeId || video.id;
+            return (
+              <VideoCard key={vid} video={video} />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

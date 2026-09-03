@@ -18,15 +18,16 @@ function formatViews(count) {
 }
 export function getMockYouTubeCatalog() {
   return [
-    { youtubeId: "dQw4w9WgXcQ", title: "How to Build Neural Networks from Scratch | Full AI Tutorial 2024", channelName: "CodeCraft Academy", channelId: "UCodeCraft", thumbnailUrl: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg", views: "340K views", viewsRaw: 340000, duration: "22:45", category: "Neural Networks" },
-    { youtubeId: "L_LUpnjgPso", title: "Building Real-time AI Voice Agents with WebSockets & Edge GPUs", channelName: "Edge AI Lab", channelId: "UEdgeAI", thumbnailUrl: "https://i.ytimg.com/vi/L_LUpnjgPso/hqdefault.jpg", views: "185K views", viewsRaw: 185000, duration: "15:10", category: "Cloudflare Workers" },
-    { youtubeId: "M576WGiDBdQ", title: "Cloudflare Workers & SQLite Durable Objects Masterclass", channelName: "Serverless Pro", channelId: "UServerless", thumbnailUrl: "https://i.ytimg.com/vi/M576WGiDBdQ/hqdefault.jpg", views: "92K views", viewsRaw: 92000, duration: "18:30", category: "Cloudflare Workers" },
-    { youtubeId: "fJ9rUzIMcZQ", title: "Sub-100ms LLM Streaming Inference on Edge GPUs", channelName: "AI Hardware Hub", channelId: "UAIHardware", thumbnailUrl: "https://i.ytimg.com/vi/fJ9rUzIMcZQ/hqdefault.jpg", views: "410K views", viewsRaw: 410000, duration: "32:15", category: "AI Superpowers" },
-    { youtubeId: "3JZ_D3ELwOQ", title: "Naija Pidgin AI Voice Synthesizer & Subtitle Engine", channelName: "Naija Tech Hub", channelId: "UNaijaTech", thumbnailUrl: "https://i.ytimg.com/vi/3JZ_D3ELwOQ/hqdefault.jpg", views: "512K views", viewsRaw: 512000, duration: "12:04", category: "Naija Dialects" },
+    { youtubeId: "dQw4w9WgXcQ", title: "How to Build Neural Networks from Scratch | Full AI Tutorial 2024", channelName: "CodeCraft Academy", channelId: "UCodeCraft", thumbnailUrl: "https://i.ytimg.com/vi/dQw4w9WgXcQ/maxresdefault.jpg", views: "340K views", viewsRaw: 340000, duration: "22:45", category: "Neural Networks" },
+    { youtubeId: "L_LUpnjgPso", title: "Building Real-time AI Voice Agents with WebSockets & Edge GPUs", channelName: "Edge AI Lab", channelId: "UEdgeAI", thumbnailUrl: "https://i.ytimg.com/vi/L_LUpnjgPso/maxresdefault.jpg", views: "185K views", viewsRaw: 185000, duration: "15:10", category: "Cloudflare Workers" },
+    { youtubeId: "M576WGiDBdQ", title: "Cloudflare Workers & SQLite Durable Objects Masterclass", channelName: "Serverless Pro", channelId: "UServerless", thumbnailUrl: "https://i.ytimg.com/vi/M576WGiDBdQ/maxresdefault.jpg", views: "92K views", viewsRaw: 92000, duration: "18:30", category: "Cloudflare Workers" },
+    { youtubeId: "fJ9rUzIMcZQ", title: "Sub-100ms LLM Streaming Inference on Edge GPUs", channelName: "AI Hardware Hub", channelId: "UAIHardware", thumbnailUrl: "https://i.ytimg.com/vi/fJ9rUzIMcZQ/maxresdefault.jpg", views: "410K views", viewsRaw: 410000, duration: "32:15", category: "AI Superpowers" },
+    { youtubeId: "3JZ_D3ELwOQ", title: "Naija Pidgin AI Voice Synthesizer & Subtitle Engine", channelName: "Naija Tech Hub", channelId: "UNaijaTech", thumbnailUrl: "https://i.ytimg.com/vi/3JZ_D3ELwOQ/maxresdefault.jpg", views: "512K views", viewsRaw: 512000, duration: "12:04", category: "Naija Dialects" },
   ];
 }
 function toUnified(v) {
-  return { source: "youtube", platform: "youtube", id: v.youtubeId, youtubeId: v.youtubeId, platformId: v.youtubeId, title: v.title, thumbnail: v.thumbnailUrl, thumbnailUrl: v.thumbnailUrl, channel: { name: v.channelName, id: v.channelId || v.channelName }, channelName: v.channelName, channelId: v.channelId || v.channelName, views: v.viewsRaw ?? v.views, viewsRaw: v.viewsRaw, viewsFormatted: v.views, duration: v.duration, category: v.category || "Tech", platformMeta: { label: "YouTube", badge: "YT", color: "#FF0000", bg: "rgba(255,0,0,0.9)" } };
+  const thumb = v.thumbnailUrl || (v.youtubeId ? `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg` : "");
+  return { source: "youtube", platform: "youtube", id: v.youtubeId, videoId: v.youtubeId, youtubeId: v.youtubeId, platformId: v.youtubeId, title: v.title, thumbnail: thumb, thumbnailUrl: thumb, channel: { name: v.channelName, id: v.channelId || v.channelName }, channelName: v.channelName, channelId: v.channelId || v.channelName, views: v.viewsRaw ?? v.views, viewsRaw: v.viewsRaw, viewsFormatted: v.views, duration: v.duration, category: v.category || "Tech", platformMeta: { label: "YouTube", badge: "YT", color: "#FF0000", bg: "rgba(255,0,0,0.9)" } };
 }
 const searchCache = new Map();
 const CACHE_TTL = 5 * 60 * 1000;
@@ -42,7 +43,7 @@ async function fetchPipedSearch(query) {
       const url = it.url || it.id || "";
       const vid = url.match(/v=([^&]+)/)?.[1] || it.id || `piped_${Math.random().toString(36).slice(2,8)}`;
       const viewsRaw = typeof it.views === "number" ? it.views : parseInt(String(it.views).replace(/[^0-9]/g, "")) || 100000;
-      return toUnified({ youtubeId: vid, title: it.title || it.name || "YouTube Video", channelName: it.uploaderName || it.uploader || "YouTube Creator", channelId: it.uploaderUrl || it.uploaderName || "unknown", thumbnailUrl: it.thumbnail ? (it.thumbnail.startsWith("http") ? it.thumbnail : `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`) : `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`, views: formatViews(String(viewsRaw)), viewsRaw, duration: it.duration ? String(it.duration) : "5:00", category: "Tech" });
+      return toUnified({ youtubeId: vid, title: it.title || it.name || "YouTube Video", channelName: it.uploaderName || it.uploader || "YouTube Creator", channelId: it.uploaderUrl || it.uploaderName || "unknown", thumbnailUrl: it.thumbnail ? (it.thumbnail.startsWith("http") ? it.thumbnail : `https://i.ytimg.com/vi/${vid}/maxresdefault.jpg`) : `https://i.ytimg.com/vi/${vid}/maxresdefault.jpg`, views: formatViews(String(viewsRaw)), viewsRaw, duration: it.duration ? String(it.duration) : "5:00", category: "Tech" });
     });
     if (videos.length === 0) throw new Error("Piped no videos");
     return videos;
@@ -75,7 +76,7 @@ async function fetchScrapeSearch(query) {
         const channelMatch = snippet.match(/"ownerText":\{"runs":\[\{"text":"([^"]+)"\}\]\}/);
         if (channelMatch) channelName = channelMatch[1].replace(/\\u0026/g, "&");
       }
-      return toUnified({ youtubeId: id, title: title.slice(0, 80), channelName, channelId: channelName, thumbnailUrl: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`, views: "100K views", duration: "5:00", category: "Tech" });
+      return toUnified({ youtubeId: id, title: title.slice(0, 80), channelName, channelId: channelName, thumbnailUrl: `https://i.ytimg.com/vi/${id}/maxresdefault.jpg`, views: "100K views", duration: "5:00", category: "Tech" });
     }));
     return videos;
   } catch (e) { console.warn("[youtube] Scrape fallback failed", e); throw e; }
@@ -116,7 +117,7 @@ export async function searchYouTube(query, apiKey) {
     const videos = items.map(item => {
       const vid = item.id?.videoId || "";
       const det = detailsMap[vid] || {};
-      return toUnified({ youtubeId: vid, title: item.snippet?.title || "YouTube Video", channelName: item.snippet?.channelTitle || "YouTube Creator", channelId: item.snippet?.channelId || item.snippet?.channelTitle, thumbnailUrl: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`, views: det.views || "100K views", viewsRaw: det.viewsRaw, duration: det.duration || "5:00", category: "Tech" });
+      return toUnified({ youtubeId: vid, title: item.snippet?.title || "YouTube Video", channelName: item.snippet?.channelTitle || "YouTube Creator", channelId: item.snippet?.channelId || item.snippet?.channelTitle, thumbnailUrl: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || `https://i.ytimg.com/vi/${vid}/maxresdefault.jpg`, views: det.views || "100K views", viewsRaw: det.viewsRaw, duration: det.duration || "5:00", category: "Tech" });
     });
     searchCache.set(cacheKey, { videos, ts: Date.now() });
     return { videos, isMock: false };

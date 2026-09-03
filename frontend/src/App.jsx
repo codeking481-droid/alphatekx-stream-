@@ -23,30 +23,65 @@ function Header({ user, isGuest }) {
 
 function HomeFeed({ user, isGuest }) {
   const feed = user ? user.feed || [] : [];
+  // Prompt 1: Home feed = clean YouTube-like cards, NO iframe, NO play icon, NO logo on thumbnail
+  // thumbnail always from videoId: https://i.ytimg.com/vi/${videoId}/hqdefault.jpg, key={videoId}, click -> /watch?v=
+  const handleCardClick = (vid) => {
+    window.location.href = `/watch?v=${vid}`;
+  };
   return (
     <main className="p-6 max-w-6xl mx-auto">
       <h1 className="text-4xl font-black mb-6">{isGuest ? 'Browse Alphatekx Stream' : 'Your Personalized Feed'}</h1>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
         {feed.length === 0 && isGuest && (
           <div className="md:col-span-3 text-center text-gray-400">Explore videos while browsing as a guest.</div>
         )}
-        {feed.map(v => {
-          const vid = v.videoId || v.id || 'jvXEkm27XOE';
+        {feed.map((v) => {
+          const vid = v.videoId || v.youtubeId || v.id || 'jvXEkm27XOE';
+          const thumb = v.thumbnail || v.thumbnailUrl || `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`;
+          const thumbUrl = thumb.includes('i.ytimg.com/vi/') ? thumb : `https://i.ytimg.com/vi/${vid}/hqdefault.jpg`;
+          const duration = v.duration || '';
           return (
-            <a key={v.videoId || v.id} href={`/workspace/${vid}`} className="block bg-[#1a0b2e] rounded-2xl overflow-hidden shadow-xl border border-white/5 hover:border-[#FFD700]/30 transition">
-            <img src={v.thumbnail} alt="thumb" className="w-full h-48 object-cover" />
-            <div className="p-4">
-              <h3 className="font-bold text-lg mb-1">{v.title}</h3>
-              <p className="text-xs text-gray-400">{v.publishedAt}</p>
-              {isGuest ? (
-                <GuestOverlay message="Sign in to like & comment">
-                  <button className="mt-3 w-full py-2 bg-white/10 rounded-lg text-sm">Like</button>
-                </GuestOverlay>
-              ) : (
-                <button className="mt-3 w-full py-2 bg-[#FFD700] text-black font-bold rounded-lg text-sm hover:scale-[1.02] transition">Like</button>
-              )}
+            <div
+              key={vid}
+              onClick={() => handleCardClick(vid)}
+              className="cursor-pointer w-full group"
+            >
+              {/* Thumbnail - clean, no iframe, no play icon, no YouTube logo, no title overlay — only duration */}
+              <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden">
+                <img
+                  src={thumbUrl}
+                  alt={v.title || 'video'}
+                  className="w-full h-full object-cover group-hover:opacity-95 transition"
+                  loading="lazy"
+                  onError={(e)=>{ e.currentTarget.src=`https://i.ytimg.com/vi/${vid}/hqdefault.jpg`; }}
+                />
+                {duration && (
+                  <span className="absolute bottom-1 right-1 bg-black/80 text-white text-[11px] px-1 py-0.5 rounded font-medium">
+                    {duration}
+                  </span>
+                )}
+              </div>
+              {/* Title + meta BELOW thumbnail */}
+              <div className="pt-2 px-1">
+                <h3 className="text-white text-[13px] font-medium leading-5 line-clamp-2 group-hover:text-[#FFD700] transition-colors">
+                  {v.title}
+                </h3>
+                <p className="text-zinc-400 text-xs mt-1 truncate">
+                  {v.channelName || v.channel || ''}{v.publishedAt ? ` • ${new Date(v.publishedAt).toLocaleDateString()}` : ''}{v.views ? ` • ${v.views}` : ''}
+                </p>
+                {/* Like button below meta — not on thumbnail. Stop propagation so card click still goes to watch */}
+                <div onClick={(e)=>e.stopPropagation()}>
+                  {isGuest ? (
+                    <GuestOverlay message="Sign in to like & comment">
+                      <button className="mt-2 w-full py-2 bg-white/10 rounded-lg text-sm">Like</button>
+                    </GuestOverlay>
+                  ) : (
+                    <button className="mt-2 w-full py-2 bg-[#FFD700] text-black font-bold rounded-lg text-sm hover:scale-[1.02] transition">Like</button>
+                  )}
+                </div>
+              </div>
             </div>
-            </a>
+          );
         })}
       </div>
     </main>
@@ -63,13 +98,18 @@ export default function App() {
   const isGuest = !user;
 
   useEffect(() => {
+    // Prompt 1: clear stale thumbnail caches that cause mix
+    try { localStorage.removeItem('thumbnails'); localStorage.removeItem('thumbnail_cache'); sessionStorage.removeItem('thumbnails'); } catch {}
     getUser().then(setUser).finally(() => setLoading(false));
   }, []);
 
   if (loading) return <div className="min-h-screen bg-[#0B0215] flex items-center justify-center text-white text-xl">Loading...</div>;
 
-  const isWorkspace = window.location.pathname.startsWith('/workspace/');
-  if (isWorkspace) return <WorkspacePage />;
+  const pathname = window.location.pathname;
+  const search = window.location.search || "";
+  const isWatch = pathname.startsWith('/watch') && new URLSearchParams(search).get('v');
+  const isWorkspace = pathname.startsWith('/workspace/');
+  if (isWatch || isWorkspace) return <WorkspacePage />;
 
   return (
     <div className="min-h-screen bg-[#0B0215] text-white">

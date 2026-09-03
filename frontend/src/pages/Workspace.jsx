@@ -1,5 +1,49 @@
 import { useState } from 'react';
 
+function WorkspaceAIChat(){
+  const params=new URLSearchParams(window.location.search);
+  const buildFrom=params.get('buildFrom')||params.get('text');
+  const initMsg=buildFrom ? `Build this from Jot: ${decodeURIComponent(buildFrom).slice(0,500)}` : 'Alphatekx AI Workspace 120B ready. Describe what you want to build.';
+  const [msgs, setMsgs]=useState([{role:'ai', content:initMsg}]);
+  const [input, setInput]=useState(buildFrom ? decodeURIComponent(buildFrom).slice(0,200) : '');
+  const [loading, setLoading]=useState(false);
+  const send=async(qOverride)=>{
+    const q=(qOverride||input).trim(); if(!q) return;
+    setMsgs(m=>[...m, {role:'user', content:q}]);
+    setInput(''); setLoading(true);
+    try{
+      const userKey=localStorage.getItem('user_groq_key')||localStorage.getItem('byok_groq_key')||"";
+      const headers={'Content-Type':'application/json'}; if(userKey) headers['x-user-groq-key']=userKey;
+      const res=await fetch('/api/ai', {method:'POST', headers, body:JSON.stringify({messages:[{role:'user', content:q}], workspaceType:'workspace'})});
+      const data=await res.json();
+      if(!data.success) throw new Error(data.error);
+      setMsgs(m=>[...m, {role:'ai', content:data.message}]);
+      // If response contains code, try to extract and preview
+      const m=data.message.match(/<create_file[^>]*>([\s\S]*?)<\/create_file>/);
+      if(m){
+        const code=m[1].trim();
+        // Dispatch to parent WorkspacePage's code state via custom event
+        window.dispatchEvent(new CustomEvent('workspace-code', {detail: code}));
+      }
+    }catch(e){ setMsgs(m=>[...m, {role:'ai', content:'Error: '+e.message}]); }
+    finally{ setLoading(false); }
+  };
+  // Auto-build if buildFrom
+  React.useEffect(()=>{ if(buildFrom) setTimeout(()=>send(decodeURIComponent(buildFrom)), 500); }, []);
+  return (
+    <div className="w-full flex-1 min-h-[50vh] flex flex-col p-3 gap-3">
+      <div className="flex-1 overflow-auto space-y-2">
+        {msgs.map((m,i)=>(<div key={i} className={`p-3 rounded-xl text-sm ${m.role==='user'?'bg-[#FFD700] text-black ml-auto max-w-[80%]':'bg-white/5 text-gray-200 border border-white/10'}`}>{m.content}</div>))}
+        {loading && <div className="text-xs text-[#FFD700] animate-pulse">120B thinking...</div>}
+      </div>
+      <div className="flex gap-2">
+        <input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>e.key==='Enter'&&send()} placeholder="Ask 120B to build..." className="flex-1 bg-black border border-white/10 rounded-xl px-3 py-2.5 text-sm text-white" />
+        <button onClick={send} className="px-4 py-2.5 bg-[#FFD700] text-black font-bold text-sm rounded-xl">Send</button>
+      </div>
+      <div className="text-[10px] text-gray-500">Model: openai/gpt-oss-120b via GROQ • Workspace</div>
+    </div>
+  );
+}
 function safeDecode(str) {
   if (!str || !str.includes('&')) return str;
   // only decode if entities present — preserves raw <tags>
@@ -16,8 +60,10 @@ function safeDecode(str) {
 
 export default function WorkspacePage() {
   const path = window.location.pathname;
+  const searchParams = new URLSearchParams(window.location.search);
+  const watchId = searchParams.get('v');
   const match = path.match(/\/workspace\/([^/]+)/);
-  const videoId = match ? match[1] : 'jvXEkm27XOE';
+  const videoId = watchId || (match ? match[1] : 'jvXEkm27XOE');
 
   const [code, setCode] = useState('');
   const [tab, setTab] = useState('Code');
@@ -38,6 +84,11 @@ export default function WorkspacePage() {
     });
   };
 
+  React.useEffect(()=>{
+    const h=(e)=>{ if(e.detail) { setCode(e.detail); setTab('Preview'); } };
+    window.addEventListener('workspace-code', h);
+    return ()=>window.removeEventListener('workspace-code', h);
+  }, []);
   const decodedCode = safeDecode(code);
   const trimmed = decodedCode.trim();
   const isFullDoc = trimmed.toLowerCase().startsWith('<!doctype') || trimmed.toLowerCase().startsWith('<html');
@@ -52,17 +103,24 @@ export default function WorkspacePage() {
         <a href="/" className="inline-flex items-center gap-2 text-sm text-white/60 hover:text-[#FFD700] mb-4">← Back</a>
 
         <div className="grid grid-cols-1 lg:grid-cols-[52%_48%] gap-6">
-          {/* Left: Video sticky on desktop, top on mobile 16:9 */}
+          {/* Left: Video — strict 16:9, 4K crisp, mobile full-bleed comfortable */}
           <div className="lg:sticky lg:top-6 lg:self-start">
-            <div className="w-full aspect-video bg-black rounded-2xl overflow-hidden border border-white/10">
+            <div
+              className="w-full bg-black overflow-hidden border border-white/10 sm:rounded-2xl rounded-none"
+              style={{ aspectRatio: "16 / 9", position: "relative", background: "#000" }}
+            >
               <iframe
-                className="w-full h-full"
-                src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1&playsinline=1`}
+                className="absolute inset-0 w-full h-full border-0 block"
+                style={{ position: "absolute", inset: 0, width: "100%", height: "100%", border: 0, display: "block" }}
+                src={`https://www.youtube.com/embed/${videoId}?enablejsapi=1&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&fs=1&controls=1&vq=hd2160&hd=1&origin=${encodeURIComponent(typeof window !== "undefined" ? window.location.origin : "https://alphatekx.stream")}`}
                 title="Workspace Video"
                 frameBorder="0"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
                 allowFullScreen
+                loading="eager"
+                referrerPolicy="strict-origin-when-cross-origin"
               />
+              <span className="pointer-events-none absolute top-2 left-2 bg-[#0B0215]/70 backdrop-blur text-[#FFD700] text-[10px] font-bold px-2 py-1 rounded-full border border-[#FFD700]/20">AlphaTekx • 4K</span>
             </div>
           </div>
 
@@ -108,10 +166,7 @@ export default function WorkspacePage() {
               )}
 
               {tab === 'AI' && (
-                <div className="w-full flex-1 min-h-[50vh] p-4 text-sm text-gray-300 space-y-3">
-                  <div className="bg-white/5 rounded-xl p-3 border border-white/10">AI Agent ready. Describe what you want to build.</div>
-                  <div className="bg-[#FFD700]/10 rounded-xl p-3 border border-[#FFD700]/20 text-[#FFD700]">Tip: Paste full HTML with &lt;style&gt; and &lt;script&gt; — it will render live in Preview.</div>
-                </div>
+                <WorkspaceAIChat />
               )}
 
               {tab === 'Terminal' && (
