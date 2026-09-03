@@ -2244,7 +2244,7 @@ function App() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4 px-4 sm:px-0">
                     <div className="flex items-center gap-3">
                       <img src={activeVideo.avatar || channelData?.avatar || `https://img.youtube.com/vi/${activeVideo.id||activeVideo.youtubeId}/hqdefault.jpg`} alt="avatar" className="w-10 h-10 rounded-full object-cover border border-white/10" />
-                      <div><p className="text-sm font-bold text-white">{activeVideo.channel || activeVideo.channelName} • {channelData?.subscribers || activeVideo.subscribers || ""} subscribers</p><p className="text-xs text-gray-400">{activeVideo.views} • {activeVideo.timeAgo} • {activeVideo.description ? activeVideo.description.slice(0,110) : ""}</p></div>
+                      <div><p className="text-sm font-bold text-white">{typeof activeVideo.channel === "string" ? activeVideo.channel : (activeVideo.channelName || "")} • {channelData?.subscribers || activeVideo.subscribers || ""} subscribers</p><p className="text-xs text-gray-400">{activeVideo.views} • {activeVideo.timeAgo} • {activeVideo.description ? activeVideo.description.slice(0,110) : ""}</p></div>
                       <button onClick={()=>setIsSubscribed(!isSubscribed)} className={`ml-3 px-5 py-2 rounded-full font-bold text-xs ${isSubscribed?"bg-white/10 text-white":"bg-white text-black"}`}>{isSubscribed?"Subscribed ✓":"Subscribe"}</button>
                     </div>
                     <div className="flex gap-2"><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Like {likeCount ? likeCount.toLocaleString() : (activeVideo.likes || "0")}</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Save</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Share</button></div>
@@ -2256,7 +2256,7 @@ function App() {
                     {videoCatalog.filter(v=> (v.youtubeId||v.id) !== (activeVideo.youtubeId||activeVideo.id)).slice(0,4).map((vid, idx)=>(
                       <div key={idx} onClick={()=>{ setActiveVideo(vid); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} className="flex gap-3 cursor-pointer group">
                         <div className="relative w-36 h-20 rounded-xl overflow-hidden bg-[#1a1a2e] flex-shrink-0"><img src={vid.img || vid.thumbnailUrl} alt={vid.title} className="w-full h-full object-cover" /><span className="absolute bottom-1 right-1 bg-black/80 text-[10px] px-1 rounded text-white">{vid.duration || ""}</span></div>
-                        <div className="flex-1 py-1"><h4 className="text-sm font-bold text-white line-clamp-2 group-hover:text-[#FFD700]">{vid.title}</h4><p className="text-xs text-gray-400 mt-1">{vid.views || ""} • {vid.timeAgo || ""}</p><p className="text-[11px] text-gray-500 truncate">{vid.channel || vid.channelName}</p></div>
+                        <div className="flex-1 py-1"><h4 className="text-sm font-bold text-white line-clamp-2 group-hover:text-[#FFD700]">{vid.title}</h4><p className="text-xs text-gray-400 mt-1">{vid.views || ""} • {vid.timeAgo || ""}</p><p className="text-[11px] text-gray-500 truncate">{typeof vid.channel === "string" ? vid.channel : (vid.channelName || "")}</p></div>
                       </div>
                     ))}
                   </div>
@@ -2285,7 +2285,7 @@ function App() {
                   </div>
                   <div className="px-4 sm:px-0">
                     <h1 className="text-lg sm:text-xl font-extrabold text-white leading-tight">{activeVideo.title}</h1>
-                    <p className="text-xs text-gray-400 mt-1">{activeVideo.channel || activeVideo.channelName} • {activeVideo.views} • {activeVideo.timeAgo}</p>
+                    <p className="text-xs text-gray-400 mt-1">{typeof activeVideo.channel === "string" ? activeVideo.channel : (activeVideo.channelName || "")} • {activeVideo.views} • {activeVideo.timeAgo}</p>
                   </div>
                 </div>
                 {/* Code panel — responsive */}
