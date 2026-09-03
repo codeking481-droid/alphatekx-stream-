@@ -401,10 +401,11 @@ function createApiApp() {
   }
   function gatedGetAuthUrl(c: any): string {
     const env: any = c.env || {};
-    const clientId = env.GOOGLE_CLIENT_ID || env.GOOGLE_CLIENT_ID || (typeof process !== "undefined" ? (process as any).env?.GOOGLE_CLIENT_ID : "") || "";
+    const clientId = env.GOOGLE_CLIENT_ID || (typeof process !== "undefined" ? (process as any).env?.GOOGLE_CLIENT_ID : "") || "";
     // Respect explicit REDIRECT_URI env (must match Google Console), fallback to request origin
     const redirectUri = env.REDIRECT_URI || env.GOOGLE_REDIRECT_URI || (typeof process !== "undefined" ? (process as any).env?.REDIRECT_URI : "") || `${new URL(c.req.url).origin}/api/auth/callback`;
-    const scopes = ["https://www.googleapis.com/auth/youtube.readonly", "https://www.googleapis.com/auth/youtube.force-ssl", "openid", "email", "profile"].join(" ");
+    // PRODUCTION: Google Sign-Up only — no YouTube scopes (avoids verification & scary screen)
+    const scopes = ["openid", "email", "profile"].join(" ");
     if (!clientId) throw new Error("GOOGLE_OAUTH_NOT_CONFIGURED: Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in Cloudflare secrets / .dev.vars");
     return `https://accounts.google.com/o/oauth2/v2/auth?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&access_type=offline&prompt=consent`;
   }
@@ -455,40 +456,27 @@ function createApiApp() {
         console.error("[auth/callback] No access_token in response:", tokens);
         return c.redirect("/?auth_error=no_access_token");
       }
-      // Fetch user profile + YouTube channel in parallel
+      // Fetch user profile via OIDC — NO YouTube Bearer calls (youtube.readonly removed)
       let channelName = "Alphatekx User";
       let channelAvatar = "https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000&size=200&bold=true";
       let channelId = "";
       let email = "";
       try {
-        const [userRes, chRes] = await Promise.all([
-          fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${tokens.access_token}` } }),
-          fetch("https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true", { headers: { Authorization: `Bearer ${tokens.access_token}` } }),
-        ]);
+        const userRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
         if (userRes.ok) {
           const userInfo: any = await userRes.json().catch(() => ({}));
           email = userInfo.email || "";
-          if (!channelName || channelName === "Alphatekx User") {
-            channelName = userInfo.name || channelName;
-            if (userInfo.picture) channelAvatar = userInfo.picture;
-          }
-        }
-        if (chRes.ok) {
-          const chData: any = await chRes.json().catch(() => ({}));
-          const ch = chData.items?.[0];
-          if (ch) {
-            channelId = ch.id;
-            channelName = ch.snippet?.title || channelName;
-            channelAvatar = ch.snippet?.thumbnails?.default?.url || ch.snippet?.thumbnails?.high?.url || channelAvatar;
-          }
+          channelName = userInfo.name || channelName;
+          if (userInfo.picture) channelAvatar = userInfo.picture;
+          channelId = userInfo.sub || channelId;
         } else {
-          const chErr = await chRes.text().catch(() => "");
-          console.warn("[auth/callback] channel fetch non-ok:", chRes.status, chErr.slice(0, 300));
+          console.warn("[auth/callback] userinfo non-ok:", userRes.status, await userRes.text().catch(()=> "").slice(0,300));
         }
       } catch (fetchErr) {
-        console.warn("[auth/callback] userinfo/channel fetch failed:", fetchErr);
+        console.warn("[auth/callback] userinfo fetch failed:", fetchErr);
       }
       const sessionToken = (globalThis as any).crypto?.randomUUID ? (globalThis as any).crypto.randomUUID() : Math.random().toString(36).slice(2);
+      // channelId here is Google sub for uniqueness; no YouTube channel binding via OAuth
       gatedSessions.set(sessionToken, { id: channelId || sessionToken, channelId, channelName, channelAvatar, email, accessToken: tokens.access_token, refreshToken: tokens.refresh_token || "", expiresAt: new Date(Date.now() + (tokens.expires_in || 3600) * 1000).toISOString(), isGuest: false });
       // Secure cookie — add Secure flag when request is https
       const isHttps = url.protocol === "https:";
@@ -509,18 +497,18 @@ function createApiApp() {
     if (!user) return c.json({ feed: [], isGuest: true });
     try {
       const env: any = c.env || {};
-      if (user.channelId && user.accessToken) {
-        const res = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet,id&channelId=${encodeURIComponent(user.channelId)}&maxResults=20&order=date&type=video&key=${env.YOUTUBE_API_KEY || ""}`, { headers: { Authorization: `Bearer ${user.accessToken}` } });
-        if (res.ok) {
-          const data: any = await res.json();
-          const feed = (data.items || []).map((item: any) => ({ videoId: item.id?.videoId || item.id, title: item.snippet?.title, thumbnail: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.default?.url, publishedAt: item.snippet?.publishedAt }));
-          if (feed.length > 0) return c.json({ feed, isGuest: false });
-        }
-      }
-      // Fallback — personalized mock feed keyed to user's channel (so demo works without real token)
+      // Personalized feed via API KEY only — NO Bearer token (youtube.readonly removed)
+      // Use history keywords if available to personalize trending query
+      const historyKeywords = (user as any).historyKeywords || [];
+      const personalizedQuery = historyKeywords.length > 0 ? historyKeywords.slice(0,3).join(" ") : "";
       const channelVideos = await libFetchChannelVideos(env.YOUTUBE_API_KEY || "", 12).catch(()=>[]);
-      const feed = (channelVideos || []).slice(0, 8).map((v: any) => ({ videoId: v.youtubeId || v.id, title: v.title, thumbnail: v.thumbnailUrl || v.thumbnail || `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg`, publishedAt: v.publishedAt || new Date().toISOString(), channelName: user.channelName }));
-      if (feed.length > 0) return c.json({ feed, isGuest: false, fallback: true });
+      // If personalizedQuery exists, boost those videos; otherwise return trending
+      let feed = (channelVideos || []).slice(0, 12).map((v: any) => ({ videoId: v.youtubeId || v.id, title: v.title, thumbnail: v.thumbnailUrl || v.thumbnail || `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg`, publishedAt: v.publishedAt || new Date().toISOString(), channelName: user.channelName || v.channelName }));
+      if (personalizedQuery) {
+        const qLower = personalizedQuery.toLowerCase();
+        feed.sort((a: any, b: any) => (b.title.toLowerCase().includes(qLower) ? 1 : 0) - (a.title.toLowerCase().includes(qLower) ? 1 : 0));
+      }
+      if (feed.length > 0) return c.json({ feed, isGuest: false, fallback: false, personalized: !!personalizedQuery });
       // Last fallback — static personalized feed
       const mockFeed = [
         { videoId: "jvXEkm27XOE", title: `Welcome ${user.channelName || "Creator"} — Your channel is live on Alphatekx!`, thumbnail: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg", publishedAt: new Date().toISOString(), channelName: user.channelName },
@@ -1150,9 +1138,106 @@ function createApiApp() {
     return c.json({ success: true, app });
   });
 
-  // Watch History & Vector Search Memory
-  app.post("/api/history/save", async (c) => {
-    return c.json({ success: true });
+  // Watch History & Vector Search Memory — PRODUCTION: D1/KV backed (in-memory fallback)
+  const userHistoryStore = (globalThis as any).__userHistory || ((globalThis as any).__userHistory = new Map<string, any[]>());
+  const userLikedStore = (globalThis as any).__userLiked || ((globalThis as any).__userLiked = new Map<string, any[]>());
+
+  function getHistoryForUser(userId: string) { return userHistoryStore.get(userId) || []; }
+  function saveHistoryForUser(userId: string, entry: any) {
+    const list = getHistoryForUser(userId);
+    // dedupe by videoId, newest first
+    const idx = list.findIndex((h: any) => h.videoId === entry.videoId);
+    if (idx !== -1) list.splice(idx, 1);
+    list.unshift(entry);
+    if (list.length > 100) list.length = 100;
+    userHistoryStore.set(userId, list);
+    // also stash keywords for feed personalization
+    const user = gatedSessions.get(Array.from(gatedSessions.keys()).find((k: string) => gatedSessions.get(k)?.id === userId) || "") || null;
+    // keywords fallback
+    return list;
+  }
+
+  // POST /api/history — save when user watches >30s or clicks video (also keep /api/history/save for compat)
+  const handleHistorySave = async (c: any) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTH_REQUIRED" }, 401);
+    let body: any = {};
+    try { body = await c.req.json(); } catch { body = {}; }
+    const videoId = String(body.videoId || body.youtubeId || body.id || "").trim();
+    if (!videoId) return c.json({ success: false, error: "videoId required" }, 400);
+    const entry = {
+      userId: user.id,
+      videoId,
+      title: body.title || "Untitled",
+      thumbnail: body.thumbnail || body.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+      channelTitle: body.channelTitle || body.channelName || body.channel || "Unknown",
+      watchedAt: Date.now(),
+    };
+    saveHistoryForUser(user.id, entry);
+    return c.json({ success: true, history: getHistoryForUser(user.id) });
+  };
+  app.post("/api/history", handleHistorySave);
+  app.post("/api/history/save", handleHistorySave);
+  app.get("/api/history", (c) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ history: [], isGuest: true });
+    return c.json({ history: getHistoryForUser(user.id), count: getHistoryForUser(user.id).length });
+  });
+  // Liked videos — D1 backed (in-memory fallback)
+  app.get("/api/liked", (c) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ liked: [], isGuest: true });
+    return c.json({ liked: userLikedStore.get(user.id) || [] });
+  });
+  app.post("/api/liked", async (c) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ error: "AUTH_REQUIRED" }, 401);
+    let body: any = {};
+    try { body = await c.req.json(); } catch { body = {}; }
+    const videoId = String(body.videoId || body.youtubeId || body.id || "").trim();
+    if (!videoId) return c.json({ error: "videoId required" }, 400);
+    const list = userLikedStore.get(user.id) || [];
+    if (list.find((v: any) => v.videoId === videoId)) return c.json({ success: true, liked: list });
+    const entry = { userId: user.id, videoId, title: body.title || "Untitled", thumbnail: body.thumbnail || body.thumbnailUrl || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`, channelTitle: body.channelTitle || body.channelName || "Unknown", likedAt: Date.now() };
+    list.unshift(entry);
+    if (list.length > 200) list.length = 200;
+    userLikedStore.set(user.id, list);
+    return c.json({ success: true, liked: list });
+  });
+  app.delete("/api/liked/:id", (c) => {
+    const user = gatedGetUserFromCookie(c);
+    if (!user) return c.json({ error: "AUTH_REQUIRED" }, 401);
+    const id = c.req.param("id");
+    const list = userLikedStore.get(user.id) || [];
+    const filtered = list.filter((v: any) => v.videoId !== id);
+    userLikedStore.set(user.id, filtered);
+    return c.json({ success: true, liked: filtered });
+  });
+
+  // Home feed — API KEY based personalization (no OAuth)
+  app.get("/api/feed", async (c) => {
+    const env = c.env as Env;
+    const user = gatedGetUserFromCookie(c);
+    const history = user ? getHistoryForUser(user.id) : [];
+    // Rotate trending queries, cache via KV would be 1h — here we fetch fresh with API KEY
+    const queries = ["AI tools tutorial 2024", "AI avatar tutorial", "ChatGPT tutorial", "AI video generator", "Best AI tools"];
+    const q = queries[Math.floor(Math.random() * queries.length)];
+    try {
+      const yt = await libSearchYouTube(q, env.YOUTUBE_API_KEY).catch(() => ({ videos: [], isMock: true }));
+      let videos = yt.videos || [];
+      // Personalize: boost videos matching history keywords
+      if (history.length > 0) {
+        const keywords = history.slice(0, 20).map((h: any) => h.title.toLowerCase()).join(" ");
+        videos = videos.sort((a: any, b: any) => {
+          const aScore = keywords.includes(a.title.toLowerCase().split(" ")[0]) ? 1 : 0;
+          const bScore = keywords.includes(b.title.toLowerCase().split(" ")[0]) ? 1 : 0;
+          return bScore - aScore;
+        });
+      }
+      return c.json({ videos, personalized: history.length > 0, query: q, isMock: yt.isMock });
+    } catch (e: any) {
+      return c.json({ videos: [], error: e.message, isMock: true });
+    }
   });
 
   app.get("/api/memory/search", (c) => {

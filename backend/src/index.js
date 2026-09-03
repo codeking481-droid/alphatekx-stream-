@@ -100,18 +100,14 @@ export function createApiApp(env = {}) {
     const user = getUserFromCookie(c);
     if (!user) return c.json({ feed: [], isGuest: true });
     try {
-      if (user.channelId && user.accessToken) {
-        const feed = await fetchUserVideos(user.channelId, user.accessToken);
-        if (feed && feed.length > 0) return c.json({ feed, isGuest: false });
-      }
-      // Fallback — return channel videos as personalized feed for demo
+      // Personalized feed via API KEY only — NO Bearer token (youtube.readonly removed)
       try {
         const chVideos = await fetchChannelVideos(env.YOUTUBE_API_KEY || "", 12);
-        const feed = (chVideos || []).slice(0,8).map(v=>({ videoId: v.youtubeId || v.id, title: v.title, thumbnail: v.thumbnailUrl || `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg`, publishedAt: v.publishedAt || new Date().toISOString(), channelName: user.channelName }));
-        if (feed.length > 0) return c.json({ feed, isGuest: false, fallback: true });
+        const feed = (chVideos || []).slice(0,12).map(v=>({ videoId: v.youtubeId || v.id, title: v.title, thumbnail: v.thumbnailUrl || `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg`, publishedAt: v.publishedAt || new Date().toISOString(), channelName: user.channelName || v.channelName }));
+        if (feed.length > 0) return c.json({ feed, isGuest: false, fallback: false });
       } catch {}
       const mockFeed = [
-        { videoId: "jvXEkm27XOE", title: `Welcome ${user.channelName||"Creator"} — Your channel is live!`, thumbnail: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg", publishedAt: new Date().toISOString(), channelName: user.channelName },
+        { videoId: "jvXEkm27XOE", title: `Welcome ${user.channelName||"Creator"} — Your channel is live on Alphatekx!`, thumbnail: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg", publishedAt: new Date().toISOString(), channelName: user.channelName },
       ];
       return c.json({ feed: mockFeed, isGuest: false, fallback: true });
     } catch (e) {

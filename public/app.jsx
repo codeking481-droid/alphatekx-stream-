@@ -224,8 +224,8 @@ const SignInButton = () => {
     window.location.href = '/api/auth/url';
   };
   return (
-    <button onClick={handleSignIn} title="If Google shows an unverified warning, click Advanced → Continue" className="bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold px-8 py-3 rounded-xl hover:scale-105 transition shadow-lg hover:shadow-gold/30">
-      Sign in with YouTube →
+    <button onClick={handleSignIn} title="Sign in with Google (email/profile only)" className="bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold px-8 py-3 rounded-xl hover:scale-105 transition shadow-lg hover:shadow-gold/30">
+      Sign in with Google →
     </button>
   );
 };
@@ -245,11 +245,10 @@ const GoogleUnverifiedNotice = () => (
 const SignUpBlock = ({ onSignIn }) => (
   <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="signup-block-title">
     <div className="bg-zinc-900 rounded-2xl p-6 max-w-md w-full text-center border border-white/10">
-      <h2 id="signup-block-title" className="text-white text-xl font-bold">🔒 Sign up to continue watching</h2>
-      <p className="text-zinc-400 text-sm mt-2">You have watched 1 video free. Sign in free to keep watching unlimited videos and unlock your profile.</p>
-      <button onClick={onSignIn} className="w-full mt-6 bg-[#FFD60A] text-black py-3 rounded-full font-bold">Sign in with YouTube → Continue</button>
-      <p className="text-zinc-500 text-xs mt-2">Free — unlimited video after signup</p>
-      <GoogleUnverifiedNotice />
+      <h2 id="signup-block-title" className="text-white text-xl font-bold">Sign in to unlock more</h2>
+      <p className="text-zinc-400 text-sm mt-2">Free unlimited video watching. Sign in with Google to save history, likes, and unlock AI features.</p>
+      <button onClick={onSignIn} className="w-full mt-6 bg-[#FFD60A] text-black py-3 rounded-full font-bold">Sign in with Google → Continue</button>
+      <p className="text-zinc-500 text-xs mt-2">Free — unlimited video after sign-in</p>
     </div>
   </div>
 );
@@ -367,21 +366,15 @@ function App() {
   };
   const allowVideoForUser = (video) => {
     if (!video) return;
-    if (!isGuest) {
-      setActiveVideo(normalizeVideo(video));
-      setActiveTab("watch");
-      if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
-      return;
-    }
-    const count = Number.parseInt(localStorage.getItem("alphatekx_anon_watch_count") || "0", 10);
-    if (count >= 1) {
-      setShowSignUpBlock(true);
-      return;
-    }
-    localStorage.setItem("alphatekx_anon_watch_count", "1");
+    // PRODUCTION: Free users have unlimited video watching — no 1-video gate
     setActiveVideo(normalizeVideo(video));
     setActiveTab("watch");
     if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+    // Also save to history for personalization (no OAuth needed)
+    try {
+      const vid = video.youtubeId || video.id || video.videoId;
+      if (vid) fetch("/api/history", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ videoId: vid, title: video.title, thumbnail: video.thumbnail || video.thumbnailUrl, channelTitle: video.channelName || video.channel }) }).catch(()=>{});
+    } catch {}
   };
   useEffect(() => {
     fetch("/api/channel/videos?max=50")
@@ -984,11 +977,8 @@ function App() {
     }
   }, [authUser]);
   useEffect(() => {
-    if (!authLoading && isGuest && activeTab === "watch" && window.location.pathname === "/watch") {
-      const count = Number.parseInt(localStorage.getItem("alphatekx_anon_watch_count") || "0", 10);
-      if (count >= 1) setShowSignUpBlock(true);
-      else localStorage.setItem("alphatekx_anon_watch_count", "1");
-    }
+    // PRODUCTION: unlimited free watching — no gate on watch tab
+    if (!isGuest) setShowSignUpBlock(false);
   }, [activeTab, authLoading, isGuest]);
   useEffect(() => {
     if (!isGuest) setShowSignUpBlock(false);
@@ -2314,7 +2304,7 @@ function App() {
           <button onClick={()=>showToast("Notifications")} className="hidden sm:flex w-9 h-9 rounded-full hover:bg-white/10 items-center justify-center text-gray-300 hover:text-white"><Icon name="bell" className="w-5 h-5" /></button>
           <button onClick={()=>setActiveTab("profile")} className="w-9 h-9 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-300 hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 009 15a1.65 1.65 0 001-1.51V13a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 9a1.65 1.65 0 001-1.51V7a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 9a1.65 1.65 0 00-1 1.51V13a1.65 1.65 0 001 1.51z"/></svg></button>
           {isGuest ? (
-            <button onClick={async()=>{ try{const r=await fetch('/api/auth/url');const d=await r.json(); if(d.url) window.location.href=d.url;}catch{window.location.href='/api/auth/url';}}} className="hidden sm:flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold text-xs hover:scale-105 transition">Sign in with YouTube →</button>
+            <button onClick={async()=>{ try{const r=await fetch('/api/auth/url');const d=await r.json(); if(d.url) window.location.href=d.url;}catch{window.location.href='/api/auth/url';}}} className="hidden sm:flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold text-xs hover:scale-105 transition">Sign in with Google →</button>
           ) : (
             <button onClick={()=>setActiveTab("profile")} className="w-9 h-9 rounded-full bg-[#7c3aed] text-white font-bold flex items-center justify-center border-2 border-white/10">A</button>
           )}
@@ -2474,7 +2464,7 @@ function App() {
                 <span className="text-[11px] font-bold text-[#7a7a9e] uppercase tracking-[0.12em]">Subscribed Channels</span>
                 {isGuest ? (
                   <div className="space-y-2">
-                    <p className="text-xs text-gray-500 leading-relaxed">No fake channels. Sign in with YouTube to load real subscriptions via YouTube API.</p>
+                    <p className="text-xs text-gray-500 leading-relaxed">Sign in with Google to save your personal watch history and preferences.</p>
                     <button onClick={async()=>{ try{const r=await fetch('/api/auth/url');const d=await r.json(); if(d.url) window.location.href=d.url;}catch{window.location.href='/api/auth/url';}}} className="text-xs text-[#FFD700] font-bold hover:underline">Sign in →</button>
                   </div>
                 ) : (
@@ -2945,7 +2935,7 @@ function App() {
                     </div>
                     <div className="flex gap-2 sm:gap-3 overflow-x-auto scrollbar-hide pb-2 snap-x snap-mandatory px-0">
                       {shortsVideos.map((s, idx)=>
-                      <div key={s.id} onClick={()=>{ if (isGuest && Number.parseInt(localStorage.getItem("alphatekx_anon_watch_count") || "0", 10) >= 1) { setShowSignUpBlock(true); return; } if (isGuest) localStorage.setItem("alphatekx_anon_watch_count", "1"); setShortsIndex(idx); setShortsMuted(false); setActiveTab("shorts"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing Short: ${s.title}`); }} className="flex-shrink-0 w-[140px] sm:w-[160px] cursor-pointer snap-start group">
+                      <div key={s.id} onClick={()=>{ setShortsIndex(idx); setShortsMuted(false); setActiveTab("shorts"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing Short: ${s.title}`); }} className="flex-shrink-0 w-[140px] sm:w-[160px] cursor-pointer snap-start group">
                           <div className="aspect-[9/16] rounded-xl overflow-hidden bg-black border border-white/10 relative group-hover:border-[#FF0000]/40 transition-colors">
                             <img src={`https://img.youtube.com/vi/${s.youtubeId}/hqdefault.jpg`} alt={s.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />

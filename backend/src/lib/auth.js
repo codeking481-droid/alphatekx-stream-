@@ -3,9 +3,8 @@ export function getAuthUrl(origin) {
   const redirectUri = process.env.REDIRECT_URI || (origin ? `${origin}/api/auth/callback` : "");
   if (!clientId) throw new Error("GOOGLE_OAUTH_NOT_CONFIGURED: Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET");
   if (!redirectUri) throw new Error("REDIRECT_URI not configured: Set REDIRECT_URI to https://your-domain.com/api/auth/callback and add it to Google Cloud Console > Credentials > Authorized redirect URIs");
+  // PRODUCTION: Google Sign-Up only — no YouTube scopes
   const scopes = [
-    'https://www.googleapis.com/auth/youtube.readonly',
-    'https://www.googleapis.com/auth/youtube.force-ssl',
     'openid',
     'email',
     'profile'
@@ -42,22 +41,10 @@ async function exchangeCodeForTokens(code) {
   return data;
 }
 
-async function getChannelInfo(accessToken) {
-  if (!accessToken) return null;
-  try {
-    const res = await fetch('https://www.googleapis.com/youtube/v3/channels?part=snippet,contentDetails&mine=true', {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-    if (!res.ok) {
-      console.warn("[auth] channel fetch non-ok:", res.status, await res.text().catch(()=> ""));
-      return null;
-    }
-    const data = await res.json();
-    return data.items?.[0] || null;
-  } catch (e) {
-    console.warn("[auth] channel fetch exception:", e?.message || e);
-    return null;
-  }
+async function getChannelInfo(_accessToken) {
+  // REMOVED: youtube.readonly channel fetch via Bearer (mine=true) — not needed for Google Sign-Up only
+  // Keep stub for compatibility — always returns null, user profile comes from userinfo
+  return null;
 }
 
 function generateSessionToken() {
@@ -73,34 +60,31 @@ export async function handleCallback(code) {
   if (tokens.error) throw new Error(tokens.error_description || tokens.error);
   if (!tokens.access_token) throw new Error("No access_token from Google");
 
-  const channel = await getChannelInfo(tokens.access_token);
-
-  // Also fetch userinfo for fallback name/avatar when user has no YouTube channel
+  // Fetch userinfo via OIDC — NO YouTube Bearer calls
   let fallbackName = "Alphatekx User";
   let fallbackAvatar = `https://ui-avatars.com/api/?name=Alphatekx&background=FFD700&color=000&size=200&bold=true`;
+  let email = "";
+  let sub = "";
   try {
     const userRes = await fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
     if (userRes.ok) {
       const info = await userRes.json();
       fallbackName = info.name || fallbackName;
       if (info.picture) fallbackAvatar = info.picture;
+      if (info.email) email = info.email;
+      if (info.sub) sub = info.sub;
     }
-  } catch {}
+  } catch (e) { console.warn("[auth] userinfo fetch failed", e); }
 
   const user = {
-    channelId: channel?.id || `yt_${Date.now()}`,
-    channelName: channel?.snippet?.title || fallbackName,
-    channelAvatar: channel?.snippet?.thumbnails?.default?.url || channel?.snippet?.thumbnails?.high?.url || fallbackAvatar,
-    email: "",
+    channelId: sub || `google_${Date.now()}`,
+    channelName: fallbackName,
+    channelAvatar: fallbackAvatar,
+    email,
     accessToken: tokens.access_token,
     refreshToken: tokens.refresh_token || "",
     expiresAt: new Date(Date.now() + (tokens.expires_in || 3600) * 1000)
   };
-  // Try to get email from userinfo if available
-  try {
-    const r = await fetch("https://openidconnect.googleapis.com/v1/userinfo", { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-    if (r.ok) { const j = await r.json(); if (j.email) user.email = j.email; }
-  } catch {}
 
   const sessionToken = generateSessionToken();
   await storeUser(user);
