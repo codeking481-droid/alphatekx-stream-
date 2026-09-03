@@ -51,6 +51,19 @@ const MOCK_TITLES = [
   "Monetize AI Avatars — Make Money with ALPHATEKX",
 ];
 
+function formatDuration(iso?: string): string {
+  if (!iso) return "";
+  const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+  if (!match) return "";
+  const hours = Number(match[1] || 0);
+  const minutes = Number(match[2] || 0);
+  const seconds = Number(match[3] || 0);
+  const paddedSeconds = String(seconds).padStart(2, "0");
+  return hours > 0
+    ? `${hours}:${String(minutes).padStart(2, "0")}:${paddedSeconds}`
+    : `${minutes}:${paddedSeconds}`;
+}
+
 export function getMockChannelVideos(count = 41) {
   const videos = [];
   for (let i = 0; i < count; i++) {
@@ -134,8 +147,11 @@ export async function fetchChannelVideos(apiKey?: string, maxResults = 50) {
             channelName: CHANNEL_NAME,
             channelId: CHANNEL_ID,
             handle: CHANNEL_HANDLE,
-            views: det?.statistics?.viewCount ? `${(Number(det.statistics.viewCount)/1000).toFixed(0)}K views` : "10K views",
-            duration: det?.contentDetails?.duration ? det.contentDetails.duration.replace("PT","").toLowerCase() : "5:00",
+            views: det?.statistics?.viewCount ? `${Number(det.statistics.viewCount).toLocaleString()} views` : "",
+            viewsRaw: det?.statistics?.viewCount ? Number(det.statistics.viewCount) : 0,
+            likes: det?.statistics?.likeCount ? Number(det.statistics.likeCount) : 0,
+            comments: det?.statistics?.commentCount ? Number(det.statistics.commentCount) : 0,
+            duration: formatDuration(det?.contentDetails?.duration),
             category: "Tech",
             publishedAt: snippet?.publishedAt,
           };
@@ -178,8 +194,11 @@ export async function fetchChannelVideos(apiKey?: string, maxResults = 50) {
         channelName: CHANNEL_NAME,
         channelId: CHANNEL_ID,
         handle: CHANNEL_HANDLE,
-        views: det?.statistics?.viewCount ? `${(Number(det.statistics.viewCount)/1000).toFixed(0)}K views` : "10K views",
-        duration: det?.contentDetails?.duration ? det.contentDetails.duration.replace("PT","").toLowerCase() : "5:00",
+        views: det?.statistics?.viewCount ? `${Number(det.statistics.viewCount).toLocaleString()} views` : "",
+        viewsRaw: det?.statistics?.viewCount ? Number(det.statistics.viewCount) : 0,
+        likes: det?.statistics?.likeCount ? Number(det.statistics.likeCount) : 0,
+        comments: det?.statistics?.commentCount ? Number(det.statistics.commentCount) : 0,
+        duration: formatDuration(det?.contentDetails?.duration),
         category: "Tech",
         publishedAt: it.snippet?.publishedAt,
       };

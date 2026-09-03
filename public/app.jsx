@@ -294,6 +294,24 @@ function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const isGuest = !authUser;
   useEffect(() => {
+    fetch("/api/channel/videos?max=50")
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        const videos = Array.isArray(data?.videos) ? data.videos : [];
+        if (!videos.length) return;
+        const realVideos = videos.map(normalizeVideo);
+        setVideoCatalog(realVideos);
+        const toSeconds = (duration) => {
+          const parts = String(duration || "").split(":").map(Number);
+          if (parts.some(Number.isNaN)) return Infinity;
+          return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+        };
+        const realShorts = realVideos.filter(video => toSeconds(video.duration) <= 180);
+        if (realShorts.length) setShortsVideos(realShorts);
+      })
+      .catch(() => {});
+  }, []);
+  useEffect(() => {
     fetch('/api/auth/user', { credentials: 'include' }).then(r=>r.ok?r.json():null).then(d=>{
       if(d && !d.isGuest && d.id) setAuthUser(d);
       else if(d && d.channelName) setAuthUser(d);
@@ -1087,18 +1105,19 @@ function App() {
     }
   ]);
 
-  // Load 30 real videos to make site look real — no mock nonsense, better than YouTube
+  // Load the official channel feed so Home and Shorts use the same live catalog.
   useEffect(() => {
-    // Fetch official channel's real 30 videos to populate home
     fetch("/api/channel/videos?max=30").then(r=>r.ok?r.json():null).then(d=>{
-      if (d && Array.isArray(d.videos) && d.videos.length>5) {
-        const real = d.videos.map(v=>normalizeVideo(v));
-        // Keep DEFAULT_VIDEO first, then real, deduped, max 31
-        const seen = new Set([DEFAULT_VIDEO.youtubeId]);
-        const filtered = real.filter(v=>!seen.has(v.youtubeId));
-        const combined = [normalizeVideo(DEFAULT_VIDEO), ...filtered].slice(0,31);
-        if (combined.length > 6) setVideoCatalog(combined);
-      }
+      const real = Array.isArray(d?.videos) ? d.videos.map(normalizeVideo) : [];
+      if (!real.length) return;
+      setVideoCatalog(real);
+      const toSeconds = (duration) => {
+        const parts = String(duration || "").split(":").map(Number);
+        if (parts.length < 2 || parts.some(Number.isNaN)) return Infinity;
+        return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
+      };
+      const shorts = real.filter(v => toSeconds(v.duration) <= 180);
+      if (shorts.length) setShortsVideos(shorts);
     }).catch(()=>{});
   }, []);
 
@@ -1695,6 +1714,7 @@ function App() {
   });
   const searchFiltered = activePlatform==="all" ? searchResults : searchResults.filter(v=> (v.platform||"youtube")===activePlatform);
   const homeFiltered = activePlatform==="all" ? filteredVideos : filteredVideos.filter(v=> (v.platform||"youtube")===activePlatform);
+  const featuredVideo = videoCatalog[0] || DEFAULT_VIDEO;
 
     return (
     <div className="h-screen w-full max-w-[100vw] overflow-hidden flex flex-col bg-[#08080f] p-0 sm:p-3 text-white font-sans selection:bg-[#FFD700] selection:text-black">
@@ -2532,24 +2552,24 @@ function App() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => { window.location.href = `/watch?v=${DEFAULT_VIDEO.youtubeId}`; }}
+                      onClick={() => { window.location.href = `/watch?v=${featuredVideo.youtubeId}`; }}
                       className="group relative block w-full aspect-video bg-black overflow-hidden sm:rounded-xl text-left"
-                      aria-label={`Watch ${DEFAULT_VIDEO.title}`}
+                      aria-label={`Watch ${featuredVideo.title}`}
                     >
                       <img
-                        src={`https://i.ytimg.com/vi/${DEFAULT_VIDEO.youtubeId}/hqdefault.jpg`}
-                        alt={DEFAULT_VIDEO.title}
+                        src={`https://i.ytimg.com/vi/${featuredVideo.youtubeId}/hqdefault.jpg`}
+                        alt={featuredVideo.title}
                         className="h-full w-full object-cover transition-opacity group-hover:opacity-90"
                         loading="eager"
                       />
-                      <span className="absolute bottom-2 right-2 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-mono text-white">{DEFAULT_VIDEO.duration}</span>
+                      <span className="absolute bottom-2 right-2 rounded bg-black/80 px-1.5 py-0.5 text-[10px] font-mono text-white">{featuredVideo.duration}</span>
                     </button>
                     <div className="space-y-1 px-4 sm:px-0 pb-3 sm:pb-0">
-                      <h3 className="font-bold text-sm sm:text-base text-white line-clamp-2">{DEFAULT_VIDEO.title}</h3>
-                      <p className="text-xs text-gray-400">{DEFAULT_VIDEO.channelName} • {DEFAULT_VIDEO.handle} • Featured</p>
+                      <h3 className="font-bold text-sm sm:text-base text-white line-clamp-2">{featuredVideo.title}</h3>
+                      <p className="text-xs text-gray-400">{featuredVideo.channelName || featuredVideo.channel} • {featuredVideo.handle || ""} • Featured</p>
                       <div className="flex gap-2 pt-1">
-                        <button onClick={()=>{ window.location.href = `/watch?v=${DEFAULT_VIDEO.youtubeId}`; }} className="min-h-[44px] px-5 py-2.5 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Watch Now</button>
-                        <a href="https://youtu.be/jvXEkm27XOE" target="_blank" rel="noreferrer" className="min-h-[44px] px-5 py-2.5 bg-[#272727] text-white font-bold text-xs rounded-xl flex items-center">Open on YouTube ↗</a>
+                        <button onClick={()=>{ window.location.href = `/watch?v=${featuredVideo.youtubeId}`; }} className="min-h-[44px] px-5 py-2.5 bg-[#FFD700] text-black font-bold text-xs rounded-xl">Watch Now</button>
+                        <a href={`https://youtu.be/${featuredVideo.youtubeId}`} target="_blank" rel="noreferrer" className="min-h-[44px] px-5 py-2.5 bg-[#272727] text-white font-bold text-xs rounded-xl flex items-center">Open on YouTube ↗</a>
                       </div>
                     </div>
                   </div>
