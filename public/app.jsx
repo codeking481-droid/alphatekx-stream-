@@ -301,7 +301,12 @@ function App() {
     }).catch(()=>setAuthUser(null)).finally(()=>setAuthLoading(false));
   }, []);
   // Navigation & Drawer State
-  const [activeTab, setActiveTab] = useState("watch"); // watch, home, shorts, teacher, memory, chat, community, marketplace, sell, studio, pricing, profile
+  const [activeTab, setActiveTab] = useState(() => {
+    const path = window.location.pathname.replace(/\/+$/, "") || "/";
+    if (path === "/shorts") return "shorts";
+    if (path === "/home") return "home";
+    return "watch";
+  }); // watch, home, shorts, teacher, memory, chat, community, marketplace, sell, studio, pricing, profile
   const [sidebarOpen, setSidebarOpen] = useState(true); // Desktop sidebar toggle
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false); // Mobile drawer slide-over toggle
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false); // REMOVED — popup off
@@ -966,6 +971,13 @@ function App() {
   const [shortsMuted, setShortsMuted] = useState(true);
   const [shortsPlaying, setShortsPlaying] = useState(true);
   const [shortsLiked, setShortsLiked] = useState({});
+  const shortsScrollerRef = useRef(null);
+  const shortsSlideRefs = useRef([]);
+  const scrollToShort = (index) => {
+    const next = Math.max(0, Math.min(index, shortsVideos.length - 1));
+    shortsSlideRefs.current[next]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    setShortsIndex(next);
+  };
   const [shortsVideos, setShortsVideos] = useState([
     { id: "jvXEkm27XOE", youtubeId: "jvXEkm27XOE", title: "This AI Avatar BEATS HeyGen 10 TIMES! 🤯 #viral #trending", channel: "ALPHATEKX", handle: "@risewithalphatekx", avatar: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg", subscribers: "3,020", subscribersCount: 3020, likes: "24K", comments: "342", shares: "1.2K", views: "15K" },
     { id: "dQw4w9WgXcQ", youtubeId: "dQw4w9WgXcQ", title: "How Attention Works in 30s! 🧠 #AI #Shorts", channel: "CodeCraft", handle: "@codecraft", avatar: "https://images.unsplash.com/photos/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=120&q=80", subscribers: "1.8M", subscribersCount: 1800000, likes: "45.2K", comments: "892", shares: "2.1K", views: "340K" },
@@ -1964,14 +1976,14 @@ function App() {
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-          <button onClick={()=>showToast("Notifications")} className="w-9 h-9 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-300 hover:text-white"><Icon name="bell" className="w-5 h-5" /></button>
+          <button onClick={()=>showToast("Notifications")} className="hidden sm:flex w-9 h-9 rounded-full hover:bg-white/10 items-center justify-center text-gray-300 hover:text-white"><Icon name="bell" className="w-5 h-5" /></button>
           <button onClick={()=>setActiveTab("profile")} className="w-9 h-9 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-300 hover:text-white"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 009 15a1.65 1.65 0 001-1.51V13a1.65 1.65 0 00-1-1.51 1.65 1.65 0 00-1.82-.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.6 9a1.65 1.65 0 001-1.51V7a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0015 9a1.65 1.65 0 00-1 1.51V13a1.65 1.65 0 001 1.51z"/></svg></button>
           {isGuest ? (
             <button onClick={async()=>{ try{const r=await fetch('/api/auth/url');const d=await r.json(); if(d.url) window.location.href=d.url;}catch{window.location.href='/api/auth/url';}}} className="hidden sm:flex items-center gap-2 px-5 py-2 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold text-xs hover:scale-105 transition">Sign in with YouTube →</button>
           ) : (
             <button onClick={()=>setActiveTab("profile")} className="w-9 h-9 rounded-full bg-[#7c3aed] text-white font-bold flex items-center justify-center border-2 border-white/10">A</button>
           )}
-          <button onClick={()=>setMobileSearchOpen(true)} className="sm:hidden w-9 h-9 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-300"><Icon name="search" className="w-5 h-5" /></button>
+          <button onClick={()=>setMobileSearchOpen(true)} className="sm:hidden w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-300"><Icon name="search" className="w-5 h-5" /></button>
         </div>
       </header>
 
@@ -2035,7 +2047,7 @@ function App() {
                 <p className="text-xs text-gray-500">Recent searches & watched will appear in History • Guest • real-time</p>
                 <div className="flex gap-2 mt-2">
                   <button onClick={()=>{ setMobileSearchOpen(false); setActiveTab("history"); }} className="px-3 py-1.5 bg-[#272727] text-white text-xs rounded-full border border-white/10">History</button>
-                  <button onClick={()=>setMobileSearchOpen(false)} className="px-3 py-1.5 bg-[#FFD700]/20 text-[#FFD700] text-xs rounded-full border border-[#FFD700]/30">Browse Shorts</button>
+                  <button onClick={()=>{ setMobileSearchOpen(false); setActiveTab("shorts"); }} className="px-3 py-1.5 bg-[#FFD700]/20 text-[#FFD700] text-xs rounded-full border border-[#FFD700]/30">Browse Shorts</button>
                 </div>
               </div>
             )}
@@ -2358,9 +2370,9 @@ function App() {
 
           {/* ------------------- 2. HOME / DISCOVER FEED — CLEAN mobile-first: generous spacing, 2 cols on mobile ------------------- */}
           {activeTab === "home" && (
-            <div className="max-w-[1600px] mx-auto px-0 sm:px-5 md:px-6 py-4 sm:py-5 md:py-6 space-y-6 overflow-x-hidden">
+            <div className="max-w-[1600px] mx-auto px-0 sm:px-5 md:px-6 py-3 sm:py-5 md:py-6 space-y-5 sm:space-y-6 overflow-x-hidden">
               {isSearching ? (
-                <div className="grid grid-cols-2 gap-2 px-2 sm:px-0 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
+                <div className="grid grid-cols-1 gap-5 px-3 sm:px-0 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
                     <div key={n} className="glass-card overflow-hidden animate-pulse p-0 flex flex-col justify-between">
                       <div className="aspect-video w-full bg-[#1a1a24]" />
@@ -2457,7 +2469,7 @@ function App() {
                     searchHistory.length>0 ? (
                       <div className="space-y-3">
                         <p className="text-[11px] text-gray-500 font-mono flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-[#00FF88]"></span> Persisted in localStorage "alphatekx_search_history" + server — never vanishes on refresh</p>
-                        <div className="grid grid-cols-2 gap-2 px-2 sm:px-0 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
+                        <div className="grid grid-cols-1 gap-5 px-3 sm:px-0 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
                           {searchHistory.map((vid)=>(
                             <div
                               key={`hist-${vid.youtubeId||vid.id}-${vid.searchedAt||""}`}
@@ -2554,7 +2566,7 @@ function App() {
                   </div>
                   {homeFiltered.length>0 ? (
                   <>
-                  <div className="grid grid-cols-2 gap-2 sm:gap-4 md:gap-6 px-2 sm:px-0 md:grid-cols-3 lg:grid-cols-4">
+                  <div className="grid grid-cols-1 gap-5 px-3 sm:px-0 sm:grid-cols-2 sm:gap-4 md:gap-6 md:grid-cols-3 lg:grid-cols-4">
                     {homeFiltered.map((vid) => (
                       <VideoCard key={vid.id} video={{...vid, platform: vid.platform||"youtube"}} onPlay={(norm)=>{ setActiveVideo({...norm, platform: vid.platform||"youtube"}); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} onSave={toggleWatchLater} isSaved={isSavedWatchLater(vid.id)} onAi={openAiHelper} />
                     ))}
@@ -2593,116 +2605,69 @@ function App() {
 
           {/* ------------------- 3. YOUTUBE SHORTS — BEST ABSOLUTE, SIMPLE LIKE YOUTUBE, EASY VOLUME ------------------- */}
           {activeTab === "shorts" && (
-            <div className="w-full max-w-[420px] mx-auto flex flex-col items-center justify-start min-h-[calc(100vh-56px)] sm:min-h-[calc(100vh-56px)] bg-[#0B0215] sm:bg-transparent p-0 sm:p-4">
-              {/* Shorts header — minimal, hand swipe only (no buttons) */}
-              <div className="w-full flex items-center justify-between px-3 py-2 sm:px-0 sm:py-3">
-                <div className="flex items-center gap-2">
-                  <span className="bg-[#FF0000] text-white px-2.5 py-1 rounded-full text-[11px] font-extrabold">Shorts</span>
-                  <span className="text-xs text-gray-400">hand swipe • {shortsIndex+1}/{shortsVideos.length}</span>
-                </div>
-                <span className="text-xs text-gray-500 hidden sm:inline">Tap for sound • swipe up/down</span>
-              </div>
-
-              {/* Vertical Short Player — full-screen feel, easy volume */}
-              <div
-                className="relative w-full aspect-[9/16] max-h-[calc(100vh-140px)] sm:max-h-[calc(100vh-180px)] bg-black sm:rounded-2xl overflow-hidden border-0 sm:border border-white/10 shadow-2xl group"
-                onTouchStart={e=>{ const y=e.touches[0].clientY; e.currentTarget.dataset.startY=y; }}
-                onTouchEnd={e=>{ const start=Number(e.currentTarget.dataset.startY||0); const end=e.changedTouches[0].clientY; const diff=start-end; if(Math.abs(diff)>50){ if(diff>0 && shortsIndex < shortsVideos.length-1){ setShortsIndex(i=>i+1); } else if(diff<0 && shortsIndex>0){ setShortsIndex(i=>i-1); } } }}
-                onClick={()=> setShortsMuted(m=>!m)}
-              >
-                {/* YouTube Short iframe — clean, no controls, loop */}
-                <iframe
-                  key={currentShort.youtubeId + shortsMuted + shortsIndex}
-                  src={`https://www.youtube.com/embed/${currentShort.youtubeId}?autoplay=1&mute=${shortsMuted?1:0}&controls=0&rel=0&playsinline=1&loop=1&playlist=${currentShort.youtubeId}&modestbranding=1`}
-                  title={currentShort.title}
-                  className="w-full h-full border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                  allowFullScreen
-                />
-                {/* Hand swipe overlay — captures swipe over iframe, easy */}
-                <div
-                  className="absolute inset-0 z-10 touch-manipulation"
-                  onTouchStart={e=>{ const y=e.touches[0].clientY; e.currentTarget.dataset.startY=String(y); }}
-                  onTouchEnd={e=>{ const start=Number(e.currentTarget.dataset.startY||0); const end=e.changedTouches[0].clientY; const diff=start-end; if(Math.abs(diff)>50){ if(diff>0 && shortsIndex < shortsVideos.length-1){ setShortsIndex(i=>i+1); } else if(diff<0 && shortsIndex>0){ setShortsIndex(i=>i-1); } } }}
-                  onClick={()=> setShortsMuted(m=>!m)}
-                  style={{touchAction: "pan-y"}}
-                />
-
-                {/* Top gradient */}
-                <div className="absolute top-0 left-0 right-0 h-20 bg-gradient-to-b from-black/60 to-transparent pointer-events-none" />
-                {/* Bottom gradient */}
-                <div className="absolute bottom-0 left-0 right-0 h-40 bg-gradient-to-t from-black via-black/40 to-transparent pointer-events-none" />
-
-                {/* EASY VOLUME — big, thumb-friendly, bottom center (YouTube simple) */}
-                <button
-                  onClick={(e)=>{ e.stopPropagation(); setShortsMuted(m=>!m); showToast(shortsMuted ? "🔊 Sound on" : "🔇 Muted"); }}
-                  className="absolute bottom-20 sm:bottom-24 left-1/2 -translate-x-1/2 z-20 flex items-center gap-2 px-5 py-3 rounded-full bg-black/75 backdrop-blur-md border border-white/20 text-white hover:bg-black/90 transition-all active:scale-95 shadow-xl min-h-[48px] min-w-[140px] justify-center"
-                  title="Tap to toggle sound"
-                >
-                  <span className={`w-8 h-8 rounded-full flex items-center justify-center text-sm ${shortsMuted ? "bg-white/20" : "bg-[#FFD700] text-black"}`}>
-                    {shortsMuted ? "🔇" : "🔊"}
-                  </span>
-                  <span className="text-xs font-bold">{shortsMuted ? "Tap for sound" : "Sound on"}</span>
-                </button>
-
-                {/* Right actions — large, easy, YouTube-like */}
-                <div className="absolute right-2 sm:right-3 bottom-28 sm:bottom-32 z-20 flex flex-col items-center gap-3 sm:gap-4">
-                  {[
-                    { icon:"like", label: currentShort.likes, active: shortsLiked[currentShort.id], color:"text-[#FFD700]", action:()=>{ setShortsLiked(s=>({...s, [currentShort.id]:!s[currentShort.id]})); showToast(shortsLiked[currentShort.id] ? "Unliked" : "Liked ❤️"); } },
-                    { icon:"chat", label: currentShort.comments, action:()=>showToast("Comments • 342 replies") },
-                    { icon:"share", label: "Share", action:()=>{ navigator.clipboard?.writeText(`https://youtu.be/${currentShort.youtubeId}`); showToast("Link copied! Share your Short"); } },
-                    { icon:"bookmark", label: "Save", action:()=>{ toggleWatchLater({youtubeId: currentShort.youtubeId, title: currentShort.title, channelName: currentShort.channel, thumbnailUrl:`https://img.youtube.com/vi/${currentShort.youtubeId}/hqdefault.jpg`, platform:"youtube"}); showToast("Saved to Watch Later"); } },
-                  ].map((btn, i)=>(
-                    <button key={i} onClick={(e)=>{ e.stopPropagation(); btn.action(); }} className="flex flex-col items-center gap-1 group/btn">
-                      <div className="w-12 h-12 rounded-full bg-black/60 backdrop-blur border border-white/10 flex items-center justify-center group-active/btn:scale-90 transition-transform hover:bg-black/80 shadow-lg">
-                        <Icon name={btn.icon} className={`w-6 h-6 ${btn.active ? btn.color : "text-white"}`} />
-                      </div>
-                      <span className="text-[11px] font-bold text-white drop-shadow">{btn.label}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Bottom info — channel + title, simple */}
-                <div className="absolute bottom-0 left-0 right-14 sm:right-16 p-3 sm:p-4 z-20 space-y-2">
+            <section className="h-[calc(100dvh-120px)] w-full bg-[#0B0215] md:h-[calc(100dvh-56px)]">
+              <div className="mx-auto flex h-full w-full max-w-[760px] flex-col">
+                <div className="flex shrink-0 items-center justify-between px-4 py-2">
                   <div className="flex items-center gap-2">
-                    <img src={currentShort.avatar} alt={currentShort.channel} className="w-8 h-8 rounded-full border-2 border-white object-cover" />
-                    <span className="font-bold text-sm text-white drop-shadow">{currentShort.handle}</span>
-                    <button
-                      onClick={(e)=>{ 
-                        e.stopPropagation();
-                        const cur = Number(String(currentShort.subscribersCount||currentShort.subscribers||"1200").replace(/[^0-9]/g,"")) || 1200;
-                        const nextCount = cur+1;
-                         const prev = shortsVideos[shortsIndex];
-                         if (prev) {
-                           setShortsVideos(s=> s.map(sh=> (sh.youtubeId===currentShort.youtubeId || sh.id===currentShort.id) ? {...sh, subscribers: nextCount.toLocaleString(), subscribersCount: nextCount} : sh));
-                         }
-                        showToast(`Subscribed to ${currentShort.channel}! 🎉 ${nextCount.toLocaleString()} subs`);
-                      }}
-                      className="ml-1 px-3 py-1 bg-white text-black text-xs font-extrabold rounded-full hover:bg-gray-100">
-                      Subscribe
-                    </button>
+                    <span className="rounded-full bg-[#FF0000] px-2.5 py-1 text-[11px] font-extrabold text-white">Shorts</span>
+                    <span className="text-xs text-gray-400">{shortsIndex + 1} / {shortsVideos.length}</span>
                   </div>
-                  <p className="text-sm text-white leading-snug line-clamp-2 drop-shadow">{currentShort.title}</p>
-                  <p className="text-xs text-gray-300">🎵 Original sound • {currentShort.views} • {currentShort.subscribers && <span>{currentShort.subscribers} subs • </span>}Tap video to {shortsMuted ? "unmute" : "mute"}</p>
+                  <div className="flex items-center gap-2">
+                    <button onClick={() => scrollToShort(shortsIndex - 1)} disabled={shortsIndex === 0} aria-label="Previous short" className="rounded-full border border-white/10 px-3 py-1 text-xs text-white disabled:opacity-30">↑</button>
+                    <button onClick={() => scrollToShort(shortsIndex + 1)} disabled={shortsIndex === shortsVideos.length - 1} aria-label="Next short" className="rounded-full border border-white/10 px-3 py-1 text-xs text-white disabled:opacity-30">↓</button>
+                  </div>
                 </div>
-
-                {/* Progress dots */}
-                <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex gap-1">
-                  {shortsVideos.map((_, i)=>(
-                    <div key={i} className={`h-1 rounded-full transition-all ${i===shortsIndex ? "w-6 bg-[#FFD700]" : "w-1.5 bg-white/40"}`} />
+                <div
+                  ref={shortsScrollerRef}
+                  onScroll={(e) => {
+                    const height = e.currentTarget.clientHeight || 1;
+                    const next = Math.round(e.currentTarget.scrollTop / height);
+                    if (next !== shortsIndex && next >= 0 && next < shortsVideos.length) setShortsIndex(next);
+                  }}
+                  className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  style={{ touchAction: "pan-y" }}
+                >
+                  {shortsVideos.map((short, idx) => (
+                    <article key={short.youtubeId} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-full min-h-full snap-start snap-always bg-black sm:my-2 sm:rounded-2xl sm:border sm:border-white/10 sm:shadow-2xl overflow-hidden">
+                      {idx === shortsIndex ? (
+                        <iframe
+                          key={`${short.youtubeId}-${shortsMuted}-${shortsPlaying}`}
+                          src={`https://www.youtube-nocookie.com/embed/${short.youtubeId}?autoplay=${shortsPlaying ? 1 : 0}&mute=${shortsMuted ? 1 : 0}&controls=0&rel=0&playsinline=1&loop=1&playlist=${short.youtubeId}&modestbranding=1`}
+                          title={short.title}
+                          className="h-full w-full border-0"
+                          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                          allowFullScreen
+                        />
+                      ) : (
+                        <img src={`https://i.ytimg.com/vi/${short.youtubeId}/hqdefault.jpg`} alt="" className="h-full w-full object-cover" loading="lazy" />
+                      )}
+                      <div
+                        className="absolute inset-0 z-10 touch-pan-y"
+                        aria-hidden="true"
+                        style={{ touchAction: "pan-y" }}
+                        onClick={() => setShortsMuted(m => !m)}
+                      />
+                      <button aria-label={shortsMuted ? "Unmute short" : "Mute short"} onClick={() => setShortsMuted(m => !m)} className="absolute right-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/70 text-lg text-white">{shortsMuted ? "🔇" : "🔊"}</button>
+                      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black via-black/50 to-transparent" />
+                      <div className="absolute bottom-0 left-0 right-16 z-10 space-y-2 p-4">
+                        <div className="flex items-center gap-2">
+                          <img src={short.avatar} alt="" className="h-8 w-8 rounded-full border-2 border-white object-cover" />
+                          <span className="text-sm font-bold text-white">{short.handle}</span>
+                          <button onClick={() => showToast(`Subscribed to ${short.channel}!`)} className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-black">Subscribe</button>
+                        </div>
+                        <p className="line-clamp-2 text-sm leading-snug text-white">{short.title}</p>
+                        <p className="text-xs text-gray-300">{short.views} • {short.subscribers} subs</p>
+                      </div>
+                      <div className="absolute bottom-4 right-3 z-10 flex flex-col items-center gap-3">
+                        <button onClick={() => setShortsLiked(s => ({ ...s, [short.id]: !s[short.id] }))} aria-label="Like short" className={`flex h-11 w-11 items-center justify-center rounded-full bg-black/60 ${shortsLiked[short.id] ? "text-[#FFD700]" : "text-white"}`}><Icon name="like" className="h-6 w-6" /></button>
+                        <button onClick={() => showToast("Comments coming soon")} aria-label="Comments" className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="chat" className="h-6 w-6" /></button>
+                        <button onClick={() => { navigator.clipboard?.writeText(`https://youtu.be/${short.youtubeId}`); showToast("Link copied"); }} aria-label="Share short" className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="share" className="h-6 w-6" /></button>
+                      </div>
+                    </article>
                   ))}
                 </div>
-
-                {/* Tap to play/pause hint */}
-                {!shortsPlaying && (
-                  <div className="absolute inset-0 z-10 flex items-center justify-center bg-black/20" onClick={(e)=>{ e.stopPropagation(); setShortsPlaying(true); }}>
-                    <div className="w-16 h-16 rounded-full bg-black/70 border-2 border-white flex items-center justify-center text-white text-2xl">▶</div>
-                  </div>
-                )}
               </div>
-
-              <p className="w-full text-center text-xs text-gray-500 py-3">Hand swipe up/down — Shorts like YouTube</p>
-            </div>
+            </section>
           )}
 
           {/* ------------------- SUPERPOWER #7: AI TEACHER ------------------- */}

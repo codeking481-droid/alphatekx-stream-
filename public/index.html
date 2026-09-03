@@ -68,6 +68,16 @@
       font-size: 15px;
       line-height: 1.5;
     }
+    button, a, input, textarea {
+      -webkit-tap-highlight-color: transparent;
+    }
+    button {
+      touch-action: manipulation;
+    }
+    main {
+      overscroll-behavior-y: contain;
+      scrollbar-gutter: stable;
+    }
     /* Hide scrollbar for chips/search tabs on mobile but keep scroll */
     .scrollbar-hide {
       -ms-overflow-style: none;
@@ -83,6 +93,9 @@
     /* Extra safety for mobile: prevent horizontal scroll from absolute elements */
     @media (max-width: 640px) {
       #root { overflow-x: hidden; }
+      body { font-size: 14px; }
+      main { scrollbar-width: none; }
+      main::-webkit-scrollbar { display: none; }
     }
     /* Custom scrollbars */
     ::-webkit-scrollbar {
