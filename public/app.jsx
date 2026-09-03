@@ -2153,7 +2153,7 @@ function App() {
         </aside>
 
         {/* ------------------- INDEPENDENT MAIN SCROLL CONTENT AREA ------------------- */}
-        <main ref={mainScrollRef} className="flex-1 overflow-y-auto scroll-smooth pb-24 md:pb-12 h-full">
+        <main ref={mainScrollRef} className={`flex-1 scroll-smooth h-full ${activeTab === "shorts" ? "overflow-hidden pb-0" : "overflow-y-auto pb-24 md:pb-12"}`}>
 
           {/* TOP TOPIC CHIPS BAR — REMOVED for mobile fit */}
           {false && activeTab === "home" && (
@@ -2605,14 +2605,14 @@ function App() {
 
           {/* ------------------- 3. YOUTUBE SHORTS — BEST ABSOLUTE, SIMPLE LIKE YOUTUBE, EASY VOLUME ------------------- */}
           {activeTab === "shorts" && (
-            <section className="h-[calc(100dvh-120px)] w-full bg-[#0B0215] md:h-[calc(100dvh-56px)]">
+            <section className="relative h-full w-full overflow-hidden bg-[#0B0215]">
               <div className="mx-auto flex h-full w-full max-w-[760px] flex-col">
-                <div className="flex shrink-0 items-center justify-between px-4 py-2">
+                <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <span className="rounded-full bg-[#FF0000] px-2.5 py-1 text-[11px] font-extrabold text-white">Shorts</span>
+                    <span className="pointer-events-auto rounded-full bg-[#FF0000] px-2.5 py-1 text-[11px] font-extrabold text-white">Shorts</span>
                     <span className="text-xs text-gray-400">{shortsIndex + 1} / {shortsVideos.length}</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="pointer-events-auto flex items-center gap-2">
                     <button onClick={() => scrollToShort(shortsIndex - 1)} disabled={shortsIndex === 0} aria-label="Previous short" className="rounded-full border border-white/10 px-3 py-1 text-xs text-white disabled:opacity-30">↑</button>
                     <button onClick={() => scrollToShort(shortsIndex + 1)} disabled={shortsIndex === shortsVideos.length - 1} aria-label="Next short" className="rounded-full border border-white/10 px-3 py-1 text-xs text-white disabled:opacity-30">↓</button>
                   </div>
@@ -2628,7 +2628,7 @@ function App() {
                   style={{ touchAction: "pan-y" }}
                 >
                   {shortsVideos.map((short, idx) => (
-                    <article key={short.youtubeId} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-full min-h-full snap-start snap-always bg-black sm:my-2 sm:rounded-2xl sm:border sm:border-white/10 sm:shadow-2xl overflow-hidden">
+                    <article key={short.youtubeId} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-full min-h-full snap-start snap-always bg-black sm:my-2 sm:rounded-2xl sm:border sm:border-white/10 sm:shadow-2xl overflow-hidden" style={{ scrollSnapStop: "always" }}>
                       {idx === shortsIndex ? (
                         <iframe
                           key={`${short.youtubeId}-${shortsMuted}-${shortsPlaying}`}
@@ -3640,7 +3640,7 @@ function App() {
       )}
 
       {/* MOBILE BOTTOM NAVIGATION BAR — YouTube fit h-16 */}
-      <nav className="fixed bottom-0 left-0 right-0 z-40 bg-[#0f0f0f] border-t border-[#272727] px-4 h-16 flex items-center justify-around md:hidden">
+      <nav className={`fixed bottom-0 left-0 right-0 z-40 bg-[#0f0f0f] border-t border-[#272727] px-4 h-16 items-center justify-around md:hidden ${activeTab === "shorts" ? "hidden" : "flex"}`}>
         <button 
           onClick={() => setActiveTab("home")}
           className={`flex flex-col items-center justify-center gap-1 ${activeTab === "home" ? "text-[#FFD700]" : "text-gray-400"}`}
