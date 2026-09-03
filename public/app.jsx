@@ -2443,8 +2443,6 @@ function App() {
                 { id: "marketplace", label: "Marketplace", icon: "shopping-bag", color: "text-[#00FF88]" },
                 { id: "studio", label: "AI Studio", icon: "studio", color: "text-purple-400" },
                 { id: "profile", label: "Profile", icon: "user", color: "text-[#00D9FF]" },
-                { id: "upload", label: "Upload", icon: "plus", color: "text-[#00FF88]" },
-                { id: "channel", label: "Channel", icon: "user", color: "text-[#00D9FF]" },
                 { id: "pricing", label: "Pro Subscription", icon: "crown", color: "text-yellow-400" }
               ].map((item) => (
                 <button
@@ -2566,7 +2564,7 @@ function App() {
       )}
 
       {/* ------------------- APP BODY (FIXED SIDEBAR + INDEPENDENT MAIN SCROLL) ------------------- */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className="flex-1 min-w-0 flex overflow-hidden relative">
 
         {/* ------------------- FIXED YOUTUBE SIDEBAR ------------------- */}
         <aside 
@@ -2620,7 +2618,6 @@ function App() {
                 { id: "teacher", label: "AI Teacher", icon: "sparkles", color: "text-[#FFD700]" },
                 { id: "memory", label: "AI Memory", icon: "brain", color: "text-[#FFD700]" },
                 { id: "marketplace", label: "Marketplace", icon: "shopping-bag", color: "text-gray-400" },
-                { id: "workspace", label: "Workspace", icon: "code", color: "text-[#00FF88]" },
                 { id: "studio", label: "AI Studio", icon: "studio", color: "text-gray-400" },
                 { id: "profile", label: "Profile", icon: "user", color: "text-gray-400" },
                 { id: "pricing", label: "Pro Subscription", icon: "crown", color: "text-[#FFD700]" }
@@ -2665,7 +2662,7 @@ function App() {
         </aside>
 
         {/* ------------------- INDEPENDENT MAIN SCROLL CONTENT AREA ------------------- */}
-        <main ref={mainScrollRef} className={`flex-1 scroll-smooth ${activeTab === "shorts" ? "h-screen overflow-hidden pb-0" : "h-full overflow-y-auto pb-24 md:pb-12"}`}>
+        <main ref={mainScrollRef} className={`flex-1 min-w-0 scroll-smooth ${activeTab === "shorts" ? "h-screen overflow-hidden pb-0" : "h-full overflow-y-auto pb-24 md:pb-12"}`}>
 
           {/* TOP TOPIC CHIPS BAR — REMOVED for mobile fit */}
           {false && activeTab === "home" && (
