@@ -436,8 +436,7 @@ function isLongFormVideo(video) {
   return seconds === null || seconds > 60;
 }
 function isShortFormVideo(video) {
-  const seconds = durationInSeconds(video?.duration);
-  return video?.isShort === true && (seconds === null || (seconds > 0 && seconds <= 180));
+  return video?.isShort === true;
 }
 
 // --- Main App Component ---

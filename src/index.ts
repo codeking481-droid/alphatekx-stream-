@@ -239,6 +239,17 @@ async function searchYouTubeInnerTube(c: any, query: string) {
     const cached = await env.KV.get(cacheKey, "json").catch(() => null);
     if (Array.isArray(cached)) return cached;
   }
+
+  function shortDurationIsValid(duration: unknown) {
+    const value = String(duration || "");
+    if (!value) return true;
+    const parts = value.split(":").map(Number);
+    if (parts.length < 2 || parts.some(Number.isNaN)) return true;
+    const seconds = parts.length === 3
+      ? parts[0] * 3600 + parts[1] * 60 + parts[2]
+      : parts[0] * 60 + parts[1];
+    return seconds > 0 && seconds <= 180;
+  }
   const webKey = env.YOUTUBE_WEB_KEY || env.YOUTUBE_API_KEY;
   let results: any[] = [];
   {
@@ -1664,7 +1675,7 @@ function createApiApp() {
         for (let offset = 0; offset < queries.length && videos.length < limit; offset += 1) {
           const query = queries[(searchPage * 3 + offset) % queries.length];
           const discovered = await searchYouTubeInnerTube(c, query).catch(() => []);
-          for (const video of discovered.slice(0, 2)) {
+          for (const video of discovered) {
             const id = video.youtubeId || video.id;
             const channel = String(video.channelName || video.channel || "").toLowerCase();
             if (!id || seen.has(id) || channel === OFFICIAL_CHANNEL_NAME.toLowerCase() || channel.includes("alphatekx")) continue;
