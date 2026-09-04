@@ -730,7 +730,7 @@ function createApiApp() {
       package_name: "ng.name.alphatekx.twa",
       sha256_cert_fingerprints: ["00:CB:E8:B4:38:63:C0:A3:39:5F:9E:C5:00:50:04:E9:57:49:2B:50:3B:CA:9A:C0:E9:12:84:FB:8C:3C:68:2F"],
     },
-  }]), { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=3600" } }));
+  }]), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store, max-age=0" } }));
 
   app.get("/api/download/count", async (c) => {
     const kv = downloadKv(c);
