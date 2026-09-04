@@ -77,7 +77,7 @@ export function createApiApp(env = {}) {
       // Fallback — return channel videos as personalized feed for demo
       try {
         const chVideos = await fetchChannelVideos(env.YOUTUBE_API_KEY || "", 12);
-        const feed = (chVideos || []).slice(0,8).map(v=>({ videoId: v.youtubeId || v.id, title: v.title, thumbnail: v.thumbnailUrl || `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg`, publishedAt: v.publishedAt || new Date().toISOString(), channelName: user.channelName }));
+        const feed = (chVideos || []).slice(0,8).map(v=>({ videoId: v.youtubeId || v.id, title: v.title, thumbnail: v.thumbnailUrl || `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg`, publishedAt: v.publishedAt || new Date().toISOString(), channelName: v.channelName || v.channel || "YouTube Creator", channelId: v.channelId || "" }));
         if (feed.length > 0) return c.json({ feed, isGuest: false, fallback: true });
       } catch {}
       const mockFeed = [

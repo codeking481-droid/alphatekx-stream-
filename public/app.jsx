@@ -159,12 +159,16 @@ const VideoCard = ({ video, onPlay, onSave, isSaved, onAi, onChannel, cleanHome 
       </div>
       <div className="p-3 sm:p-4 space-y-1.5 flex-1 min-w-0">
         <h3 className="font-bold text-[13px] sm:text-sm leading-snug text-white group-hover:text-[#FFD700] line-clamp-2 min-w-0 break-words">{v.title}</h3>
-        {onChannel ? (
-          <button type="button" onClick={(event) => { event.stopPropagation(); onChannel(v); }} className="text-left text-xs text-gray-400 truncate hover:text-[#00D9FF]">
-            {v.channel || v.channelName}
+        {onChannel && (
+          <button type="button" onClick={(event) => { event.stopPropagation(); onChannel(v); }} className="flex min-h-11 items-center gap-2 text-left text-xs text-gray-300 hover:text-[#00D9FF]">
+            <img src={v.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(v.channel || "YouTube")}&background=1A0B2E&color=FFD700`} alt="" className="h-7 w-7 rounded-full object-cover" />
+            <span className="truncate">{v.channel || v.channelName}</span>
           </button>
-        ) : <p className="text-xs text-gray-400 truncate">{v.channel || v.channelName}</p>}
+        )}
+        {!onChannel && <p className="text-xs text-gray-400 truncate">{v.channel || v.channelName}</p>}
         <p className="text-xs text-gray-500">{v.views} • {v.timeAgo}</p>
+        {video.alphatekx_views != null && <p className="text-[11px] text-[#FFD700]">♥ {Number(video.alphatekx_likes || 0)} • 💬 {Number(video.alphatekx_comments || 0)} • 👁 {Number(video.alphatekx_views || 0)} boosts</p>}
+        {Number(video.is_pro_creator) === 1 && <span className="inline-block text-[10px] font-bold text-[#FFD700]">⭐ Pro Boost</span>}
       </div>
     </div>
   );
@@ -224,24 +228,11 @@ const SignInButton = () => {
     window.location.href = '/api/auth/url';
   };
   return (
-    <button onClick={handleSignIn} title="If Google shows an unverified warning, click Advanced → Continue" className="bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold px-8 py-3 rounded-xl hover:scale-105 transition shadow-lg hover:shadow-gold/30">
+    <button onClick={handleSignIn} className="bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black font-bold px-8 py-3 rounded-xl hover:scale-105 transition shadow-lg hover:shadow-gold/30">
       Sign in with Google →
     </button>
   );
 };
-const GoogleUnverifiedNotice = () => (
-  <div className="bg-[#1a1a1a] border border-yellow-600/50 rounded-xl p-4 mt-4 text-left">
-    <p className="text-yellow-300 text-sm font-bold">⚠️ Google has not verified this app yet</p>
-    <p className="text-zinc-300 text-xs mt-1">The app is under review. If Google shows this warning, you can continue safely:</p>
-    <div className="mt-3 bg-black rounded-lg p-3 space-y-2 text-xs">
-      <p className="text-white font-bold">Follow the arrow ↘️</p>
-      <p className="text-zinc-300"><b className="text-white">1. Click “Advanced”</b> at the bottom left <span className="text-yellow-400">↘️</span></p>
-      <p className="text-zinc-300"><b className="text-white">2. Click “Go to alphatekx.name.ng”</b> <span className="text-yellow-400">→</span></p>
-      <p className="text-zinc-300"><b className="text-white">3. Click “Continue”</b> to finish signing in ✅</p>
-    </div>
-    <p className="text-zinc-500 text-[11px] mt-2">This warning appears for new OAuth apps while Google reviews them.</p>
-  </div>
-);
 const SignUpBlock = ({ onSignIn }) => (
   <div className="fixed inset-0 z-[100] bg-black/90 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby="signup-block-title">
     <div className="bg-zinc-900 rounded-2xl p-6 max-w-md w-full text-center border border-white/10">
@@ -249,7 +240,6 @@ const SignUpBlock = ({ onSignIn }) => (
       <p className="text-zinc-400 text-sm mt-2">You have watched 1 video free. Sign in free to keep watching unlimited videos and unlock your profile.</p>
       <button onClick={onSignIn} className="w-full mt-6 bg-[#FFD60A] text-black py-3 rounded-full font-bold">Sign in with Google → Continue</button>
       <p className="text-zinc-500 text-xs mt-2">Free — unlimited video after signup</p>
-      <GoogleUnverifiedNotice />
     </div>
   </div>
 );
@@ -271,17 +261,17 @@ const GuestOverlay = ({ children, message }) => {
   );
 };
 
-// --- PROMPT #3: DEFAULT VIDEO (YOUR VIDEO) — plays first, helps grow YouTube channel ---
+// Safe fallback video used only while the live feed is loading.
 const DEFAULT_VIDEO = {
-  id: "jvXEkm27XOE",
-  youtubeId: "jvXEkm27XOE",
-  title: "This AI Avatar BEATS HeyGen 10 TIMES! 🤯 #viral #trending #viralvideo #aivideo",
-  channel: "ALPHATEKX",
-  channelName: "ALPHATEKX",
-  channelId: "UCGm89Z31SYxEU9PEQ-p3cNA",
-  handle: "@risewithalphatekx",
-  subscribers: "3,020",
-  views: "Featured • Alphatekx Stream",
+  id: "dQw4w9WgXcQ",
+  youtubeId: "dQw4w9WgXcQ",
+  title: "Featured YouTube video",
+  channel: "YouTube Creator",
+  channelName: "YouTube Creator",
+  channelId: "",
+  handle: "",
+  subscribers: "",
+  views: "Featured",
   timeAgo: "Featured",
   duration: "2:15",
   tag: "Featured",
@@ -289,16 +279,11 @@ const DEFAULT_VIDEO = {
   img: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
   thumbnail: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
   thumbnailUrl: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg",
-  description: "Featured Alphatekx video — auto-plays first for every visitor. Your view counts toward YouTube growth! 🚀🇳🇬",
+  description: "Featured video from the YouTube library.",
   platform: "youtube",
   platformMeta: { label: "YouTube", badge: "YT", color: "#FF0000", bg: "rgba(255,0,0,0.9)" },
   featured: true,
 };
-// PROMPT #7: Official ALPHATEKX channel
-const OFFICIAL_CHANNEL_ID = "UCGm89Z31SYxEU9PEQ-p3cNA";
-const OFFICIAL_CHANNEL_HANDLE = "@risewithalphatekx";
-const OFFICIAL_CHANNEL_NAME = "ALPHATEKX";
-
 // --- Helper to normalize video objects from API or mock ---
 function normalizeVideo(v) {
   return {
@@ -338,6 +323,11 @@ function uniqueVideos(videos) {
   setMonacoReady(true);
 }
 function durationInSeconds(duration) {
+  if (typeof duration === "string" && /^PT/i.test(duration)) {
+    const match = duration.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?$/i);
+    if (!match) return null;
+    return Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0);
+  }
   const parts = String(duration || "").split(":").map(Number);
   if (!duration || parts.length < 2 || parts.some(Number.isNaN)) return null;
   return parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts[0] * 60 + parts[1];
@@ -348,7 +338,7 @@ function isLongFormVideo(video) {
 }
 function isShortFormVideo(video) {
   const seconds = durationInSeconds(video?.duration);
-  return seconds !== null && seconds <= 60;
+  return seconds !== null && seconds > 0 && seconds <= 180;
 }
 
 // --- Main App Component ---
@@ -375,6 +365,10 @@ function App() {
   };
   const allowVideoForUser = (video) => {
     if (!video) return;
+    if (isGuest) {
+      setShowSignUpBlock(true);
+      return;
+    }
     const next = normalizeVideo(video);
     setActiveVideo(next);
     setActiveTab("watch");
@@ -382,17 +376,6 @@ function App() {
     if (videoId) window.history.pushState({}, "", `/watch/${encodeURIComponent(videoId)}`);
     if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
   };
-  useEffect(() => {
-    fetch("/api/channel/videos?max=50")
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        const videos = Array.isArray(data?.videos) ? data.videos : [];
-        if (!videos.length) return;
-        const realVideos = uniqueVideos(videos.map(normalizeVideo));
-        setVideoCatalog(realVideos);
-      })
-      .catch(() => {});
-  }, []);
   useEffect(() => {
     fetch('/api/auth/user?auth_build=' + encodeURIComponent(AUTH_BUILD), { credentials: 'include', cache: 'no-store' }).then(r=>r.ok?r.json():null).then(d=>{
       if(d && !d.isGuest && d.id) setAuthUser(d);
@@ -422,9 +405,18 @@ function App() {
     if (path === "/marketplace" || path.startsWith("/marketplace/")) return "marketplace";
     if (path === "/workspace") return "workspace";
     if (path === "/marketplace" || path.startsWith("/marketplace/")) return "marketplace";
+    if (path === "/pricing") return "pricing";
+    if (path === "/ads" || path.startsWith("/ads/")) return "ads";
+    if (path === "/channel" || path.startsWith("/channel/")) return "channel";
     if (path === "/home") return "home";
     return "home";
   }); // watch, home, shorts, teacher, memory, chat, community, marketplace, sell, studio, pricing, profile
+  useEffect(() => {
+    if (authLoading || activeTab !== "watch" || !isGuest) return;
+    setActiveTab("home");
+    setShowSignUpBlock(true);
+    window.history.replaceState({}, "", "/");
+  }, [authLoading, activeTab, isGuest]);
   const [sidebarOpen, setSidebarOpen] = useState(true); // Desktop sidebar toggle
   const [mobileDrawerOpen, setMobileDrawerOpen] = useState(false); // Mobile drawer slide-over toggle
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false); // REMOVED — popup off
@@ -467,7 +459,9 @@ function App() {
       const next = [entry, ...filtered].slice(0,100);
       try { localStorage.setItem("alphatekx_watched_history", JSON.stringify(next)); } catch {}
       // also fire to server for real-time sync
-      fetch("/api/history/save", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ videoId: entry.youtubeId, title: entry.title }) }).catch(()=>{});
+      if (authUser) {
+        fetch("/api/history/save", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify(entry) }).catch(()=>{});
+      }
       return next;
     });
   };
@@ -500,6 +494,24 @@ function App() {
     const saved = localStorage.getItem("alphatekx_api_key") || "";
     if (saved) setByokStatus("Key saved ✓");
   }, []);
+  useEffect(() => {
+    if (!authUser || authUser.isGuest) return;
+    fetch("/api/history?kind=watched", { credentials: "include", cache: "no-store" })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (!Array.isArray(data?.history) || !data.history.length) return;
+        const merged = [...data.history.map(normalizeVideo), ...watchedHistory];
+        const seen = new Set();
+        const next = merged.filter(item => {
+          const id = item.youtubeId || item.id;
+          if (!id || seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        }).slice(0, 100);
+        setWatchedHistory(next);
+      })
+      .catch(() => {});
+  }, [authUser?.id]);
   const saveByokKey = (value) => {
     setByokKey(value);
     try {
@@ -507,6 +519,10 @@ function App() {
         localStorage.setItem("alphatekx_api_key", value.trim());
         setApiKey(value.trim());
         setByokStatus("Key saved ✓");
+        fetch("/api/user/save-key", {
+          method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+          body: JSON.stringify({ user_id: billingUserId(), openai_key: value.trim() }),
+        }).catch(() => {});
       } else {
         localStorage.removeItem("alphatekx_api_key");
         setApiKey("");
@@ -581,6 +597,23 @@ function App() {
   const handleAiSend = async () => {
     const q = aiChatInput.trim();
     if (!q) return;
+    try {
+      const [keyResponse, subscriptionResponse] = await Promise.all([
+        fetch(`/api/user/get-key?user_id=${encodeURIComponent(billingUserId())}`, { credentials: "include" }),
+        fetch(`/api/subscription/status?user_id=${encodeURIComponent(billingUserId())}`, { credentials: "include" }),
+      ]);
+      const keyData = await keyResponse.json().catch(() => ({}));
+      const subscriptionData = await subscriptionResponse.json().catch(() => ({}));
+      if (!keyData.hasOpenAI && !keyData.hasGemini && !subscriptionData.isPro) {
+        setShowPaywall(true);
+        showToast("Bring your own key or upgrade to Pro to use Workspace AI");
+        return;
+      }
+    } catch (error) {
+      showToast(error.message || "Unable to verify Workspace AI access");
+      return;
+    }
+    if (!(await openAiFeature("vibe_code"))) return;
     setAiChatMessages(prev => [...prev, { role: "user", text: q }]);
     setAiChatInput("");
     setBuilding(true);
@@ -609,6 +642,7 @@ function App() {
         setWatchPanelOpen(true);
         setActiveTab("workspace");
       }
+      await incrementAiUsage("vibe_code");
       showToast(files.length ? `🤖 Built ${files.length} file${files.length > 1 ? "s" : ""} → Preview` : "🤖 AI workspace ready");
     } catch (e) {
       setAiChatMessages(prev => [...prev, { role: "ai", text: `AI request failed: ${e.message}` }]);
@@ -932,8 +966,11 @@ function App() {
   }, [codeValue, activeCheckpoint]);
 
   // === NEW: Channel / Upload / Profile / Categories (preserve design) ===
-  // PROMPT #7: Official ALPHATEKX channel as default
-  const [activeChannelId, setActiveChannelId] = useState("UCGm89Z31SYxEU9PEQ-p3cNA");
+  // The channel view follows the signed-in user's YouTube channel.
+  const [activeChannelId, setActiveChannelId] = useState(() => {
+    const match = window.location.pathname.match(/^\/channel\/([^/]+)/);
+    return match ? decodeURIComponent(match[1]) : "";
+  });
   const [channelData, setChannelData] = useState(null);
   const [channelUploads, setChannelUploads] = useState([]);
   const [isChannelLoading, setIsChannelLoading] = useState(false);
@@ -949,6 +986,10 @@ function App() {
   const [uploadCategory, setUploadCategory] = useState("Tech");
   const [uploadThumbnail, setUploadThumbnail] = useState("");
   const [uploadVideoUrl, setUploadVideoUrl] = useState("");
+  const [uploadVideoId, setUploadVideoId] = useState("");
+  const [uploadPreviewTitle, setUploadPreviewTitle] = useState("");
+  const [uploadPreviewThumbnail, setUploadPreviewThumbnail] = useState("");
+  const [uploadLinkError, setUploadLinkError] = useState("");
   const [uploadDuration, setUploadDuration] = useState("");
   const [isUploading, setIsUploading] = useState(false);
   // Profile editable
@@ -956,6 +997,53 @@ function App() {
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileForm, setProfileForm] = useState({ name:"", handle:"", bio:"", avatar:"", banner:"", email:"" });
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [adsForm, setAdsForm] = useState({ company_name: "", title: "", video_url: "", thumbnail_url: "", link_url: "", days: 1 });
+  const [adsDuration, setAdsDuration] = useState(null);
+  const [adsError, setAdsError] = useState("");
+  const [adsLoading, setAdsLoading] = useState(false);
+  const [myAds, setMyAds] = useState([]);
+  const [createdAd, setCreatedAd] = useState(null);
+  const adsPriceNgn = Number(adsForm.days || 1) * 3000;
+  const loadMyAds = async () => {
+    if (!authUser || isGuest) return;
+    const response = await fetch(`/api/ads/my-ads?user_id=${encodeURIComponent(authUser.id)}`, { credentials: "include", cache: "no-store" });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) setMyAds(Array.isArray(data.ads) ? data.ads : []);
+  };
+  const handleAdVideoUrl = (value) => {
+    setAdsForm(current => ({ ...current, video_url: value }));
+    setAdsDuration(null);
+    if (!value.trim()) return;
+    const video = document.createElement("video");
+    video.preload = "metadata";
+    video.onloadedmetadata = () => setAdsDuration(Number.isFinite(video.duration) ? video.duration : null);
+    video.onerror = () => setAdsError("Use a publicly reachable video URL.");
+    video.src = value.trim();
+  };
+  const createAdCampaign = async (event) => {
+    event.preventDefault();
+    if (isGuest) { setShowSignUpBlock(true); return; }
+    setAdsError(""); setAdsLoading(true);
+    try {
+      if (adsDuration !== null && (adsDuration < 60 || adsDuration > 120)) throw new Error("Video must be 1-2 minutes");
+      const response = await fetch("/api/ads/create", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ ...adsForm, destination_url: adsForm.link_url, duration_seconds: adsDuration, days: Math.min(30, Math.max(1, Number(adsForm.days) || 1)), user_id: authUser.id }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || data.message || "Unable to create ad");
+      setCreatedAd(data);
+      if (!data.authorization_url) throw new Error("Paystack is unavailable");
+      window.location.href = data.authorization_url;
+    } catch (error) { setAdsError(error.message || "Ad setup failed"); }
+    finally { setAdsLoading(false); }
+  };
+  useEffect(() => { if (activeTab === "ads") loadMyAds().catch(() => {}); }, [activeTab, authUser?.id]);
+  const [boostStats, setBoostStats] = useState(null);
+  const loadBoostStats = async () => {
+    if (!authUser || authUser.isGuest) { setShowSignUpBlock(true); return; }
+    const response = await fetch(`/api/creator/stats?creator_id=${encodeURIComponent(authUser.id)}`, { credentials: "include", cache: "no-store" });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) { showToast(data.error || "Boost stats unavailable"); return; }
+    setBoostStats(data);
+  };
 
   // Persist history to localStorage whenever it changes
   useEffect(() => {
@@ -967,7 +1055,7 @@ function App() {
 
   // Load history from server on mount — merge with localStorage (server newest first)
   useEffect(() => {
-    fetch("/api/search/history").then(r=>r.ok?r.json():null).then(data=>{
+    fetch("/api/search/history", { credentials: "include" }).then(r=>r.ok?r.json():null).then(data=>{
       if (data && Array.isArray(data.history) && data.history.length>0) {
         // Merge server + local, dedupe by youtubeId, keep newest
         const merged = [...data.history.map(normalizeVideo)];
@@ -982,6 +1070,24 @@ function App() {
     }).catch(()=>{});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => {
+    if (!authUser || authUser.isGuest) return;
+    const sync = async () => {
+      const localWatched = watchedHistory.slice(0, 100);
+      await Promise.all(localWatched.map(entry => fetch("/api/history/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(entry),
+      }).catch(() => null)));
+      const response = await fetch("/api/search/history", { credentials: "include", cache: "no-store" });
+      if (response.ok) {
+        const data = await response.json();
+        if (Array.isArray(data.history) && data.history.length) setSearchHistory(data.history.map(normalizeVideo));
+      }
+    };
+    sync().catch(() => {});
+  }, [authUser?.id]);
 
   const persistSearchHistory = (videos, query) => {
     if (!videos || videos.length===0) return;
@@ -1009,7 +1115,7 @@ function App() {
   useEffect(() => {
     fetch("/api/categories").then(r=>r.ok?r.json():null).then(d=>{ if(d && Array.isArray(d.categories)) setCategories(d.categories); }).catch(()=>{});
     // watch later sync
-    fetch("/api/watch-later").then(r=>r.ok?r.json():null).then(d=>{
+    fetch("/api/watch-later", { credentials: "include" }).then(r=>r.ok?r.json():null).then(d=>{
       if(d && Array.isArray(d.videos) && d.videos.length>0){
         setWatchLater(d.videos);
         try{ localStorage.setItem("alphatekx_watch_later", JSON.stringify(d.videos)); }catch{}
@@ -1065,56 +1171,74 @@ function App() {
   useEffect(() => {
     if (activeTab !== "channel") return;
     setIsChannelLoading(true);
-    const isOfficial = activeChannelId === OFFICIAL_CHANNEL_ID || activeChannelId.toLowerCase() === "alphatekx" || activeChannelId.toLowerCase() === "risewithalphatekx" || activeChannelId.toLowerCase().includes("ucgm89z31syxeu9peq");
     const channelFetch = fetch(`/api/channel/${encodeURIComponent(activeChannelId)}`).then(r=>r.ok?r.json():null);
-    const videosFetch = isOfficial ? fetch(`/api/channel/videos?max=50`).then(r=>r.ok?r.json():null).catch(()=>null) : Promise.resolve(null);
-    Promise.all([channelFetch, videosFetch]).then(([d, vData]) => {
+    Promise.all([channelFetch]).then(([d]) => {
       if(d && d.channel){
         setChannelData(d.channel);
-        let uploads = Array.isArray(d.uploads)?d.uploads:[];
-        if(vData && Array.isArray(vData.videos) && vData.videos.length>0){
-          const seen = new Set(uploads.map(u=>u.youtubeId||u.id));
-          const official = vData.videos.filter(v=>!seen.has(v.youtubeId||v.id)).map(v=>({...v, channelId: OFFICIAL_CHANNEL_ID, channelName: OFFICIAL_CHANNEL_NAME}));
-          uploads = [...official, ...uploads];
-        }
-        setChannelUploads(uploads);
-      } else if(vData && Array.isArray(vData.videos)){
-        // fallback if channel fetch failed but videos succeeded (official)
-        fetch(`/api/channel`).then(r=>r.ok?r.json():null).then(cd=>{ if(cd && cd.channel) setChannelData(cd.channel); });
-        setChannelUploads(vData.videos.map(v=>({...v, channelId: OFFICIAL_CHANNEL_ID, channelName: OFFICIAL_CHANNEL_NAME})));
+        setChannelUploads(Array.isArray(d.uploads) ? d.uploads : []);
       }
       setIsChannelLoading(false);
     }).catch(()=> setIsChannelLoading(false));
   }, [activeTab, activeChannelId]);
+  useEffect(() => {
+    if (!authUser || isGuest || !activeChannelId) return;
+    try { setChannelSubscribed(localStorage.getItem(`alphatekx_sub_${authUser.id || authUser.email}_${activeChannelId}`) === "1"); } catch {}
+  }, [activeChannelId, authUser?.id, authUser?.email, isGuest]);
   const navigateToChannel = (channelId) => {
-    let cid = channelId || "codecraft";
+    let cid = channelId || authUser?.channelId || profileData?.channelId || "";
+    if (!cid) {
+      showToast("No YouTube channel is connected to this account");
+      setActiveTab("channel");
+      return;
+    }
     if (/^UC[a-zA-Z0-9_-]{22}$/.test(cid)) {
       setActiveChannelId(cid);
     } else {
       cid = slugify(cid) || "codecraft";
-      if (cid === "risewithalphatekx" || cid === "alphatekx" || cid === "alphatekx-dev") cid = OFFICIAL_CHANNEL_ID;
       setActiveChannelId(cid);
     }
     setActiveTab("channel");
+    window.history.pushState({}, "", `/channel/${encodeURIComponent(cid)}`);
     setChannelSubscribed(false);
     if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
   };
   const handleUploadSubmit = async (e) => {
     e.preventDefault();
-    if (!uploadTitle.trim() || uploadTitle.trim().length < 3) { showToast("Title must be at least 3 characters"); return; }
+    if (!uploadVideoId) { setUploadLinkError("Invalid YouTube link - paste full youtube.com or youtu.be link"); return; }
     setIsUploading(true);
     try {
-      const res = await fetch("/api/upload", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ title: uploadTitle, description: uploadDesc, category: uploadCategory, channelId: activeChannelId || profileForm.handle?.replace("@","") || "codecraft", channelName: profileData?.name || channelData?.name || "Alphatekx Dev", thumbnailUrl: uploadThumbnail, videoUrl: uploadVideoUrl, duration: uploadDuration || "10:00" }) });
+      const res = await fetch("/api/upload", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify({ videoId: uploadVideoId, title: uploadPreviewTitle || `YouTube Video - ${uploadVideoId}`, thumbnail: uploadPreviewThumbnail || `https://img.youtube.com/vi/${uploadVideoId}/hqdefault.jpg`, originalUrl: uploadVideoUrl }) });
       const data = await res.json();
       if (!res.ok || !data.success) throw new Error(data.error || "Upload failed");
-      showToast(`Uploaded "${data.video.title}" to ${data.video.channelName}! 🎉`);
+      showToast("Video live in Alphatekx Stream ✓");
       setUploadTitle(""); setUploadDesc(""); setUploadThumbnail(""); setUploadVideoUrl(""); setUploadDuration("");
-      // refresh channel uploads if on that channel
-      setChannelUploads(prev => [data.video, ...prev]);
-      setActiveChannelId(data.video.channelId);
-      setActiveTab("channel");
+      setUploadVideoId(""); setUploadPreviewTitle(""); setUploadPreviewThumbnail(""); setUploadLinkError("");
+      setSearchResults(prev => uniqueVideos([data.video, ...prev]));
+      setActiveTab("home");
     } catch(err){ showToast(err.message || "Upload failed"); }
     finally { setIsUploading(false); }
+  };
+  const handleUploadLinkChange = async (value) => {
+    setUploadVideoUrl(value);
+    const match = value.match(/(?:youtube\.com\/(?:watch\?v=|shorts\/|embed\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})(?:[?&#/]|$)/);
+    if (!match) {
+      setUploadVideoId("");
+      setUploadLinkError(value ? "Invalid YouTube link - paste full youtube.com or youtu.be link" : "");
+      return;
+    }
+    const id = match[1];
+    setUploadVideoId(id);
+    setUploadLinkError("");
+    setUploadPreviewThumbnail(`https://img.youtube.com/vi/${id}/hqdefault.jpg`);
+    setUploadPreviewTitle(`YouTube Video - ${id}`);
+    try {
+      const response = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${id}`)}&format=json`);
+      if (response.ok) {
+        const metadata = await response.json();
+        if (metadata.title) setUploadPreviewTitle(metadata.title);
+        if (metadata.thumbnail_url) setUploadPreviewThumbnail(metadata.thumbnail_url);
+      }
+    } catch {}
   };
   const handleSaveProfile = async (e) => {
     e.preventDefault();
@@ -1135,14 +1259,14 @@ function App() {
     const exists = watchLater.some(v=> (v.youtubeId||v.id)===id);
     if (exists) {
       // remove
-      const res = await fetch(`/api/watch-later/${encodeURIComponent(id)}`, { method:"DELETE" });
+      const res = await fetch(`/api/watch-later/${encodeURIComponent(id)}`, { method:"DELETE", credentials:"include" });
       if (res.ok) {
         setWatchLater(prev => prev.filter(v=> (v.youtubeId||v.id)!==id));
         showToast("Removed from Watch Later");
       }
     } else {
       const payload = { ...video, youtubeId: id, platform: video.platform || "youtube", platformMeta: video.platformMeta, title: video.title, channelName: video.channelName || video.channel, thumbnailUrl: video.thumbnailUrl || video.img, views: video.views, duration: video.duration };
-      const res = await fetch("/api/watch-later", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify(payload) });
+      const res = await fetch("/api/watch-later", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify(payload) });
       const data = await res.json().catch(()=>null);
       if (res.ok) {
         setWatchLater(data?.videos || [...watchLater, payload]);
@@ -1155,7 +1279,7 @@ function App() {
     }
   };
   const removeWatchLater = async (id) => {
-    const res = await fetch(`/api/watch-later/${encodeURIComponent(id)}`, { method:"DELETE" });
+    const res = await fetch(`/api/watch-later/${encodeURIComponent(id)}`, { method:"DELETE", credentials:"include" });
     if (res.ok) {
       const data = await res.json().catch(()=>null);
       if (data?.videos) setWatchLater(data.videos); else setWatchLater(prev=> prev.filter(v=> (v.youtubeId||v.id)!==id));
@@ -1177,13 +1301,14 @@ function App() {
   const [shortsCommentText, setShortsCommentText] = useState("");
   const [shortsComments, setShortsComments] = useState({});
   const [videoComments, setVideoComments] = useState([]);
+  const [videoCommentInput, setVideoCommentInput] = useState("");
   const [commentsLoading, setCommentsLoading] = useState(false);
   const [commentsOpen, setCommentsOpen] = useState(false);
   const shortsLoadingMoreRef = useRef(false);
   const shortsScrollerRef = useRef(null);
   const shortsSlideRefs = useRef([]);
   const scrollToShort = (index) => {
-    const next = Math.max(0, Math.min(index, shortsVideos.length - 1));
+    const next = Math.max(0, Math.min(index, shortsVideos.filter(isShortFormVideo).length - 1));
     shortsSlideRefs.current[next]?.scrollIntoView({ behavior: "smooth", block: "nearest" });
     setShortsIndex(next);
   };
@@ -1195,26 +1320,40 @@ function App() {
     if (shortsLoadingMoreRef.current || (!reset && !shortsPageToken)) return;
     shortsLoadingMoreRef.current = true;
     try {
-      const token = reset ? "" : shortsPageToken;
-      const response = await fetch(`/api/shorts?limit=12${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`);
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Shorts unavailable");
-      const incoming = uniqueVideos((data.videos || []).map(normalizeVideo)).filter(video => {
-        const id = video.youtubeId || video.id;
-        if (!id || shortsIdsRef.current.has(id)) return false;
-        shortsIdsRef.current.add(id);
-        return true;
-      });
+      if (reset) shortsIdsRef.current.clear();
+      let token = reset ? "" : shortsPageToken;
+      let nextToken = token;
+      const incoming = [];
+      const pagesToLoad = reset ? 3 : 1;
+      for (let page = 0; page < pagesToLoad; page += 1) {
+        const response = await fetch(`/api/shorts?limit=25${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`, { cache: "no-store" });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.error || "Shorts unavailable");
+        for (const video of uniqueVideos((data.videos || []).map(normalizeVideo))) {
+          const id = video.youtubeId || video.id;
+          if (id && !shortsIdsRef.current.has(id)) {
+            shortsIdsRef.current.add(id);
+            incoming.push(video);
+          }
+        }
+        nextToken = data.nextPageToken || "";
+        if (!nextToken) break;
+        token = nextToken;
+      }
       if (reset) setShortsIndex(0);
       setShortsVideos(prev => reset ? incoming : uniqueVideos([...prev, ...incoming]));
-      setShortsPageToken(data.nextPageToken || "");
+      setShortsPageToken(nextToken);
     } catch (error) {
       if (reset) setShortsVideos([]);
     } finally {
       shortsLoadingMoreRef.current = false;
     }
   };
-  const currentShort = shortsVideos[shortsIndex] || shortsVideos[0];
+  const shortFeedVideos = shortsVideos.filter(isShortFormVideo);
+  const currentShort = shortFeedVideos[shortsIndex] || shortFeedVideos[0] || DEFAULT_VIDEO;
+  useEffect(() => {
+    if (activeTab === "shorts") loadShortsPage(true);
+  }, [activeTab]);
   const [miniPlayerActive, setMiniPlayerActive] = useState(false); // REMOVED — no float
   const [isMiniPlaying, setIsMiniPlaying] = useState(true);
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
@@ -1311,26 +1450,73 @@ function App() {
       description: "Demonstrating Pidgin, Yoruba, Igbo and Hausa translation models for video subtitle localization." 
     }
   ]);
+  const [activeVideo, setActiveVideo] = useState(videoCatalog[0]);
+  const [boostFeedTab, setBoostFeedTab] = useState("foryou");
+  const [boostFeedCursor, setBoostFeedCursor] = useState(0);
+  const [boostFeedLoading, setBoostFeedLoading] = useState(false);
+  const loadBoostFeed = async (tab = boostFeedTab, reset = false) => {
+    if (boostFeedLoading) return;
+    setBoostFeedLoading(true);
+    try {
+      const endpoint = tab === "following" ? "/api/feed/following" : `/api/feed/${tab}?limit=20&cursor=${reset ? 0 : boostFeedCursor}`;
+      const response = await fetch(endpoint, { credentials: "include", cache: "no-store" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Boost feed unavailable");
+      const incoming = uniqueVideos((data.videos || []).map(normalizeVideo));
+      if (reset || tab !== "foryou") setVideoCatalog(incoming.length ? incoming : videoCatalog);
+      else if (incoming.length) setVideoCatalog(previous => uniqueVideos([...previous, ...incoming]));
+      setBoostFeedCursor(Number(data.nextCursor || 0));
+    } catch (error) {
+      if (tab !== "following") showToast(error.message || "Boost feed unavailable");
+    } finally { setBoostFeedLoading(false); }
+  };
 
   // Load fresh recommendations so Home is not pinned to the starter catalog.
   useEffect(() => {
+    const rotateCatalog = (videos) => {
+      if (videos.length < 2) return videos;
+      let cursor = 0;
+      try {
+        cursor = Number(localStorage.getItem("alphatekx_feed_cursor") || 0) % videos.length;
+        localStorage.setItem("alphatekx_feed_cursor", String(cursor + 1));
+      } catch {}
+      return [...videos.slice(cursor), ...videos.slice(0, cursor)];
+    };
     fetch(`/api/feed?refresh=${Date.now()}`, { cache: "no-store" }).then(r=>r.ok?r.json():null).then(d=>{
       const real = uniqueVideos(Array.isArray(d?.videos) ? d.videos.map(normalizeVideo) : []);
       if (!real.length) return;
-      setVideoCatalog(real);
+      setVideoCatalog(rotateCatalog(real));
     }).catch(()=>{});
     loadShortsPage(true);
     const refresh = setInterval(() => {
       fetch(`/api/feed?refresh=${Date.now()}`, { cache: "no-store" }).then(r=>r.ok?r.json():null).then(d => {
         const real = uniqueVideos(Array.isArray(d?.videos) ? d.videos.map(normalizeVideo) : []);
-        if (real.length) setVideoCatalog(real);
+        if (real.length) setVideoCatalog(rotateCatalog(real));
       }).catch(()=>{});
-    }, 15 * 60 * 1000);
+    }, 5 * 60 * 1000);
     return () => clearInterval(refresh);
   }, []);
+  useEffect(() => { if (activeTab === "home") loadBoostFeed(boostFeedTab, true); }, [boostFeedTab, activeTab]);
+  const countedViewsRef = useRef(new Set());
+  useEffect(() => {
+    if (activeTab !== "watch" || isGuest) return;
+    const videoId = activeVideo?.youtubeId || activeVideo?.id;
+    if (!videoId) return;
+    const timer = setInterval(() => {
+      if (countedViewsRef.current.has(videoId)) return;
+      const player = ytPlayerRef.current;
+      if (!player || typeof player.getCurrentTime !== "function" || typeof player.getDuration !== "function") return;
+      const current = Number(player.getCurrentTime());
+      const duration = Number(player.getDuration());
+      if (current >= 30 && duration > 0) {
+        countedViewsRef.current.add(videoId);
+        fetch("/api/video/view", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ video_id: videoId, watch_percent: Math.round(Math.min(100, current / duration * 100)) }) }).catch(() => {});
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [activeTab, activeVideo?.youtubeId, activeVideo?.id, isGuest]);
 
   // Active Video State — also track watched history real-time + real likes/views (no mock)
-  const [activeVideo, setActiveVideo] = useState(videoCatalog[0]);
   useEffect(() => {
     const videoId = activeVideo?.youtubeId || activeVideo?.id || "default";
     try {
@@ -1390,6 +1576,21 @@ function App() {
     }, 5000);
     return () => clearInterval(timer);
   }, [activeTab, activeVideo?.youtubeId, activeVideo?.id, activeVideo?.title]);
+  useEffect(() => {
+    if (activeTab !== "watch" || !activeVideo) return;
+    const videoId = activeVideo.youtubeId || activeVideo.id;
+    let progress = 0;
+    try {
+      const history = JSON.parse(localStorage.getItem("alphatekx_history") || "[]");
+      progress = Number(history.find(item => item.videoId === videoId)?.progress || 0);
+    } catch {}
+    if (!progress) return;
+    const timer = setTimeout(() => {
+      try { ytPlayerRef.current?.seekTo?.(progress, true); } catch {}
+      try { iframeRef.current?.contentWindow?.postMessage(JSON.stringify({ event: "command", func: "seekTo", args: [progress, true] }), "*"); } catch {}
+    }, 900);
+    return () => clearTimeout(timer);
+  }, [activeTab, activeVideo?.youtubeId, activeVideo?.id]);
   // Notebook auto-save/load per video
   useEffect(() => {
     const vid = activeVideo?.youtubeId || activeVideo?.id || "default";
@@ -1410,6 +1611,14 @@ function App() {
     } finally {
       setCommentsLoading(false);
     }
+  };
+  const submitVideoComment = async () => {
+    const text = videoCommentInput.trim();
+    if (!text) return;
+    if (isGuest) { setShowSignUpBlock(true); return; }
+    await handleSendCommunityMessage(text);
+    setVideoCommentInput("");
+    await loadVideoComments(activeVideo?.youtubeId || activeVideo?.id);
   };
   useEffect(() => {
     if (commentsOpen) loadVideoComments(activeVideo?.youtubeId || activeVideo?.id);
@@ -1491,16 +1700,67 @@ function App() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [likeCount, setLikeCount] = useState(0); // Will fetch real from API
   const [videoLiked, setVideoLiked] = useState(false);
-  const toggleVideoLike = () => {
+  useEffect(() => {
+    const videoId = activeVideo?.youtubeId || activeVideo?.id;
+    const userId = authUser?.id || authUser?.email;
+    if (!videoId || !userId) return;
+    setVideoLiked(false);
+    setLikeCount(Number(activeVideo?.likeCount || 0));
+    setIsSaved(watchLater.some(v => (v.youtubeId || v.id) === videoId));
+    const channelId = activeVideo?.channelId || channelIdFromVideo(activeVideo);
+    fetch(`/api/video/${encodeURIComponent(videoId)}/interaction`, { credentials: "include", cache: "no-store" })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (!data) return;
+        setVideoLiked(Boolean(data.liked));
+        if (Number.isFinite(Number(data.likeCount))) setLikeCount(Number(data.likeCount));
+      })
+      .catch(() => {});
+    if (channelId) {
+      fetch(`/api/channel/${encodeURIComponent(channelId)}/subscription`, { credentials: "include", cache: "no-store" })
+        .then(response => response.ok ? response.json() : null)
+        .then(data => { if (data) setIsSubscribed(Boolean(data.subscribed)); })
+        .catch(() => {});
+    }
+  }, [activeVideo?.youtubeId, activeVideo?.id, activeVideo?.channelId, authUser?.id, authUser?.email, watchLater]);
+  const toggleVideoLike = async () => {
     if (isGuest) {
       setShowSignUpBlock(true);
       return;
     }
-    setVideoLiked(value => {
-      const next = !value;
-      setLikeCount(count => Math.max(0, count + (next ? 1 : -1)));
-      return next;
-    });
+    const videoId = activeVideo?.youtubeId || activeVideo?.id;
+    if (!videoId) return;
+    try {
+      const response = await fetch(`/api/video/${encodeURIComponent(videoId)}/like`, { method: "POST", credentials: "include" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Like failed");
+      setVideoLiked(Boolean(data.liked));
+      if (Number.isFinite(Number(data.likeCount))) setLikeCount(Number(data.likeCount));
+      try { localStorage.setItem(`alphatekx_like_${authUser?.id || authUser?.email}_${videoId}`, data.liked ? "1" : "0"); } catch {}
+    } catch (error) { showToast(error.message || "Like unavailable"); }
+  };
+  const toggleChannelSubscription = async () => {
+    if (isGuest) { setShowSignUpBlock(true); return; }
+    const channelId = activeVideo?.channelId || channelIdFromVideo(activeVideo);
+    if (!channelId) return;
+    try {
+      const response = await fetch(`/api/channel/${encodeURIComponent(channelId)}/subscribe`, { method: "POST", credentials: "include" });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Subscription failed");
+      setIsSubscribed(Boolean(data.subscribed));
+      try { localStorage.setItem(`alphatekx_sub_${authUser?.id || authUser?.email}_${channelId}`, data.subscribed ? "1" : "0"); } catch {}
+      showToast(data.subscribed ? "Subscribed ✓" : "Unsubscribed");
+    } catch (error) { showToast(error.message || "Subscription unavailable"); }
+  };
+  const toggleVideoSave = async () => {
+    if (isGuest) { setShowSignUpBlock(true); return; }
+    if (!activeVideo) return;
+    try {
+      await toggleWatchLater(activeVideo);
+      setIsSaved(previous => !previous);
+    } catch (error) {
+      showToast(error.message || "Save unavailable");
+    }
   };
   const [userLiked, setUserLiked] = useState(false);
   const [isSaved, setIsSaved] = useState(false);
@@ -1549,7 +1809,7 @@ function App() {
             try { localStorage.setItem("alphatekx_last_search_results", JSON.stringify(vids)); } catch {}
             persistSearchHistory(vids, searchQuery);
             // fire-and-forget POST to server for persistent history
-            fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ videos: vids, searchedQuery: searchQuery }) }).catch(()=>{});
+            fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify({ videos: vids, searchedQuery: searchQuery }) }).catch(()=>{});
           }
           setSearchTab("results");
         })
@@ -1566,7 +1826,7 @@ function App() {
           rememberSearch(searchQuery);
           try { localStorage.setItem("alphatekx_last_search_results", JSON.stringify(vids)); } catch {}
           persistSearchHistory(vids, searchQuery);
-          fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ videos: vids, searchedQuery: searchQuery }) }).catch(()=>{});
+          fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify({ videos: vids, searchedQuery: searchQuery }) }).catch(()=>{});
         })
         .finally(() => {
           setIsSearching(false);
@@ -1722,6 +1982,17 @@ function App() {
     setSellLoading(true);
     setSellError("");
     try {
+      const usageResponse = await fetch("/api/market/check-publish", {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({ user_id: billingUserId() }),
+      });
+      const usageData = await usageResponse.json().catch(() => ({}));
+      if (usageResponse.status === 429 || usageData.allowed === false) {
+        setUsageLockFeature("market");
+        setShowPaywall(true);
+        return;
+      }
+      if (!usageResponse.ok) throw new Error(usageData.error || "Unable to check publishing limit");
       const response = await fetch("/api/marketplace/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -1730,6 +2001,10 @@ function App() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Unable to list product");
+      await fetch("/api/market/increment", {
+        method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+        body: JSON.stringify({ user_id: billingUserId() }),
+      });
       setSellSheetOpen(false);
       setSellForm({ name: "", description: "", price: "", category: "app", sellerEmail: "", fileUrl: "", tags: "", thumbnailUrl: "", fileName: "" });
       setSellThumbnailPreview("");
@@ -1829,6 +2104,10 @@ function App() {
 
   // Superpower 10: Monetization Pro Subscription
   const [isProUser, setIsProUser] = useState(false);
+  const [subscriptionInfo, setSubscriptionInfo] = useState(null);
+  const [aiUsage, setAiUsage] = useState({});
+  const [usageLockFeature, setUsageLockFeature] = useState("");
+  const [showByokModal, setShowByokModal] = useState(false);
   const [checkoutProduct, setCheckoutProduct] = useState(null);
   const [toastMessage, setToastMessage] = useState(null);
   const [cartCount, setCartCount] = useState(0);
@@ -1843,6 +2122,50 @@ function App() {
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
+  };
+  const billingUserId = () => authUser?.id || authUser?.email || (() => {
+    try {
+      let id = localStorage.getItem("alphatekx_user_id");
+      if (!id) { id = `anon_${crypto.randomUUID?.() || Date.now()}`; localStorage.setItem("alphatekx_user_id", id); }
+      return id;
+    } catch { return "anonymous"; }
+  })();
+  const refreshSubscription = async () => {
+    if (!authUser) {
+      setSubscriptionInfo(null);
+      setIsProUser(false);
+      return { authenticated: false, isPro: false };
+    }
+    const userId = billingUserId();
+    const response = await fetch(`/api/subscription/status?user_id=${encodeURIComponent(userId)}`, { credentials: "include" });
+    const data = await response.json().catch(() => ({}));
+    if (response.ok) { setSubscriptionInfo(data); setIsProUser(Boolean(data.isPro)); }
+    return data;
+  };
+  const checkAiUsage = async (feature) => {
+    const userId = billingUserId();
+    const response = await fetch("/api/ai/check-and-use", {
+      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+      body: JSON.stringify({ user_id: userId, feature }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (data.count != null) setAiUsage(previous => ({ ...previous, [feature]: data.count }));
+    if (response.status === 429 || data.allowed === false) { setUsageLockFeature(feature); setShowPaywall(true); return false; }
+    if (!response.ok) throw new Error(data.error || "Unable to check AI usage");
+    return true;
+  };
+  const incrementAiUsage = async (feature) => {
+    const response = await fetch("/api/ai/increment", {
+      method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include",
+      body: JSON.stringify({ user_id: billingUserId(), feature }),
+    });
+    if (!response.ok) throw new Error("Unable to save AI usage");
+    const data = await response.json().catch(() => ({}));
+    if (data.count != null) setAiUsage(previous => ({ ...previous, [feature]: data.count }));
+  };
+  const openAiFeature = async (feature) => {
+    try { return await checkAiUsage(feature); }
+    catch (error) { showToast(error.message || "AI usage check failed"); return false; }
   };
   const toggleLandscape = async () => {
     const next = !landscapeMode;
@@ -1905,12 +2228,6 @@ function App() {
       showToast(error.message || "Unable to start checkout");
     }
   };
-  const refreshSubscription = async () => {
-    const response = await fetch("/api/subscription/status", { credentials: "include" });
-    const data = await response.json().catch(() => ({}));
-    if (response.ok) setIsProUser(Boolean(data?.isPro));
-    return data;
-  };
   useEffect(() => {
     refreshSubscription().catch(() => {});
   }, [authUser?.id]);
@@ -1920,6 +2237,24 @@ function App() {
     const reference = params.get("trxref") || params.get("reference");
     if (!reference) {
       showToast("Payment returned without a transaction reference");
+      return;
+    }
+    if (window.location.pathname === "/ads") {
+      fetch(`/api/ads/my-ads?user_id=${encodeURIComponent(authUser.id)}`, { credentials: "include", cache: "no-store" })
+        .then(response => response.ok ? response.json() : Promise.reject(new Error("Unable to load ad campaign")))
+        .then(data => {
+          const campaign = (data.ads || []).find(ad => ad.paystack_reference === reference);
+          if (!campaign) throw new Error("Ad campaign was not found for this payment");
+          return fetch("/api/ads/verify-payment", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ campaign_id: campaign.id, reference }) });
+        })
+        .then(async response => {
+          const data = await response.json().catch(() => ({}));
+          if (!response.ok || !data.success) throw new Error(data.error || "Ad payment verification failed");
+          showToast("Ad payment confirmed — your campaign is queued");
+          window.history.replaceState({}, "", "/ads");
+          await loadMyAds();
+        })
+        .catch(error => showToast(error.message || "Ad payment verification failed"));
       return;
     }
     fetch(`/api/paystack/verify?reference=${encodeURIComponent(reference)}`, { credentials: "include" })
@@ -1968,6 +2303,9 @@ function App() {
       if (searchSuggestionsOpen) setSearchSuggestionsOpen(false);
       if (activeTab !== "watch") {
         setMiniPlayerActive(false);
+        if (activeTab === "home" && boostFeedTab === "foryou" && scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 600) {
+          loadBoostFeed("foryou");
+        }
         return;
       }
       if (mainPlayerRef.current) {
@@ -2137,7 +2475,7 @@ function App() {
     setChatMessageInput("");
     setSummaryInputChat("");
     try {
-      const res = await fetch("/api/community/send", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ message: msgText, timestampInVideo: timestamp || "", channel: activeChannel, userName: "You (Pro Member)", videoId: activeVideo?.id }) });
+      const res = await fetch("/api/community/send", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify({ message: msgText, timestampInVideo: timestamp || "", channel: activeChannel, userName: "You", videoId: activeVideo?.youtubeId || activeVideo?.id }) });
       if (res.ok) {
         const data = await res.json();
         if (data?.message) {
@@ -2145,7 +2483,11 @@ function App() {
           setCommunityMessages(prev => prev.map(m=> m.id===optimistic.id ? { ...m, id: data.message.id || m.id } : m));
         }
       }
-    } catch {}
+    } catch (error) {
+      setCommunityMessages(prev => prev.filter(m => m.id !== optimistic.id));
+      showToast(error.message || "Message could not be posted");
+      return;
+    }
     showToast("Message posted to Live Community Chat!");
   };
 
@@ -2204,6 +2546,7 @@ function App() {
   // Build AI Teacher Course through the authenticated Groq-backed Worker.
   const handleBuildCourse = async () => {
     if (!teacherGoal.trim()) { showToast("Tell AI what you want to learn first"); return; }
+    if (!(await openAiFeature("teacher"))) return;
     setIsBuildingCourse(true);
     try {
       const res = await fetch("/api/teacher/build", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify({ goal: teacherGoal, prompt: teacherGoal }) });
@@ -2225,6 +2568,7 @@ function App() {
   const handleAskTeacher = async () => {
     const question = teacherQuestion.trim();
     if (!question) return;
+    if (!(await openAiFeature("teacher"))) return;
     setIsAskingTeacher(true);
     try {
       const response = await fetch("/api/ai/teacher", {
@@ -2255,6 +2599,7 @@ function App() {
     }
     const videoId = activeVideo?.youtubeId || activeVideo?.id;
     if (!videoId) return;
+    if (!(await openAiFeature("jot"))) return;
     setJotsLoading(true);
     try {
       const response = await fetch(`/api/ai-jot?videoId=${encodeURIComponent(videoId)}`, { credentials: "include" });
@@ -2360,24 +2705,13 @@ function App() {
     }
   };
   useEffect(() => {
-    if (activeTab !== "studio") return;
-    fetch("/api/studio/templates")
-      .then(response => response.ok ? response.json() : null)
-      .then(data => setStudioTemplates(Array.isArray(data?.templates) ? data.templates : []))
-      .catch(() => showToast("Unable to load Studio templates"));
-  }, [activeTab]);
-  useEffect(() => {
     const videoId = activeVideo?.youtubeId || activeVideo?.id;
     if (activeTab !== "watch" || !videoId || isGuest) {
       setVideoJots([]);
       return;
     }
     setJotsLoading(true);
-    fetch(`/api/ai-jot?videoId=${encodeURIComponent(videoId)}`, { credentials: "include" })
-      .then(response => response.ok ? response.json() : null)
-      .then(data => setVideoJots(Array.isArray(data?.result?.jots) ? data.result.jots : []))
-      .catch(() => setVideoJots([]))
-      .finally(() => setJotsLoading(false));
+    setJotsLoading(false);
   }, [activeTab, activeVideo?.youtubeId, activeVideo?.id, isGuest]);
 
   // Filtered Video Catalog + Unified aggregator filtered helpers (platform filter)
@@ -2622,7 +2956,7 @@ function App() {
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => { if(item.id==="channel") navigateToChannel(OFFICIAL_CHANNEL_ID); else setActiveTab(item.id); setMobileDrawerOpen(false); }}
+                  onClick={() => { if(item.id==="channel") navigateToChannel(authUser?.channelId || profileData?.channelId); else setActiveTab(item.id); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center gap-4 px-3 py-2.5 rounded-xl text-sm font-medium ${
                     activeTab === item.id ? "bg-[#272727] text-[#00D9FF] font-bold" : "text-gray-300"
                   }`}
@@ -2638,14 +2972,14 @@ function App() {
               {[
                 { id: "teacher", label: "AI Teacher", icon: "teacher", color: "text-[#00FF88]" },
                 { id: "memory", label: "AI Memory", icon: "brain", color: "text-[#00D9FF]" },
+                { id: "ads", label: "Ads", icon: "video", color: "text-yellow-400" },
                 { id: "marketplace", label: "Marketplace", icon: "shopping-bag", color: "text-[#00FF88]" },
-                { id: "studio", label: "AI Studio", icon: "studio", color: "text-purple-400" },
                 { id: "profile", label: "Profile", icon: "user", color: "text-[#00D9FF]" },
                 { id: "pricing", label: "Pro Subscription", icon: "crown", color: "text-yellow-400" }
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => { if(item.id==="channel") navigateToChannel(OFFICIAL_CHANNEL_ID); else setActiveTab(item.id); setMobileDrawerOpen(false); }}
+                  onClick={() => { if(item.id==="channel") navigateToChannel(authUser?.channelId || profileData?.channelId); else setActiveTab(item.id); setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center gap-4 px-3 py-2.5 rounded-xl text-sm font-medium ${
                     activeTab === item.id ? "bg-[#272727] text-white font-bold" : "text-gray-300"
                   }`}
@@ -2788,7 +3122,7 @@ function App() {
                 <button
                   key={item.id}
                   onClick={() => {
-                    if(item.id==="channel") navigateToChannel(OFFICIAL_CHANNEL_ID);
+                    if(item.id==="channel") navigateToChannel(authUser?.channelId || profileData?.channelId);
                     else setActiveTab(item.id);
                   }}
                   title={!sidebarOpen ? item.label : undefined}
@@ -2816,14 +3150,14 @@ function App() {
               {[
                 { id: "teacher", label: "AI Teacher", icon: "sparkles", color: "text-[#FFD700]" },
                 { id: "memory", label: "AI Memory", icon: "brain", color: "text-[#FFD700]" },
+                { id: "ads", label: "Ads", icon: "video", color: "text-[#FFD700]" },
                 { id: "marketplace", label: "Marketplace", icon: "shopping-bag", color: "text-gray-400" },
-                { id: "studio", label: "AI Studio", icon: "studio", color: "text-gray-400" },
                 { id: "profile", label: "Profile", icon: "user", color: "text-gray-400" },
                 { id: "pricing", label: "Pro Subscription", icon: "crown", color: "text-[#FFD700]" }
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => { if(item.id==="channel") navigateToChannel(OFFICIAL_CHANNEL_ID); else setActiveTab(item.id); }}
+                  onClick={() => setActiveTab(item.id)}
                   title={!sidebarOpen ? item.label : undefined}
                   className={`w-full flex items-center ${sidebarOpen ? "gap-5 px-3" : "justify-center px-2"} py-2.5 rounded-xl text-sm font-medium transition-colors ${
                     activeTab === item.id 
@@ -2913,7 +3247,7 @@ function App() {
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-8 space-y-4">
                   <div ref={mainPlayerRef} className={`watch-video-player relative w-full aspect-video bg-black ${landscapeMode ? "ring-2 ring-[#FFD700]" : ""}`}>
-                    <iframe ref={iframeRef} src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" />
+                    {isGuest ? <button type="button" onClick={() => setShowSignUpBlock(true)} className="absolute inset-0 flex items-center justify-center bg-black/80 text-sm font-bold text-white">Sign up to watch this video</button> : <iframe ref={iframeRef} src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" />}
                     <button onClick={toggleLandscape} className="absolute right-3 top-3 z-30 rounded-full bg-black/75 px-3 py-2 text-xs font-bold text-white border border-white/20 hover:bg-black" aria-label="View video in landscape 16:9">{landscapeMode ? "[x] 16:9" : "[ ] 16:9"}</button>
                   </div>
                   <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight px-4 sm:px-0">{activeVideo.title}</h1>
@@ -2921,9 +3255,9 @@ function App() {
                     <div className="flex items-center gap-3">
                       <img src={activeVideo.avatar || channelData?.avatar || `https://img.youtube.com/vi/${activeVideo.id||activeVideo.youtubeId}/hqdefault.jpg`} alt="avatar" className="w-10 h-10 rounded-full object-cover border border-white/10" />
                       <div><button onClick={()=>navigateToChannel(activeVideo.channelId || channelIdFromVideo(activeVideo))} className="text-left text-sm font-bold text-white hover:text-[#00D9FF]">{typeof activeVideo.channel === "string" ? activeVideo.channel : (activeVideo.channelName || "")} • {channelData?.subscribers || activeVideo.subscribers || ""} subscribers</button><p className="text-xs text-gray-400">{activeVideo.views} • {activeVideo.timeAgo} • {activeVideo.description ? activeVideo.description.slice(0,110) : ""}</p></div>
-                      <button onClick={()=>setIsSubscribed(!isSubscribed)} className={`ml-3 px-5 py-2 rounded-full font-bold text-xs ${isSubscribed?"bg-white/10 text-white":"bg-white text-black"}`}>{isSubscribed?"Subscribed ✓":"Subscribe"}</button>
+                      <button onClick={toggleChannelSubscription} className={`ml-3 px-5 py-2 rounded-full font-bold text-xs ${isSubscribed?"bg-white/10 text-white":"bg-white text-black"}`}>{isSubscribed?"Subscribed ✓":"Subscribe"}</button>
                     </div>
-                    <div className="flex flex-wrap gap-2"><button onClick={toggleVideoLike} aria-pressed={videoLiked} className={`px-4 py-2 rounded-full border text-sm font-bold ${videoLiked ? "bg-[#FFD700] text-black border-[#FFD700]" : "bg-[#1a1a2e] text-white border-white/10"}`}>Like {likeCount ? likeCount.toLocaleString() : (activeVideo.likes || "0")}</button><button onClick={()=>{ setCommentsOpen(true); loadVideoComments(activeVideo.youtubeId || activeVideo.id); }} className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Comments {activeVideo.comments || ""}</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Save</button><button className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Share</button></div>
+                    <div className="flex flex-wrap gap-2"><button onClick={toggleVideoLike} aria-pressed={videoLiked} className={`px-4 py-2 rounded-full border text-sm font-bold ${videoLiked ? "bg-[#FFD700] text-black border-[#FFD700]" : "bg-[#1a1a2e] text-white border-white/10"}`}>Like {likeCount ? likeCount.toLocaleString() : (activeVideo.likes || "0")}</button><button onClick={()=>{ setCommentsOpen(true); loadVideoComments(activeVideo.youtubeId || activeVideo.id); }} className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Comments {activeVideo.comments || ""}</button><button onClick={toggleVideoSave} aria-pressed={isSaved} className={`px-4 py-2 rounded-full border text-sm font-bold ${isSaved ? "bg-[#FFD700] text-black border-[#FFD700]" : "bg-[#1a1a2e] text-white border-white/10"}`}>{isSaved ? "Saved ✓" : "Save"}</button><button onClick={() => setShareModalOpen(true)} className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Share</button></div>
                   </div>
                   <section className="watch-ai-buttons px-4 sm:px-0 space-y-3">
                     <div className="flex flex-wrap gap-2">
@@ -2965,7 +3299,11 @@ function App() {
                     <button onClick={()=>setCommentsOpen(true)} className="mb-3 text-left text-lg font-bold text-white">Comments {activeVideo.comments ? `(${activeVideo.comments})` : ""}</button>
                     {commentsOpen && (
                       <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                        {commentsLoading ? <p className="text-sm text-gray-400">Loading real YouTube comments…</p> : videoComments.length === 0 ? <div className="space-y-2"><p className="text-sm text-gray-400">No public comments are available for this video.</p><a href={`https://www.youtube.com/watch?v=${activeVideo.youtubeId || activeVideo.id}`} target="_blank" rel="noreferrer" className="inline-block text-xs font-bold text-[#FFD700]">See comments on YouTube ↗</a></div> : <div className="space-y-4">{videoComments.map(comment => <div key={comment.id} className="flex gap-3"><img src={comment.authorPhoto || "https://ui-avatars.com/api/?name=YT&background=272727&color=fff"} alt="" className="h-8 w-8 rounded-full" /><div><p className="text-xs font-bold text-white">{comment.author}</p><p className="mt-1 text-sm text-gray-200 whitespace-pre-wrap">{comment.text}</p><p className="mt-1 text-[11px] text-gray-500">{comment.likeCount ? `${comment.likeCount} likes` : ""}</p></div></div>)}</div>}
+                        {commentsLoading ? <p className="text-sm text-gray-400">Loading real comments…</p> : videoComments.length === 0 ? <div className="space-y-2"><p className="text-sm text-gray-400">No public comments are available for this video.</p><a href={`https://www.youtube.com/watch?v=${activeVideo.youtubeId || activeVideo.id}`} target="_blank" rel="noreferrer" className="inline-block text-xs font-bold text-[#FFD700]">See comments on YouTube ↗</a></div> : <div className="space-y-4">{videoComments.map(comment => <div key={comment.id} className="flex gap-3"><img src={comment.authorPhoto || "https://ui-avatars.com/api/?name=YT&background=272727&color=fff"} alt="" className="h-8 w-8 rounded-full" /><div><p className="text-xs font-bold text-white">{comment.author}</p><p className="mt-1 text-sm text-gray-200 whitespace-pre-wrap">{comment.text}</p><p className="mt-1 text-[11px] text-gray-500">{comment.likeCount ? `${comment.likeCount} likes` : ""}</p></div></div>)}</div>}
+                        <form className="mt-4 flex gap-2" onSubmit={event => { event.preventDefault(); submitVideoComment(); }}>
+                          <input value={videoCommentInput} onChange={event => setVideoCommentInput(event.target.value)} placeholder={isGuest ? "Sign in to comment" : "Add a comment..."} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:border-[#FFD700]" />
+                          <button type="submit" className="rounded-xl bg-[#FFD700] px-4 py-2 text-xs font-bold text-black">Post</button>
+                        </form>
                       </div>
                     )}
                   </section>
@@ -3001,6 +3339,7 @@ function App() {
                   <span>←</span> <span className="hidden sm:inline">Back to Results</span><span className="sm:hidden">Back</span>
                 </button>
                 <h2 className="flex-1 text-center text-xl font-extrabold text-white truncate px-4">{activeTab === "workspace" ? "Alphatekx Workspace" : activeVideo.title}</h2>
+                {activeTab === "workspace" && <span className="hidden sm:inline-flex rounded-full bg-[#00FF88]/15 px-2.5 py-1 text-[10px] font-bold text-[#00FF88]">FREE FOREVER</span>}
                 {activeTab === "workspace" && <button onClick={saveWorkspace} className="px-4 py-2 rounded-full bg-[#00FF88] text-black text-sm font-bold">Save</button>}
               </div>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 min-w-0">
@@ -3008,7 +3347,7 @@ function App() {
                 <div className="lg:col-span-6 space-y-3">
                   <div className="relative bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.25)]">
                     <div className="aspect-video relative bg-black">
-                      <iframe src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" />
+                      {isGuest ? <button type="button" onClick={() => setShowSignUpBlock(true)} className="absolute inset-0 flex items-center justify-center bg-black/80 text-sm font-bold text-white">Sign up to watch this video</button> : <iframe src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" />}
                     </div>
                   </div>
                   <div className="px-4 sm:px-0">
@@ -3061,7 +3400,7 @@ function App() {
                             <span className="text-[#FFD700]">🔑</span>
                             <input id="byok-input" type="password" value={byokKey} onChange={e=>saveByokKey(e.target.value)} placeholder="Paste DeepSeek/OpenAI key (optional)" className="flex-1 min-h-[36px] bg-black/60 border border-[#FFD700]/30 rounded-full px-4 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]" />
                             <span className={`text-[10px] font-bold whitespace-nowrap ${byokKey ? "text-green-400" : "text-gray-400"}`}>{byokStatus}</span>
-                            <button onClick={()=>setShowPaywall(true)} className="hidden sm:block px-3 py-1.5 bg-[#FFD700]/20 text-[#FFD700] border border-[#FFD700]/30 rounded-full text-xs font-bold hover:bg-[#FFD700]/30">Use Credits</button>
+                            <button onClick={()=>{ setShowPaywall(false); setActiveTab("pricing"); }} className="hidden sm:block px-3 py-1.5 bg-[#FFD700]/20 text-[#FFD700] border border-[#FFD700]/30 rounded-full text-xs font-bold hover:bg-[#FFD700]/30">Use Credits</button>
                           </div>
                           <div className="sm:hidden px-3 pb-2 bg-[#1a1030]"><button onClick={()=>setShowPaywall(true)} className="w-full py-2 bg-[#FFD700]/20 text-[#FFD700] border border-[#FFD700]/30 rounded-full text-xs font-bold">Use Alphatekx Credits ₦500</button></div>
                           <div className="flex-1 overflow-y-auto space-y-3 p-3 bg-[#0B0215]">
@@ -3069,6 +3408,10 @@ function App() {
                             {building && <div className="text-xs text-[#FFD700] animate-pulse px-2">🤖 Building…</div>}
                           </div>
                           <div className="p-3 bg-[#0B0215] border-t border-white/5">
+                            <div className="mb-2 flex items-center justify-between gap-2">
+                              <span className="text-[10px] text-gray-500">Vibe Coding: {isProUser ? "PRO Unlimited" : `${aiUsage.vibe_code || 0}/2 free`}</span>
+                              <button onClick={() => setShowByokModal(true)} className="text-[10px] font-bold text-[#FFD700]">BYOK / Pro</button>
+                            </div>
                             <div className="flex gap-2">
                               <input value={aiChatInput} onChange={e=>setAiChatInput(e.target.value)} onKeyDown={e=>e.key==="Enter"&&handleAiSend()} placeholder="Ask AI to build or explain..." className="flex-1 min-h-[44px] bg-[#1a1a2e] border border-[#FFD700]/30 rounded-full px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]" />
                               <button onClick={handleAiSend} className="min-h-[44px] px-5 py-2 bg-[#FFD700] text-black font-bold rounded-full text-sm hover:brightness-110">Send</button>
@@ -3131,6 +3474,11 @@ function App() {
           {/* ------------------- 2. HOME / DISCOVER FEED — CLEAN mobile-first: generous spacing, 2 cols on mobile ------------------- */}
           {activeTab === "home" && (
             <div className="max-w-[1600px] mx-auto px-0 sm:px-5 md:px-6 py-3 sm:py-5 md:py-6 space-y-5 sm:space-y-6 overflow-x-hidden">
+              <div className="sticky top-0 z-10 -mx-0 flex h-12 items-center gap-2 overflow-x-auto bg-[#0B0215] px-3 scrollbar-hide sm:px-0">
+                {[["foryou", "For You 🔥"], ["following", "Following"], ["trending", "Trending 📈"], ["new", "New ✨"]].map(([tab, label]) => (
+                  <button key={tab} onClick={() => { setBoostFeedTab(tab); setBoostFeedCursor(0); }} className={`min-h-11 flex-shrink-0 rounded-full border px-4 text-xs font-bold ${boostFeedTab === tab ? "border-[#FFD700] bg-[#FFD700] text-black" : "border-[#2A1A3E] bg-[#1A0B2E] text-gray-300"}`}>{label}</button>
+                ))}
+              </div>
               {isSearching ? (
                 <div className="grid grid-cols-1 gap-5 px-3 sm:px-0 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
                   {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
@@ -3180,7 +3528,7 @@ function App() {
                       onClick={()=>{
                         setSearchTab("history");
                         // refresh history from server when switching
-                        fetch("/api/search/history").then(r=>r.ok?r.json():null).then(data=>{
+                        fetch("/api/search/history", { credentials: "include" }).then(r=>r.ok?r.json():null).then(data=>{
                           if(data && Array.isArray(data.history)) {
                             const vids=data.history.map(normalizeVideo);
                             if(vids.length>0) setSearchHistory(vids);
@@ -3196,7 +3544,7 @@ function App() {
                       <>
                         <button
                           onClick={()=>{
-                            fetch("/api/search/history").then(r=>r.ok?r.json():null).then(data=>{
+                            fetch("/api/search/history", { credentials: "include" }).then(r=>r.ok?r.json():null).then(data=>{
                               if(data && Array.isArray(data.history)) {
                                 const vids=data.history.map(normalizeVideo);
                                 setSearchHistory(vids);
@@ -3214,7 +3562,7 @@ function App() {
                             if(!confirm("Clear all search history?")) return;
                             setSearchHistory([]);
                             localStorage.removeItem("alphatekx_search_history");
-                            fetch("/api/search/history",{method:"DELETE"}).catch(()=>{});
+                            fetch("/api/search/history",{method:"DELETE", credentials:"include"}).catch(()=>{});
                             showToast("Search history cleared");
                           }}
                           className="text-[10px] text-gray-500 hover:text-red-400 font-mono"
@@ -3316,14 +3664,13 @@ function App() {
                       <button onClick={()=>setActiveTab("shorts")} className="text-xs font-bold text-[#FFD700] hover:underline min-h-[44px] px-3 flex items-center">View all →</button>
                     </div>
                     <div className="flex gap-2 sm:gap-3 overflow-x-auto scrollbar-hide pb-2 snap-x snap-mandatory px-0">
-                      {shortsVideos.map((s, idx)=>
+                      {shortFeedVideos.map((s, idx)=>
                       <div key={s.id} onClick={()=>{ setShortsIndex(idx); setShortsMuted(false); setActiveTab("shorts"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; showToast(`Playing Short: ${s.title}`); }} className="flex-shrink-0 w-[140px] sm:w-[160px] cursor-pointer snap-start group">
                           <div className="aspect-[9/16] rounded-xl overflow-hidden bg-black border border-white/10 relative group-hover:border-[#FF0000]/40 transition-colors">
                             <img src={`https://img.youtube.com/vi/${s.youtubeId}/hqdefault.jpg`} alt={s.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                             <span className="absolute top-2 left-2 bg-[#FF0000] text-white text-[9px] font-bold px-1.5 py-0.5 rounded">SHORT</span>
                             <div className="absolute bottom-2 left-2 right-2">
-                              <p className="text-[11px] font-bold text-white line-clamp-2 leading-tight">{s.title}</p>
                               <p className="text-[10px] text-white/70">{s.views}</p>
                             </div>
                             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 bg-black/30 transition-opacity">
@@ -3379,14 +3726,19 @@ function App() {
           {activeTab === "shorts" && (
             <section className="fixed inset-0 z-20 h-screen w-full overflow-hidden bg-black md:static md:h-full">
               <div className="mx-auto flex h-full w-full max-w-[760px] flex-col">
-                <div className="pointer-events-none absolute inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3">
+                <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3">
                   <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => { setActiveTab("home"); if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0; }} className="pointer-events-auto flex min-h-10 items-center gap-1 rounded-full border border-white/15 bg-black/70 px-3 text-xs font-bold text-white" aria-label="Back to normal feed">← Back</button>
                     <span className="pointer-events-auto rounded-full bg-[#FF0000] px-2.5 py-1 text-[11px] font-extrabold text-white">Shorts</span>
-                    <span className="text-xs text-gray-400">{shortsIndex + 1} / {shortsVideos.length}</span>
+                    <span className="text-xs text-gray-400">{shortsIndex + 1} / {shortFeedVideos.length}</span>
                   </div>
                   <div className="pointer-events-auto flex items-center gap-2">
                     <button onClick={() => scrollToShort(shortsIndex - 1)} disabled={shortsIndex === 0} aria-label="Previous short" className="rounded-full border border-white/10 px-3 py-1 text-xs text-white disabled:opacity-30">↑</button>
-                    <button onClick={() => scrollToShort(shortsIndex + 1)} disabled={shortsIndex === shortsVideos.length - 1} aria-label="Next short" className="rounded-full border border-white/10 px-3 py-1 text-xs text-white disabled:opacity-30">↓</button>
+                    <button onClick={() => {
+                      if (shortsIndex >= shortsVideos.filter(isShortFormVideo).length - 1 && shortsPageToken) {
+                        loadShortsPage().then(() => setTimeout(() => scrollToShort(shortsIndex + 1), 0));
+                      } else scrollToShort(shortsIndex + 1);
+                    }} disabled={shortsIndex >= shortsVideos.filter(isShortFormVideo).length - 1 && !shortsPageToken} aria-label="Next short" className="rounded-full border border-white/10 px-3 py-1 text-xs text-white disabled:opacity-30">↓</button>
                   </div>
                 </div>
                 <div
@@ -3394,17 +3746,17 @@ function App() {
                   onScroll={(e) => {
                     const height = e.currentTarget.clientHeight || 1;
                     const next = Math.round(e.currentTarget.scrollTop / height);
-                    if (next !== shortsIndex && next >= 0 && next < shortsVideos.length) setShortsIndex(next);
+                    if (next !== shortsIndex && next >= 0 && next < shortFeedVideos.length) setShortsIndex(next);
                     if (e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < height * 2) loadShortsPage();
                   }}
                   className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   style={{ touchAction: "pan-y" }}
                 >
-                  {shortsVideos.filter(isShortFormVideo).map((short, idx) => (
-                   <article key={short.youtubeId || short.id} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-screen min-h-full snap-start snap-always bg-black overflow-hidden" style={{ scrollSnapStop: "always" }}>
+                  {shortFeedVideos.map((short, idx) => (
+                   <article key={short.youtubeId || short.id} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-full min-h-screen snap-start snap-always bg-black overflow-hidden" style={{ scrollSnapStop: "always" }}>
                       <div className="absolute inset-0 flex justify-center bg-black">
                         <div className="relative h-[min(92vh,900px)] aspect-[9/16] max-w-[min(92vw,520px)] overflow-hidden rounded-2xl">
-                          {idx === shortsIndex ? (
+                          {idx === shortsIndex && !isGuest ? (
                             <iframe
                               key={`${short.youtubeId}-${shortsMuted}-${shortsPlaying}`}
                               src={`https://www.youtube.com/embed/${short.youtubeId}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&autoplay=0&mute=${shortsMuted ? 1 : 0}`}
@@ -3415,6 +3767,7 @@ function App() {
                           ) : (
                             <img src={`https://i.ytimg.com/vi/${short.youtubeId}/hqdefault.jpg`} alt="" className="h-full w-full object-contain" loading="lazy" />
                           )}
+                          {idx === shortsIndex && isGuest && <button type="button" onClick={() => setShowSignUpBlock(true)} className="absolute inset-0 flex items-center justify-center bg-black/70 text-sm font-bold text-white">Sign up to watch Shorts</button>}
                         </div>
                       </div>
                       <button aria-label={shortsMuted ? "Unmute short" : "Mute short"} onClick={() => setShortsMuted(m => !m)} className="absolute right-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/70 text-lg text-white">{shortsMuted ? "🔇" : "🔊"}</button>
@@ -3425,16 +3778,33 @@ function App() {
                             <img src={short.avatar} alt="" className="h-8 w-8 rounded-full border-2 border-white object-cover" />
                             <span className="text-sm font-bold text-white">{short.handle || short.channelName}</span>
                           </button>
-                          <button onClick={() => showToast(`Subscribed to ${short.channel}!`)} className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-black">Subscribe</button>
+                          <button onClick={async () => {
+                            if (isGuest) { setShowSignUpBlock(true); return; }
+                            const channelId = short.channelId || channelIdFromVideo(short);
+                            try {
+                              const response = await fetch(`/api/channel/${encodeURIComponent(channelId)}/subscribe`, { method: "POST", credentials: "include" });
+                              const data = await response.json().catch(() => ({}));
+                              if (!response.ok) throw new Error(data.error || "Subscription failed");
+                              showToast(data.subscribed ? `Subscribed to ${short.channelName || short.channel}!` : "Unsubscribed");
+                            } catch (error) { showToast(error.message || "Subscription unavailable"); }
+                          }} className="rounded-full bg-white px-3 py-1 text-xs font-extrabold text-black">Subscribe</button>
                         </div>
                         <p className="line-clamp-2 text-sm leading-snug text-white">{short.title}</p>
                         <p className="line-clamp-3 text-xs leading-5 text-gray-300">{short.description || "Watch this Short on Alphatekx."}</p>
                         <p className="text-xs text-gray-300">{short.views || "0 views"} • {short.likes || "0 likes"} • {short.comments || "0 comments"}</p>
                       </div>
                       <div className="absolute bottom-4 right-3 z-10 flex flex-col items-center gap-3">
-                        <button onClick={() => { if (isGuest) { setShowSignUpBlock(true); return; } setShortsLiked(s => ({ ...s, [short.id]: !s[short.id] })); }} aria-label={`Like short (${short.likes || "0 likes"})`} className={`flex h-11 w-11 flex-col items-center justify-center rounded-full bg-black/60 ${shortsLiked[short.id] ? "text-[#FFD700]" : "text-white"}`}><Icon name="like" className="h-6 w-6" /><span className="text-[9px]">{short.likes || "0"}</span></button>
+                        <button onClick={async () => { if (isGuest) { setShowSignUpBlock(true); return; } try { const response = await fetch(`/api/video/${encodeURIComponent(short.youtubeId || short.id)}/like`, { method: "POST", credentials: "include" }); const data = await response.json().catch(() => ({})); if (!response.ok) throw new Error(data.error || "Like failed"); setShortsLiked(s => ({ ...s, [short.id]: Boolean(data.liked) })); } catch (error) { showToast(error.message || "Like unavailable"); } }} aria-label={`Like short (${short.likes || "0 likes"})`} className={`flex h-11 w-11 flex-col items-center justify-center rounded-full bg-black/60 ${shortsLiked[short.id] ? "text-[#FFD700]" : "text-white"}`}><Icon name="like" className="h-6 w-6" /><span className="text-[9px]">{short.likes || "0"}</span></button>
                         <button onClick={() => { setShortsCommentsOpen(true); loadVideoComments(short.youtubeId); }} aria-label={`Comments on ${short.title}`} className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="chat" className="h-6 w-6" /></button>
-                        <button onClick={() => { navigator.clipboard?.writeText(`https://youtu.be/${short.youtubeId}`); showToast("Link copied"); }} aria-label="Share short" className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="share" className="h-6 w-6" /></button>
+                        <button onClick={async () => {
+                          const url = `${window.location.origin}/watch/${encodeURIComponent(short.youtubeId)}`;
+                          try {
+                            if (navigator.share) await navigator.share({ title: short.title, url });
+                            else { await navigator.clipboard.writeText(url); showToast("Link copied"); }
+                          } catch (error) {
+                            if (error?.name !== "AbortError") showToast("Unable to share this Short");
+                          }
+                        }} aria-label="Share short" className="flex h-11 w-11 items-center justify-center rounded-full bg-black/60 text-white"><Icon name="share" className="h-6 w-6" /></button>
                       </div>
                     </article>
                   ))}
@@ -3675,7 +4045,7 @@ function App() {
           )}
 
           {/* ------------------- SUPERPOWER #9: AI STUDIO ------------------- */}
-          {activeTab === "studio" && (
+          {false && activeTab === "studio" && (
             <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-8">
               <div className="glass-card p-8 space-y-6">
                 <div className="flex items-center gap-3">
@@ -3740,7 +4110,7 @@ function App() {
                     />
                     <button
                       onClick={async () => {
-                        if (!isProUser) { showToast("🔒 Clip Maker is Pro-only — upgrade to continue"); setActiveTab("pricing"); return; }
+                        if (!(await openAiFeature("video_gen"))) return;
                         setGeneratedClip(null); setClipResult(null);
                         try {
                           const res = await fetch("/api/clips/create", {
@@ -3800,7 +4170,7 @@ function App() {
                     </div>
                     <button
                       onClick={async () => {
-                        if (!isProUser) { showToast("🔒 Thumbnail Enhancer is Pro-only"); setActiveTab("pricing"); return; }
+                        if (!(await openAiFeature("thumbnail"))) return;
                         setIsEnhancingThumbnail(true);
                         try {
                           const res = await fetch("/api/thumbnail/enhance", {
@@ -3843,7 +4213,7 @@ function App() {
                     </select>
                     <button
                       onClick={async () => {
-                        if (!isProUser) { showToast("🔒 Voice Translator is Pro-only"); setActiveTab("pricing"); return; }
+                        if (!(await openAiFeature("translator"))) return;
                         setIsVoiceTranslating(true);
                         try {
                           const res = await fetch("/api/voice/translate", {
@@ -3933,6 +4303,39 @@ function App() {
                   </button>
                   {!isProUser && <button onClick={() => startProCheckout("yearly")} className="w-full py-3 rounded-xl border border-[#00D9FF]/40 text-[#00D9FF] text-sm font-bold hover:bg-[#00D9FF]/10">Choose annual — $99/year (NGN equivalent)</button>}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === "ads" && (
+            <div className="mx-auto max-w-3xl space-y-5 p-3 sm:p-6">
+              <div>
+                <h1 className="text-xl font-extrabold text-[#FFD700]">Run Ads — $2/day — No Free Trial</h1>
+                <p className="mt-1 text-sm text-gray-400">Upload a 1–2 minute video, choose your days, and join the automatic queue.</p>
+              </div>
+              <form onSubmit={createAdCampaign} className="glass-card space-y-4 p-4 sm:p-6">
+                {adsError && <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{adsError}</p>}
+                <input required value={adsForm.company_name} onChange={e=>setAdsForm({...adsForm, company_name:e.target.value})} placeholder="Company name" className="min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-white" />
+                <input required value={adsForm.title} onChange={e=>setAdsForm({...adsForm, title:e.target.value})} placeholder="Ad title" className="min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-white" />
+                <div>
+                  <input required type="url" value={adsForm.video_url} onChange={e=>handleAdVideoUrl(e.target.value)} placeholder="Public video URL (60–120 seconds)" className="min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-white" />
+                  {adsDuration !== null && <p className={`mt-1 text-xs ${adsDuration >= 60 && adsDuration <= 120 ? "text-green-400" : "text-red-400"}`}>Detected duration: {Math.round(adsDuration)}s {adsDuration >= 60 && adsDuration <= 120 ? "✓" : "— must be 60–120s"}</p>}
+                </div>
+                <input type="url" value={adsForm.thumbnail_url} onChange={e=>setAdsForm({...adsForm, thumbnail_url:e.target.value})} placeholder="Thumbnail URL (optional)" className="min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-white" />
+                <input required type="url" value={adsForm.link_url} onChange={e=>setAdsForm({...adsForm, link_url:e.target.value})} placeholder="Website or WhatsApp destination" className="min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-white" />
+                <label className="block text-sm text-gray-300">Days
+                  <input required type="number" min="1" max="30" value={adsForm.days} onChange={e=>setAdsForm({...adsForm, days:Math.min(30, Math.max(1, Number(e.target.value)||1))})} className="mt-1 min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-4 text-white" />
+                </label>
+                <div className="rounded-xl border border-[#FFD700]/30 bg-[#FFD700]/10 p-4">
+                  <p className="text-sm text-gray-300">$2 × {adsForm.days} day{Number(adsForm.days) === 1 ? "" : "s"}</p>
+                  <p className="text-2xl font-extrabold text-[#FFD700]">${Number(adsForm.days||1)*2} / ₦{adsPriceNgn.toLocaleString()}</p>
+                </div>
+                <button disabled={adsLoading} className="min-h-12 w-full rounded-xl bg-[#FFD700] font-extrabold text-black disabled:opacity-50">{adsLoading ? "Preparing Paystack…" : `Pay $${Number(adsForm.days||1)*2} with Paystack`}</button>
+                <p className="text-xs leading-relaxed text-gray-500">How it works: pay $2 per day, we queue your ad, and it appears in the sponsored slot during your dates. No free trial. No discount. No refund.</p>
+              </form>
+              <div className="glass-card p-4">
+                <h2 className="font-bold text-white">My ads</h2>
+                {!myAds.length ? <p className="mt-2 text-sm text-gray-500">Your campaigns will appear here after setup.</p> : <div className="mt-3 space-y-2">{myAds.map(ad=><div key={ad.id} className="flex items-center justify-between rounded-xl border border-white/10 p-3 text-sm"><span className="truncate text-gray-200">{ad.title}</span><span className="ml-3 text-xs font-bold text-[#FFD700]">{ad.status}</span></div>)}</div>}
               </div>
             </div>
           )}
@@ -4216,7 +4619,7 @@ function App() {
               ) : channelData ? (
                 <>
                   <div className="relative rounded-2xl h-36 sm:h-48 overflow-hidden border border-white/10 bg-gradient-to-r from-[#00D9FF]/20 via-purple-900/30 to-[#00FF88]/20">
-                    <img src={channelData.banner || profileData?.banner} alt="Channel Banner" className="absolute inset-0 w-full h-full object-cover opacity-50" />
+                    {channelData.banner && <img src={channelData.banner} alt="Channel Banner" className="absolute inset-0 w-full h-full object-cover opacity-50" />}
                     <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
                   </div>
                   <div className="flex flex-col sm:flex-row items-start sm:items-end gap-4 sm:gap-6 -mt-10 sm:-mt-12 px-2 sm:px-6 relative z-10">
@@ -4233,15 +4636,23 @@ function App() {
                       <p className="text-xs text-gray-300 max-w-2xl line-clamp-2">{channelData.description}</p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                      <button onClick={()=>{
-                        const next = !channelSubscribed;
-                        setChannelSubscribed(next);
-                        setChannelData(prev=> prev ? {...prev, subscribers: next ? `${(Number(String(prev.subscribersCount||prev.subscribers||"3020").replace(/[^0-9]/g,"")||3020)+1).toLocaleString()}` : `${(Number(String(prev.subscribersCount||prev.subscribers||"3021").replace(/[^0-9]/g,"")||3021)-1).toLocaleString()}`, subscribersCount: next ? (Number(prev.subscribersCount||3020)+1) : (Number(prev.subscribersCount||3020)-1)} : prev);
-                        showToast(next ? `Subscribed to ${channelData.name}! 🎉 ${next ? (Number(channelData.subscribersCount||3020)+1).toLocaleString() : ""} subs` : `Unsubscribed from ${channelData.name}`);
+                      <button onClick={async ()=>{
+                        if (isGuest) { setShowSignUpBlock(true); return; }
+                        const channelId = channelData.id || activeChannelId;
+                        try {
+                          const response = await fetch(`/api/channel/${encodeURIComponent(channelId)}/subscribe`, { method: "POST", credentials: "include" });
+                          const data = await response.json().catch(() => ({}));
+                          if (!response.ok) throw new Error(data.error || "Subscription failed");
+                          setChannelSubscribed(Boolean(data.subscribed));
+                          try { localStorage.setItem(`alphatekx_sub_${authUser?.id || authUser?.email}_${channelId}`, data.subscribed ? "1" : "0"); } catch {}
+                          showToast(data.subscribed ? `Subscribed to ${channelData.name}!` : `Unsubscribed from ${channelData.name}`);
+                        } catch (error) { showToast(error.message || "Subscription unavailable"); }
                       }} className={`px-6 py-2.5 rounded-full font-bold text-xs transition-all active:scale-95 ${channelSubscribed ? "bg-[#272727] text-gray-300" : "bg-[#00D9FF] text-black shadow-[0_0_15px_rgba(0,217,255,0.4)]"}`}>{channelSubscribed ? "Subscribed ✓" : "Subscribe"}</button>
                       <button onClick={()=>setActiveTab("upload")} className="px-4 py-2 rounded-full bg-white/10 hover:bg-white/20 text-xs font-bold text-white border border-white/10 hidden sm:block">Upload video</button>
+                      <button onClick={loadBoostStats} className="min-h-11 rounded-full border border-[#FFD700]/50 px-4 text-xs font-bold text-[#FFD700]">My Boost Stats</button>
                     </div>
                   </div>
+                  {boostStats && <div className="glass-card mt-4 flex items-center justify-between p-4"><span className="text-xs text-gray-300">Alphatekx boost views</span><strong className="text-lg text-[#FFD700]">{Number(boostStats.total_boost_views || 0).toLocaleString()}</strong></div>}
                   <div className="border-t border-[#272727] pt-4">
                     <div className="flex items-center gap-2 mb-4">
                       <h3 className="font-bold text-white">Uploads</h3>
@@ -4288,43 +4699,30 @@ function App() {
                 <div className="flex items-center gap-3">
                   <div className="p-3 bg-[#00D9FF]/20 text-[#00D9FF] rounded-2xl"><Icon name="plus" className="w-6 h-6" /></div>
                   <div>
-                    <h1 className="text-xl font-bold text-white">Upload Video</h1>
-                    <p className="text-xs text-gray-400">Share your content — preserves existing design. Channel: {channelData?.name || profileData?.name || "Alphatekx Dev"}</p>
+                    <h1 className="text-xl font-bold text-white">Add Video to Alphatekx Stream</h1>
+                    <p className="text-xs text-gray-400">We stream from YouTube through Alphatekx - no hosting cost.</p>
                   </div>
                 </div>
                 <form onSubmit={handleUploadSubmit} className="space-y-4">
                   <div>
-                    <label className="text-xs text-gray-400 block mb-1">Title *</label>
-                    <input value={uploadTitle} onChange={e=>setUploadTitle(e.target.value)} required minLength={3} placeholder="e.g. How I Built an AI Stream in 24 Hours" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#00D9FF]" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">Description</label>
-                    <textarea value={uploadDesc} onChange={e=>setUploadDesc(e.target.value)} rows={3} placeholder="Describe your video... (supports Naija translations later)" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#00D9FF]" />
-                  </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-xs text-gray-400 block mb-1">Category</label>
-                      <select value={uploadCategory} onChange={e=>setUploadCategory(e.target.value)} className="w-full bg-black/80 border border-white/10 rounded-xl px-3 py-3 text-sm text-white focus:outline-none focus:border-[#00D9FF]">
-                        {categories.filter(c=>c!=="All").map(c=> <option key={c} value={c}>{c}</option>)}
-                      </select>
+                    <label className="text-xs text-gray-400 block mb-1">YouTube link *</label>
+                    <div className="relative">
+                      <input value={uploadVideoUrl} onChange={e=>handleUploadLinkChange(e.target.value)} onPaste={e=>setTimeout(()=>handleUploadLinkChange(e.currentTarget.value), 0)} required placeholder="Paste YouTube link here... e.g. https://youtu.be/..." className="w-full h-12 bg-[#0B0215] border border-gray-800 rounded-xl px-4 pr-12 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]" />
+                      {uploadVideoId && <span className="absolute right-4 top-3 text-[#00FF88] text-lg" aria-label="Valid YouTube link">✓</span>}
                     </div>
-                    <div>
-                      <label className="text-xs text-gray-400 block mb-1">Duration (e.g. 12:30)</label>
-                      <input value={uploadDuration} onChange={e=>setUploadDuration(e.target.value)} placeholder="10:00" className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#00FF88]" />
+                    {uploadLinkError && <p className="mt-1 text-[11px] text-red-400">{uploadLinkError}</p>}
+                  </div>
+                  {uploadVideoId && <div className="space-y-3">
+                    <div className="aspect-video overflow-hidden rounded-xl border border-white/10 bg-black">
+                      <iframe src={`https://www.youtube.com/embed/${uploadVideoId}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&rel=0&modestbranding=1&fs=1&iv_load_policy=3&enablecastapi=1`} title="YouTube preview" className="h-full w-full border-0" allow="autoplay; encrypted-media; fullscreen; picture-in-picture" allowFullScreen />
                     </div>
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">Thumbnail URL (optional)</label>
-                    <input value={uploadThumbnail} onChange={e=>setUploadThumbnail(e.target.value)} placeholder="https://images.unsplash.com/..." className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#00FF88]" />
-                  </div>
-                  <div>
-                    <label className="text-xs text-gray-400 block mb-1">YouTube / Video URL (optional)</label>
-                    <input value={uploadVideoUrl} onChange={e=>setUploadVideoUrl(e.target.value)} placeholder="https://youtube.com/watch?v=..." className="w-full bg-black/80 border border-white/10 rounded-xl px-4 py-3 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#00FF88]" />
-                  </div>
-                  <button type="submit" disabled={isUploading} className="w-full py-3.5 bg-gradient-to-r from-[#00D9FF] to-[#00FF88] text-black font-extrabold text-sm rounded-xl shadow-[0_0_20px_rgba(0,217,255,0.3)] hover:opacity-95 disabled:opacity-50 transition-transform active:scale-95">
-                    {isUploading ? "Uploading..." : "Publish to Channel 🚀"}
+                    <input value={uploadPreviewTitle} onChange={e=>setUploadPreviewTitle(e.target.value)} aria-label="Video title" className="w-full rounded-xl border border-white/10 bg-black/80 px-4 py-3 text-sm text-white" />
+                    <img src={uploadPreviewThumbnail} alt="YouTube thumbnail preview" className="h-20 w-36 rounded-lg object-cover" />
+                  </div>}
+                  <button type="submit" disabled={isUploading || !uploadVideoId} className="w-full h-11 bg-[#FFD700] text-black font-extrabold text-sm rounded-xl disabled:opacity-50 transition-transform active:scale-95">
+                    {isUploading ? "Publishing..." : "PUBLISH TO STREAM"}
                   </button>
-                  <p className="text-[11px] text-center text-gray-500 font-mono">POST /api/upload • Stored in edge memory • Visible on Channel page instantly</p>
+                  <p className="text-[11px] text-center text-gray-500">Paste a link only. Video files are not uploaded to Stream.</p>
                 </form>
               </div>
             </div>
@@ -4398,7 +4796,7 @@ function App() {
                 </form>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                  <button onClick={()=>navigateToChannel(profileData?.name || "codecraft")} className="glass-card p-4 hover:border-[#00D9FF] transition-colors text-left">
+                  <button onClick={()=>navigateToChannel(profileData?.channelId || authUser?.channelId)} className="glass-card p-4 hover:border-[#00D9FF] transition-colors text-left">
                     <p className="text-xs text-gray-400">Your Channel</p>
                     <p className="font-bold text-white flex items-center gap-1">Go to Channel <span className="text-[#00D9FF]">→</span></p>
                     <SubscriberCount count={profileData?.subscribers || "1.2M"} className="mt-1" />
@@ -4413,6 +4811,13 @@ function App() {
                     <p className="font-bold text-white">{isProUser ? "Pro Active ✓" : "Upgrade to Pro"}</p>
                     <p className="text-[11px] text-[#00FF88]">$5 / month</p>
                   </button>
+                  <div className="sm:col-span-3 mt-4 w-full rounded-xl border border-gray-800 bg-[#0B0215] p-4 space-y-2">
+                    <h3 className="text-sm font-bold text-white">🎬 AI Studio</h3>
+                    <p className="text-[11px] text-gray-400">Thumbnail Enhancer, Voice Generator, Translator, Video Generator</p>
+                    <span className="inline-flex rounded-full bg-[#FFD700] px-2 py-1 text-[10px] font-bold text-black">COMING SOON</span>
+                    <button type="button" disabled className="block h-11 w-full rounded-xl bg-gray-700 text-xs font-bold text-gray-400">Not Available For Now - Needs Real Money</button>
+                    <p className="text-[11px] text-gray-500">We are building heavy AI servers. Stream + Market live now.</p>
+                  </div>
                 </div>
               )}
             </div>
@@ -4472,7 +4877,7 @@ function App() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <h1 className="text-xl font-bold text-white flex items-center gap-2"><Icon name="history" className="w-6 h-6 text-[#FFD700]" /> History <span className="text-xs text-gray-400 font-mono">• Guest • {searchHistory.length + watchedHistory.length} items</span></h1>
                 <div className="flex gap-2">
-                  <button onClick={()=>{ if(!confirm("Clear all history?")) return; setSearchHistory([]); setWatchedHistory([]); try{localStorage.removeItem("alphatekx_search_history"); localStorage.removeItem("alphatekx_watched_history");}catch{} fetch("/api/search/history",{method:"DELETE"}).catch(()=>{}); showToast("History cleared — Guest"); }} className="text-xs text-red-400 border border-red-400/20 px-3 py-1.5 rounded-full hover:bg-red-400/10 min-h-[44px]">Clear all</button>
+                  <button onClick={()=>{ if(!confirm("Clear all history?")) return; setSearchHistory([]); setWatchedHistory([]); try{localStorage.removeItem("alphatekx_search_history"); localStorage.removeItem("alphatekx_watched_history");}catch{} fetch("/api/search/history",{method:"DELETE", credentials:"include"}).catch(()=>{}); showToast("History cleared"); }} className="text-xs text-red-400 border border-red-400/20 px-3 py-1.5 rounded-full hover:bg-red-400/10 min-h-[44px]">Clear all</button>
                   <button onClick={()=>setActiveTab("home")} className="px-4 py-2 rounded-full bg-[#272727] hover:bg-[#383838] text-xs text-gray-200 min-h-[44px]">Browse →</button>
                 </div>
               </div>
@@ -4532,6 +4937,49 @@ function App() {
                   </div>
                 )
               )}
+            </div>
+          )}
+
+
+          {showPaywall && (
+            <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/75 px-4" role="dialog" aria-modal="true">
+              <div className="w-full max-w-md rounded-2xl border border-gray-800 bg-[#0B0215] p-5 shadow-2xl">
+                <div className="text-center">
+                  <div className="text-4xl">🔒</div>
+                  <h2 className="mt-2 text-base font-bold text-white">{usageLockFeature === "market" ? "5/5 Free Products Published 🎉" : `Daily Limit Reached - ${usageLockFeature || "AI feature"}`}</h2>
+                  <p className="mt-2 text-xs leading-5 text-gray-400">
+                    {usageLockFeature === "market"
+                      ? "Upgrade to Pro for unlimited Marketplace publishing and keep 80% per sale."
+                      : `You have used 2/2 free ${usageLockFeature || "AI"} uses. Upgrade to Pro for unlimited access.`}
+                  </p>
+                </div>
+                <div className="mt-4 rounded-xl bg-[#1A0B2E] p-3 text-xs text-gray-200">
+                  <strong className="text-[#FFD700]">⭐ PRO $19/month</strong>
+                  <p className="mt-1 text-gray-400">Unlimited Jot, Teacher, Thumbnail, Voice, Translator, Video Gen, Vibe Coding, and Market publishing.</p>
+                </div>
+                <button onClick={() => startProCheckout("monthly")} className="mt-4 min-h-12 w-full rounded-xl bg-[#FFD700] px-4 text-xs font-extrabold text-black">PAY $19 WITH PAYSTACK - UNLOCK ALL</button>
+                <button onClick={() => { setShowPaywall(false); setShowByokModal(true); }} className="mt-3 min-h-10 w-full text-xs font-bold text-[#FFD700]">Or Bring Your Own Key (Free)</button>
+                <button onClick={() => setShowPaywall(false)} className="mt-1 min-h-10 w-full text-xs text-gray-400">Maybe Later</button>
+              </div>
+            </div>
+          )}
+          {showByokModal && (
+            <div className="fixed inset-0 z-[71] flex items-center justify-center bg-black/75 px-4" role="dialog" aria-modal="true">
+              <div className="w-full max-w-md rounded-2xl border border-gray-800 bg-[#0B0215] p-5">
+                <h2 className="text-base font-bold text-white">AI Vibe Coding - 2 Options</h2>
+                <div className="mt-4 rounded-xl border border-gray-800 bg-[#1A0B2E] p-3">
+                  <p className="text-sm font-bold text-white">🔑 Bring Your Own Key (FREE)</p>
+                  <p className="mt-1 text-xs text-gray-400">Use your own provider credits at no cost to Alphatekx.</p>
+                  <input value={byokKey} onChange={e => setByokKey(e.target.value)} type="password" placeholder="Paste your OpenAI key" className="mt-3 min-h-11 w-full rounded-xl border border-gray-700 bg-black/40 px-3 text-sm text-white" />
+                  <button onClick={() => { saveByokKey(byokKey); setShowByokModal(false); showToast("BYOK key saved ✓"); }} className="mt-3 min-h-11 w-full rounded-xl bg-[#FFD700] text-xs font-bold text-black">Save Key</button>
+                </div>
+                <div className="mt-3 rounded-xl border border-[#FFD700]/30 bg-[#1A0B2E] p-3">
+                  <p className="text-sm font-bold text-white">⭐ Upgrade to Pro $19</p>
+                  <p className="mt-1 text-xs text-gray-400">$19/month (₦25,901.18) covers all AI and unlimited Market publishing.</p>
+                  <button onClick={() => startProCheckout("monthly")} className="mt-3 min-h-11 w-full rounded-xl bg-[#FFD700] text-xs font-bold text-black">PAY $19 WITH PAYSTACK</button>
+                </div>
+                <button onClick={() => setShowByokModal(false)} className="mt-3 min-h-10 w-full text-xs text-gray-400">Close</button>
+              </div>
             </div>
           )}
 

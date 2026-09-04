@@ -14,8 +14,9 @@
     "GOOGLE_REDIRECT_URI": "https://alphatekx.name.ng/api/auth/callback",
     "PAYSTACK_CURRENCY": "NGN",
     "PAYSTACK_PLAN_CURRENCY": "NGN",
-    "PAYSTACK_MONTHLY_AMOUNT": "2900000",
-    "PAYSTACK_YEARLY_AMOUNT": "15000000"
+    "PAYSTACK_MONTHLY_AMOUNT": "2590118",
+    "PAYSTACK_YEARLY_AMOUNT": "15000000",
+    "PRO_PRICE_KOBO": "2590118"
   },
   "d1_databases": [
     {
