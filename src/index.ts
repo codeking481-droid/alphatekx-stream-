@@ -15,11 +15,14 @@ import { fetchChannelInfo as libFetchChannelInfo, fetchChannelVideos as libFetch
 interface Env {
   DB?: D1Database;
   KV?: KVNamespace;
+  ALPHATEKX_KV?: KVNamespace;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   SESSION_SECRET?: string;
   GOOGLE_REDIRECT_URI?: string;
   YOUTUBE_API_KEY?: string;
+  YOUTUBE_WEB_KEY?: string;
+  YOUTUBE_DATA_API_KEY?: string;
   TIKHUB_API_KEY?: string;
   TIKTOK_API_KEY?: string;
   INSTAGRAM_ACCESS_TOKEN?: string;
@@ -27,9 +30,11 @@ interface Env {
   FACEBOOK_ACCESS_TOKEN?: string;
   STRIPE_SECRET_KEY?: string;
   PAYSTACK_SECRET_KEY?: string;
+  PAYSTACK_PUBLIC_KEY?: string;
   PAYSTACK_CURRENCY?: string;
   PAYSTACK_PLAN_CURRENCY?: string;
   PAYSTACK_MONTHLY_AMOUNT?: string;
+  PAYSTACK_LITE_AMOUNT?: string;
   PAYSTACK_YEARLY_AMOUNT?: string;
   PAYSTACK_PLAN_MONTHLY?: string;
   PAYSTACK_PLAN_YEARLY?: string;
@@ -74,6 +79,230 @@ function isoDurationSeconds(iso?: string): number {
   return Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0);
 }
 
+function extractInnerTubeEngagement(data: any) {
+  let likes = "";
+  let comments = "";
+  let channelAvatar = "";
+  const commentItems: any[] = [];
+  const visit = (value: any) => {
+    if (!value || typeof value !== "object") return;
+    const owner = value.videoOwnerRenderer;
+    if (owner?.thumbnail?.thumbnails?.length) channelAvatar = owner.thumbnail.thumbnails.at(-1)?.url || channelAvatar;
+    const actionText = value.videoActionButtonRenderer?.text?.simpleText
+      || value.toggleButtonRenderer?.defaultText?.simpleText
+      || value.toggleButtonRenderer?.defaultText?.runs?.map((run: any) => run.text).join("");
+    if (actionText && !likes && /\d/.test(actionText)) likes = actionText;
+    const commentHeader = value.commentsEntryPointHeaderRenderer?.commentCount;
+    if (commentHeader && !comments) comments = commentHeader.simpleText || commentHeader.runs?.map((run: any) => run.text).join("") || "";
+    const comment = value.commentRenderer;
+    if (comment?.commentId && (comment.contentText?.runs || comment.contentText?.simpleText)) {
+      commentItems.push({
+        id: comment.commentId,
+        author: comment.authorText?.simpleText || comment.authorText?.runs?.map((run: any) => run.text).join("") || "YouTube user",
+        authorPhoto: comment.authorThumbnail?.thumbnails?.at(-1)?.url || "",
+        text: comment.contentText?.simpleText || comment.contentText?.runs?.map((run: any) => run.text).join("") || "",
+        likeCount: Number(comment.voteCount?.simpleText || 0) || 0,
+        publishedAt: comment.publishedTimeText?.runs?.map((run: any) => run.text).join("") || "",
+      });
+    }
+    for (const child of Object.values(value)) visit(child);
+  };
+  visit(data);
+  return { likes, comments, channelAvatar, commentItems };
+}
+
+function parseInnerTubeChannelVideos(data: any, channelId: string) {
+  const videos: any[] = [];
+  const continuationTokens: string[] = [];
+  const visit = (value: any) => {
+    if (!value || typeof value !== "object") return;
+    if (value.videoRenderer?.videoId) {
+      const item = value.videoRenderer;
+      const id = item.videoId;
+      videos.push({
+        id, youtubeId: id, source: "youtube", platform: "youtube", channelId,
+        title: item.title?.runs?.map((run: any) => run.text).join("") || item.title?.simpleText || "",
+        channelName: item.ownerText?.runs?.map((run: any) => run.text).join("") || "",
+        thumbnailUrl: item.thumbnail?.thumbnails?.at(-1)?.url || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+        views: item.viewCountText?.simpleText || item.viewCountText?.runs?.map((run: any) => run.text).join("") || "",
+        duration: item.lengthText?.simpleText || "",
+        publishedAt: item.publishedTimeText?.simpleText || "",
+      });
+    }
+    if (value.lockupViewModel?.contentId && /^[A-Za-z0-9_-]{11}$/.test(value.lockupViewModel.contentId)) {
+      const item = value.lockupViewModel;
+      const metadata = item.metadata?.lockupMetadataViewModel || {};
+      const title = metadata.title?.content || metadata.title?.runs?.map((run: any) => run.text).join("") || "";
+      const thumbnail = item.contentImage?.thumbnailViewModel?.image?.sources?.at(-1)?.url
+        || item.contentImage?.thumbnailViewModel?.image?.sources?.at(-1)?.src
+        || `https://i.ytimg.com/vi/${item.contentId}/hqdefault.jpg`;
+      videos.push({
+        id: item.contentId, youtubeId: item.contentId, source: "youtube", platform: "youtube", channelId,
+        title, channelName: "", thumbnailUrl: thumbnail, views: "", duration: "", publishedAt: "",
+      });
+    }
+
+    const continuation = value.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token;
+    if (continuation) continuationTokens.push(continuation);
+    for (const child of Object.values(value)) visit(child);
+  };
+  visit(data);
+  const unique = Array.from(new Map(videos.map(video => [video.youtubeId, video])).values());
+  return {
+    videos: unique.slice(0, 30),
+    nextToken: continuationTokens[continuationTokens.length - 1] || "",
+    continuationTokens,
+  };
+}
+
+function youtubeBrowseUrl(key: string) {
+  return key
+    ? `https://www.youtube.com/youtubei/v1/browse?key=${encodeURIComponent(key)}`
+    : "https://www.youtube.com/youtubei/v1/browse?prettyPrint=false";
+}
+
+async function browseChannelTab(c: any, params: string, kind: string) {
+  try {
+    const body: any = await c.req.json().catch(() => ({}));
+    const channelId = String(body.channelId || "").trim();
+    const continuationToken = String(body.continuationToken || "").trim();
+    const key = (c.env as Env).YOUTUBE_WEB_KEY || (c.env as Env).YOUTUBE_API_KEY;
+    if (!channelId) return c.json({ success: false, error: "CHANNEL_ID_REQUIRED" }, 400);
+    const payload = continuationToken
+      ? { context: { client: { clientName: "WEB", clientVersion: "2.20240301" } }, continuation: continuationToken }
+      : { context: { client: { clientName: "WEB", clientVersion: "2.20240301" } }, browseId: channelId, params: decodeURIComponent(params) };
+    let response = await fetch(youtubeBrowseUrl(key), {
+      method: "POST", headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" }, body: JSON.stringify(payload),
+    });
+    if (!response.ok && !continuationToken) {
+      response = await fetch(youtubeBrowseUrl(""), {
+        method: "POST", headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" }, body: JSON.stringify(payload),
+      });
+    }
+    if (!response.ok) return c.json({ success: false, error: "YOUTUBE_CHANNEL_FAILED" }, 502);
+    const parsed = parseInnerTubeChannelVideos(await response.json(), channelId);
+    return c.json({ success: true, channelId, kind, videos: parsed.videos, nextToken: parsed.nextToken });
+  } catch (error: any) {
+    console.error(`[channel/${kind}]`, error);
+    return c.json({ success: false, error: "YOUTUBE_CHANNEL_FAILED" }, 502);
+  }
+}
+
+async function fetchYoutubeRssVideos(channelId: string, limit = 50): Promise<any[]> {
+  const response = await fetch(`https://www.youtube.com/feeds/videos.xml?channel_id=${encodeURIComponent(channelId)}`, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
+  if (!response.ok) throw new Error(`YouTube RSS ${response.status}`);
+  const xml = await response.text();
+  const entries = [...xml.matchAll(/<entry>([\s\S]*?)<\/entry>/g)].map((match) => match[1]);
+  const read = (entry: string, tag: string) => entry.match(new RegExp(`<${tag}[^>]*>([\\s\\S]*?)<\\/${tag}>`))?.[1]
+    ?.replace(/<!\[CDATA\[|\]\]>/g, "").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'").trim() || "";
+  return entries.slice(0, limit).map((entry) => {
+    const id = read(entry, "yt:videoId");
+    const title = read(entry, "title");
+    const publishedAt = read(entry, "published");
+    const description = read(entry, "media:description");
+    return {
+      id, youtubeId: id, title, channelId, channelName: read(entry, "name") || OFFICIAL_CHANNEL_NAME,
+      thumbnailUrl: id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : "",
+      description, publishedAt, views: "Live YouTube", source: "youtube", platform: "youtube",
+      duration: "", isShort: /#shorts?\b|\bshort\b/i.test(`${title} ${description}`),
+    };
+  }).filter((video) => /^[A-Za-z0-9_-]{11}$/.test(video.youtubeId));
+}
+
+async function fetchYoutubeSectionVideos(channelId: string, section: "shorts" | "videos", limit = 50): Promise<any[]> {
+  const response = await fetch(`https://www.youtube.com/channel/${encodeURIComponent(channelId)}/${section}`, {
+    headers: { "User-Agent": "Mozilla/5.0" },
+  });
+  if (!response.ok) throw new Error(`YouTube ${section} page ${response.status}`);
+  const html = await response.text();
+  const ids = [...html.matchAll(/"videoId":"([A-Za-z0-9_-]{11})"/g)].map((match) => match[1]);
+  const uniqueIds = [...new Set(ids)].slice(0, limit);
+  const rss = await fetchYoutubeRssVideos(channelId, 50).catch(() => []);
+  const byId = new Map(rss.map((video) => [video.youtubeId, video]));
+  return uniqueIds.map((id) => ({
+    ...(byId.get(id) || {}),
+    id, youtubeId: id, channelId, channelName: OFFICIAL_CHANNEL_NAME,
+    title: byId.get(id)?.title || (section === "shorts" ? "YouTube Short" : "YouTube video"),
+    thumbnailUrl: byId.get(id)?.thumbnailUrl || `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+    duration: byId.get(id)?.duration || "",
+    isShort: section === "shorts",
+    source: "youtube", platform: "youtube",
+  }));
+}
+
+async function searchYouTubeInnerTube(c: any, query: string) {
+  const env = c.env as Env;
+  const cacheKey = `yt:search:${query.trim().toLowerCase()}`;
+  if (env.KV) {
+    const cached = await env.KV.get(cacheKey, "json").catch(() => null);
+    if (Array.isArray(cached)) return cached;
+  }
+  const webKey = env.YOUTUBE_WEB_KEY || env.YOUTUBE_API_KEY;
+  let results: any[] = [];
+  {
+    const searchUrl = webKey
+      ? `https://www.youtube.com/youtubei/v1/search?key=${encodeURIComponent(webKey)}`
+      : "https://www.youtube.com/youtubei/v1/search?prettyPrint=false";
+    const response = await fetch(searchUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+      body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: "2.20240301" } }, query }),
+    });
+    if (response.ok) {
+      const data: any = await response.json().catch(() => ({}));
+      const contents = data.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+      results = contents.flatMap((section: any) => section.itemSectionRenderer?.contents || []).map((item: any) => {
+        const renderer = item.videoRenderer;
+        if (!renderer?.videoId) return null;
+        return {
+          id: renderer.videoId, youtubeId: renderer.videoId, title: renderer.title?.runs?.map((run: any) => run.text).join("") || "",
+          channelName: renderer.ownerText?.runs?.[0]?.text || "YouTube Creator",
+          thumbnailUrl: renderer.thumbnail?.thumbnails?.at(-1)?.url || `https://i.ytimg.com/vi/${renderer.videoId}/hqdefault.jpg`,
+          views: renderer.viewCountText?.simpleText || renderer.viewCountText?.runs?.map((run: any) => run.text).join("") || "",
+          duration: renderer.lengthText?.simpleText || "", source: "youtube", platform: "youtube",
+        };
+      }).filter(Boolean).slice(0, 20);
+    }
+  }
+  const dataApiKey = env.YOUTUBE_DATA_API_KEY || env.YOUTUBE_API_KEY;
+  if (!results.length && dataApiKey) {
+    const response = await fetch(`https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=20&q=${encodeURIComponent(query)}&key=${encodeURIComponent(dataApiKey)}`);
+    if (response.ok) {
+      const data: any = await response.json().catch(() => ({}));
+      results = (data.items || []).map((item: any) => ({
+        id: item.id?.videoId, youtubeId: item.id?.videoId, title: item.snippet?.title || "",
+        channelName: item.snippet?.channelTitle || "YouTube Creator", channelId: item.snippet?.channelId || "",
+        thumbnailUrl: item.snippet?.thumbnails?.high?.url || item.snippet?.thumbnails?.medium?.url || "",
+        description: item.snippet?.description || "", source: "youtube", platform: "youtube",
+      })).filter((item: any) => item.youtubeId);
+    }
+  }
+  if (env.KV && results.length) await env.KV.put(cacheKey, JSON.stringify(results), { expirationTtl: 7200 }).catch(() => {});
+  return results;
+}
+
+async function fetchOfficialShorts(apiKey: string | undefined, limit: number, searchPage = 0, context: any = null): Promise<any[]> {
+  if (apiKey) {
+    const channelVideos = await libFetchChannelVideos(apiKey, 50).catch(() => []);
+    const shorts = channelVideos.filter((video: any) => {
+      const parts = String(video.duration || "").split(":").map(Number);
+      const seconds = parts.length === 3 ? parts[0] * 3600 + parts[1] * 60 + parts[2] : parts.length === 2 ? parts[0] * 60 + parts[1] : NaN;
+      return Number.isFinite(seconds) && seconds > 0 && seconds <= 180;
+    }).map((video: any) => ({ ...video, isShort: true }));
+    if (shorts.length) return shorts.slice(0, limit);
+  }
+  const queries = ["#shorts", "AI shorts", "tech shorts", "funny shorts", "music shorts", "football shorts", "gaming shorts", "science shorts", "food shorts", "travel shorts"];
+  const videos: any[] = [];
+  const query = queries[searchPage % queries.length];
+  for (const result of await searchYouTubeInnerTube(context || { env: {} }, query).catch(() => [])) {
+    videos.push({ ...result, isShort: true, category: "Shorts" });
+    if (videos.length >= limit) break;
+  }
+  return videos.slice(0, limit);
+}
+
 async function refreshAdStatuses(db: D1Database, now = Date.now()) {
   await db.batch([
     db.prepare("UPDATE ads_queue SET status = 'active', started_at = COALESCE(started_at, ?) WHERE status = 'scheduled' AND scheduled_at <= ? AND (ended_at IS NULL OR ended_at > ?)")
@@ -85,6 +314,43 @@ async function refreshAdStatuses(db: D1Database, now = Date.now()) {
     db.prepare("UPDATE ads_campaigns SET status = 'completed', updated_at = ? WHERE status IN ('scheduled', 'active') AND end_at IS NOT NULL AND end_at <= ?")
       .bind(now, now),
   ]);
+}
+
+async function clearCurrentAdsCache(env: Env) {
+  if (env.KV) await env.KV.delete("ads:current").catch(() => {});
+}
+
+async function getCurrentAds(db: D1Database, env: Env, now = Date.now()): Promise<any[]> {
+  if (env.KV) {
+    const cached = await env.KV.get("ads:current", "json").catch(() => null);
+    if (Array.isArray(cached)) return cached;
+  }
+  const result: any = await db.prepare(
+    "SELECT * FROM ads_campaigns WHERE status = 'active' AND start_at <= ? AND end_at > ? ORDER BY start_at ASC, created_at ASC LIMIT 3"
+  ).bind(now, now).all();
+  const campaigns = result.results || [];
+  if (env.KV) await env.KV.put("ads:current", JSON.stringify(campaigns), { expirationTtl: 60 }).catch(() => {});
+  return campaigns;
+}
+
+async function activateOrQueueAd(db: D1Database, campaign: any, reference: string, userId?: string) {
+  const now = Date.now();
+  const last: any = await db.prepare(
+    "SELECT MAX(end_at) AS last_end_at FROM ads_campaigns WHERE status IN ('active', 'scheduled') AND end_at > ?"
+  ).bind(now).first();
+  const lastEndAt = Number(last?.last_end_at || 0);
+  const startAt = lastEndAt > now ? lastEndAt + 60000 : now;
+  const endAt = startAt + Number(campaign.days) * 86400000;
+  const status = startAt <= now ? "active" : "scheduled";
+  const where = userId ? " WHERE id = ? AND user_id = ?" : " WHERE id = ?";
+  const binds = userId ? [status, reference, startAt, endAt, now, campaign.id, userId] : [status, reference, startAt, endAt, now, campaign.id];
+  await db.batch([
+    db.prepare(`UPDATE ads_campaigns SET status = ?, paystack_reference = ?, start_at = ?, end_at = ?, updated_at = ?${where}`)
+      .bind(...binds),
+    db.prepare("INSERT OR IGNORE INTO ads_queue (id, campaign_id, scheduled_at, started_at, ended_at, status, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(crypto.randomUUID(), campaign.id, startAt, status === "active" ? now : null, endAt, status, now),
+  ]);
+  return { status, startAt, endAt };
 }
 
 // In-memory mock storage fallback when Durable Object SQL storage is unavailable
@@ -421,6 +687,99 @@ function pushToSearchHistory(videos: any[], searchedQuery: string) {
 function createApiApp() {
   const app = new Hono<{ Bindings: Env }>();
 
+  const downloadKv = (c: any): KVNamespace | undefined => c.env?.ALPHATEKX_KV || c.env?.KV;
+  const jsonDownload = (c: any, body: any, status = 200) => c.json(body, status, {
+    "Access-Control-Allow-Origin": "*",
+    "Cache-Control": "no-store",
+  });
+  const numberFromKv = async (kv: KVNamespace | undefined, key: string) => Number(await kv?.get(key) || 0) || 0;
+  const displayCount = (value: number) => value > 1000 ? `${(value / 1000).toFixed(1)}K` : String(value);
+  const safeDownloadPut = async (kv: KVNamespace | undefined, key: string, value: string, expirationTtl?: number) => {
+    if (!kv) return false;
+    try {
+      await kv.put(key, value, expirationTtl ? { expirationTtl } : undefined);
+      return true;
+    } catch (error) {
+      console.error(`[download] unable to persist ${key}`, error);
+      return false;
+    }
+  };
+  const downloadDb = async (c: any) => {
+    const db: D1Database | undefined = c.env?.DB;
+    if (!db) return null;
+    await db.prepare("CREATE TABLE IF NOT EXISTS download_counters (key TEXT PRIMARY KEY, value INTEGER NOT NULL DEFAULT 0)").run();
+    return db;
+  };
+  const downloadDbValue = async (c: any, key: string) => {
+    const db = await downloadDb(c);
+    if (!db) return 0;
+    const row = await db.prepare("SELECT value FROM download_counters WHERE key = ?").bind(key).first<{ value: number }>();
+    return Number(row?.value || 0);
+  };
+  const incrementDownloadDb = async (c: any, key: string) => {
+    const db = await downloadDb(c);
+    if (!db) return 0;
+    await db.prepare("INSERT INTO download_counters (key, value) VALUES (?, 1) ON CONFLICT(key) DO UPDATE SET value = value + 1").bind(key).run();
+    return downloadDbValue(c, key);
+  };
+
+  app.get("/.well-known/assetlinks.json", (c) => new Response(JSON.stringify([{
+    relation: ["delegate_permission/common.handle_all_urls"],
+    target: {
+      namespace: "android_app",
+      package_name: "ng.name.alphatekx.twa",
+      sha256_cert_fingerprints: ["00:CB:E8:B4:38:63:C0:A3:39:5F:9E:C5:00:50:04:E9:57:49:2B:50:3B:CA:9A:C0:E9:12:84:FB:8C:3C:68:2F"],
+    },
+  }]), { headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=3600" } }));
+
+  app.get("/api/download/count", async (c) => {
+    const kv = downloadKv(c);
+    const total = await downloadDbValue(c, "download:counter:total") || await numberFromKv(kv, "download:counter:total");
+    const installed = await downloadDbValue(c, "download:counter:pwa_installed") || await numberFromKv(kv, "download:counter:pwa_installed");
+    return jsonDownload(c, { total, installed, display: displayCount(total), installedDisplay: displayCount(installed) });
+  });
+  app.post("/api/download/tab-tapped", async (c) => {
+    const kv = downloadKv(c);
+    const today = new Date().toISOString().slice(0, 10);
+    const ip = c.req.header("cf-connecting-ip") || "unknown";
+    const dedupeKey = `download:dedupe:${ip}:${today}`;
+    if (kv && await kv.get(dedupeKey)) {
+      return jsonDownload(c, { ok: true, total: await downloadDbValue(c, "download:counter:total") || await numberFromKv(kv, "download:counter:total"), deduped: true });
+    }
+    const total = await incrementDownloadDb(c, "download:counter:total");
+    const dailyKey = `download:counter:daily:${today}`;
+    const daily = await incrementDownloadDb(c, dailyKey);
+    await safeDownloadPut(kv, "download:counter:total", String(total));
+    await safeDownloadPut(kv, dailyKey, String(daily), 90 * 86400);
+    await safeDownloadPut(kv, dedupeKey, "1", 3600);
+    return jsonDownload(c, { ok: true, total, display: displayCount(total) });
+  });
+  app.post("/api/download/pwa-installed", async (c) => {
+    const kv = downloadKv(c);
+    const installed = await incrementDownloadDb(c, "download:counter:pwa_installed");
+    await safeDownloadPut(kv, "download:counter:pwa_installed", String(installed));
+    return jsonDownload(c, { ok: true, installed, installedDisplay: displayCount(installed) });
+  });
+  app.post("/api/download/app-opened", async (c) => {
+    const kv = downloadKv(c);
+    const opened = await incrementDownloadDb(c, "download:counter:app_opened");
+    await safeDownloadPut(kv, "download:counter:app_opened", String(opened));
+    return jsonDownload(c, { ok: true, opened });
+  });
+  app.get("/api/download/stats", async (c) => {
+    const kv = downloadKv(c);
+    const total = await downloadDbValue(c, "download:counter:total") || await numberFromKv(kv, "download:counter:total");
+    const installed = await downloadDbValue(c, "download:counter:pwa_installed") || await numberFromKv(kv, "download:counter:pwa_installed");
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date();
+      date.setUTCDate(date.getUTCDate() - i);
+      const key = date.toISOString().slice(0, 10);
+      days.push({ date: key, count: await downloadDbValue(c, `download:counter:daily:${key}`) || await numberFromKv(kv, `download:counter:daily:${key}`) });
+    }
+    return jsonDownload(c, { total, installed, last7Days: days });
+  });
+
   async function ensurePersistence(c: any) {
     const db: D1Database | undefined = c.env?.DB;
     if (!db) return null;
@@ -430,9 +789,9 @@ function createApiApp() {
       db.prepare("CREATE TABLE IF NOT EXISTS channel_subscriptions (user_id TEXT NOT NULL, channel_id TEXT NOT NULL, created_at INTEGER NOT NULL, PRIMARY KEY (user_id, channel_id))"),
       db.prepare("CREATE TABLE IF NOT EXISTS marketplace_products (id TEXT PRIMARY KEY, data TEXT NOT NULL, created_at INTEGER NOT NULL)"),
       db.prepare("CREATE TABLE IF NOT EXISTS marketplace_sales (id TEXT PRIMARY KEY, data TEXT NOT NULL, created_at INTEGER NOT NULL)"),
-      db.prepare("CREATE TABLE IF NOT EXISTS ai_usage (user_id TEXT NOT NULL, feature TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, last_used INTEGER, PRIMARY KEY (user_id, feature))"),
+      db.prepare("CREATE TABLE IF NOT EXISTS ai_usage (user_id TEXT NOT NULL, feature TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, last_used INTEGER, window_start INTEGER, used_in_window INTEGER NOT NULL DEFAULT 0, weekly_used INTEGER NOT NULL DEFAULT 0, week_start INTEGER, plan TEXT DEFAULT 'free', PRIMARY KEY (user_id, feature))"),
       db.prepare("CREATE TABLE IF NOT EXISTS market_usage (user_id TEXT PRIMARY KEY, product_count INTEGER NOT NULL DEFAULT 0, updated_at INTEGER)"),
-      db.prepare("CREATE TABLE IF NOT EXISTS subscriptions (user_id TEXT PRIMARY KEY, plan TEXT DEFAULT 'free', expires_at INTEGER, paystack_ref TEXT, created_at INTEGER, updated_at INTEGER)"),
+      db.prepare("CREATE TABLE IF NOT EXISTS subscriptions (user_id TEXT PRIMARY KEY, plan TEXT DEFAULT 'free', status TEXT DEFAULT 'active', expires_at INTEGER, current_period_start INTEGER, current_period_end INTEGER, paystack_ref TEXT, created_at INTEGER, updated_at INTEGER)"),
       db.prepare("CREATE TABLE IF NOT EXISTS user_api_keys (user_id TEXT PRIMARY KEY, openai_key TEXT, gemini_key TEXT, updated_at INTEGER)")
       ,db.prepare("CREATE TABLE IF NOT EXISTS video_stats (video_id TEXT PRIMARY KEY, creator_id TEXT, channel_id TEXT, alphatekx_likes INTEGER DEFAULT 0, alphatekx_comments INTEGER DEFAULT 0, alphatekx_views INTEGER DEFAULT 0, total_watch_seconds INTEGER DEFAULT 0, avg_watch_percent INTEGER DEFAULT 0, score REAL DEFAULT 0, is_pro_creator INTEGER DEFAULT 0, created_at INTEGER, updated_at INTEGER)")
       ,db.prepare("CREATE TABLE IF NOT EXISTS video_impressions (id TEXT PRIMARY KEY, user_id TEXT, video_id TEXT, shown_at INTEGER)")
@@ -450,6 +809,15 @@ function createApiApp() {
     await db.prepare("ALTER TABLE video_stats ADD COLUMN channel_id TEXT").run().catch(() => {});
     await db.prepare("ALTER TABLE video_stats ADD COLUMN total_watch_seconds INTEGER DEFAULT 0").run().catch(() => {});
     await db.prepare("ALTER TABLE ads_campaigns ADD COLUMN company_name TEXT").run().catch(() => {});
+    await db.prepare("ALTER TABLE ai_usage ADD COLUMN window_start INTEGER").run().catch(() => {});
+    await db.prepare("ALTER TABLE ai_usage ADD COLUMN used_in_window INTEGER NOT NULL DEFAULT 0").run().catch(() => {});
+    await db.prepare("ALTER TABLE ai_usage ADD COLUMN weekly_used INTEGER NOT NULL DEFAULT 0").run().catch(() => {});
+    await db.prepare("ALTER TABLE ai_usage ADD COLUMN week_start INTEGER").run().catch(() => {});
+    await db.prepare("ALTER TABLE ai_usage ADD COLUMN plan TEXT DEFAULT 'free'").run().catch(() => {});
+    await db.prepare("ALTER TABLE subscriptions ADD COLUMN status TEXT DEFAULT 'active'").run().catch(() => {});
+    await db.prepare("ALTER TABLE subscriptions ADD COLUMN current_period_start INTEGER").run().catch(() => {});
+    await db.prepare("ALTER TABLE subscriptions ADD COLUMN current_period_end INTEGER").run().catch(() => {});
+    await db.prepare("CREATE INDEX IF NOT EXISTS idx_ai_usage_user_window ON ai_usage (user_id, feature, window_start, week_start)").run().catch(() => {});
     return db;
   }
 
@@ -478,6 +846,10 @@ function createApiApp() {
 
   async function updateAdStatuses(db: D1Database, now = Date.now()) {
     await refreshAdStatuses(db, now);
+  }
+
+  async function expireSubscriptions(db: D1Database, now = Date.now()) {
+    await db.prepare("UPDATE subscriptions SET plan = 'free', status = 'expired', updated_at = ? WHERE expires_at IS NOT NULL AND expires_at <= ? AND plan != 'free'").bind(now, now).run();
   }
 
   async function adDurationForRequest(c: any, videoUrl: string, suppliedDuration: unknown): Promise<{ seconds: number | null; source: string }> {
@@ -571,7 +943,7 @@ function createApiApp() {
     if (!/^https?:\/\/\S+$/i.test(videoUrl)) return c.json({ success: false, error: "VIDEO_URL_REQUIRED" }, 400);
     if (!/^https?:\/\/\S+$/i.test(destinationUrl)) return c.json({ success: false, error: "DESTINATION_URL_REQUIRED" }, 400);
     if (thumbnailUrl && !/^https?:\/\/\S+$/i.test(thumbnailUrl)) return c.json({ success: false, error: "INVALID_THUMBNAIL_URL" }, 400);
-    if (!Number.isInteger(days) || days < 1 || days > 30) return c.json({ success: false, error: "DAYS_MUST_BE_1_TO_30" }, 400);
+    if (!Number.isSafeInteger(days) || days < 1) return c.json({ success: false, error: "DAYS_MUST_BE_A_POSITIVE_INTEGER" }, 400);
     if (!email || !email.includes("@")) return c.json({ success: false, error: "ACCOUNT_EMAIL_REQUIRED" }, 400);
     const duration = await adDurationForRequest(c, videoUrl, body.duration_seconds ?? body.duration);
     if (duration.seconds === null) {
@@ -587,6 +959,7 @@ function createApiApp() {
     const totalPriceUsd = days * 2;
     const totalPriceNgn = days * 3000;
     const totalAmountKobo = totalPriceNgn * 100;
+    if (!Number.isSafeInteger(totalAmountKobo)) return c.json({ success: false, error: "AD_BUDGET_TOO_LARGE_FOR_PAYMENT_PROCESSOR" }, 400);
     await db.prepare("INSERT INTO ads_campaigns (id, user_id, title, video_url, thumbnail_url, destination_url, company_name, duration_seconds, days, daily_budget_ngn, total_amount_kobo, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 3000, ?, 'pending_payment', ?, ?)")
       .bind(campaignId, user.id, title, videoUrl, thumbnailUrl || null, destinationUrl, companyName || null, duration.seconds || 0, days, totalAmountKobo, now, now).run();
     const origin = new URL(c.req.url).origin;
@@ -709,15 +1082,18 @@ function createApiApp() {
     if (metadataCampaignId !== campaignId || (metadataUserId && metadataUserId !== user.id) || Number(transaction.amount) !== Number(campaign.total_amount_kobo) || String(transaction.currency || "").toUpperCase() !== "NGN") {
       return c.json({ success: false, error: "PAYSTACK_PAYMENT_MISMATCH" }, 403);
     }
-    const now = Date.now();
-    const endAt = now + Number(campaign.days) * 86400000;
-    await db.batch([
-      db.prepare("UPDATE ads_campaigns SET status = 'scheduled', paystack_reference = ?, start_at = ?, end_at = ?, updated_at = ? WHERE id = ? AND user_id = ?")
-        .bind(reference, now, endAt, now, campaignId, user.id),
-      db.prepare("INSERT INTO ads_queue (id, campaign_id, scheduled_at, ended_at, status, created_at) VALUES (?, ?, ?, ?, 'scheduled', ?)")
-        .bind(crypto.randomUUID(), campaignId, now, endAt, now),
-    ]);
-    return c.json({ success: true, campaign_id: campaignId, status: "scheduled", start_at: now, end_at: endAt });
+    const { status, startAt, endAt } = await activateOrQueueAd(db, campaign, reference, user.id);
+    await clearCurrentAdsCache(c.env as Env);
+    return c.json({
+      success: true,
+      campaign_id: campaignId,
+      status,
+      start_at: startAt,
+      end_at: endAt,
+      start_date: startAt,
+      end_date: endAt,
+      message: status === "active" ? "Ad live! Auto queued" : "Ad paid and automatically queued",
+    });
   });
 
   app.get("/api/ads/current", async (c) => {
@@ -725,10 +1101,23 @@ function createApiApp() {
     if (!db) return c.json({ success: false, error: "PERSISTENCE_NOT_CONFIGURED" }, 503);
     await updateAdStatuses(db);
     const now = Date.now();
-    const result: any = await db.prepare("SELECT c.*, q.status AS queue_status, q.scheduled_at, q.started_at, q.ended_at FROM ads_campaigns c JOIN ads_queue q ON q.campaign_id = c.id WHERE c.status IN ('scheduled', 'active') AND q.status IN ('scheduled', 'active') AND COALESCE(c.start_at, q.scheduled_at) <= ? AND COALESCE(c.end_at, q.ended_at) > ? ORDER BY COALESCE(c.start_at, q.scheduled_at) ASC, c.created_at ASC")
-      .bind(now, now).all();
-    const campaigns = result.results || [];
+    const campaigns = await getCurrentAds(db, c.env as Env, now);
     return c.json({ success: true, campaigns, ads: campaigns });
+  });
+
+  app.get("/api/cron/ads-expire", async (c) => {
+    const db = await ensurePersistence(c);
+    if (!db) return c.json({ success: false, error: "PERSISTENCE_NOT_CONFIGURED" }, 503);
+    await updateAdStatuses(db);
+    await clearCurrentAdsCache(c.env as Env);
+    return c.json({ success: true });
+  });
+
+  app.get("/api/cron/sub-expire", async (c) => {
+    const db = await ensurePersistence(c);
+    if (!db) return c.json({ success: false, error: "PERSISTENCE_NOT_CONFIGURED" }, 503);
+    await expireSubscriptions(db);
+    return c.json({ success: true });
   });
 
   app.get("/api/ads/my-ads", async (c) => {
@@ -754,10 +1143,34 @@ function createApiApp() {
     const usageResult: any = {};
     for (const feature of Object.keys(aiLimits)) {
       const row = await usage(c, "ai_usage", user.id, feature);
-      usageResult[feature] = { used: row.used, limit: isPro || feature === "workspace" ? null : aiLimits[feature] };
+      usageResult[feature] = { used: row.used, limit: isPro || feature === "workspace" ? null : (sub?.plan && sub.plan !== "free" ? getPlanLimits(String(sub.plan)).window : 2) };
     }
     const market = await usage(c, "market_usage", user.id);
-    return c.json({ authenticated: true, user_id: user.id, isPro, plan: sub?.plan || "free", expires_at: sub?.expiresAt || null, days_left: sub?.expiresAt ? Math.max(0, Math.ceil((Number(sub.expiresAt) - Date.now()) / 86400000)) : 0, usage: usageResult, market: { used: market.used, limit: isPro ? null : 5 } });
+    const rate = await aiRateLimitStatus(c, user.id);
+    return c.json({ authenticated: true, user_id: user.id, isPro, plan: sub?.plan || "free", expires_at: sub?.expiresAt || null, days_left: sub?.expiresAt ? Math.max(0, Math.ceil((Number(sub.expiresAt) - Date.now()) / 86400000)) : 0, usage: usageResult, ai_rate_limit: rate, market: { used: market.used, limit: isPro ? null : 5 } });
+  });
+
+  app.all("/api/ai/check-limit", async (c) => {
+    try {
+      const user = await gatedGetUserFromCookie(c);
+      if (!user) return c.json({ allowed: false, error: "IDENTITY_REQUIRED" }, 401);
+      const rate = await aiRateLimitStatus(c, user.id);
+      return c.json({ allowed: rate.remainingWindow > 0 && rate.remainingWeekly > 0, ...rate });
+    } catch (error: any) {
+      return c.json({ allowed: false, error: error.message || "AI_LIMIT_CHECK_FAILED" }, 503);
+    }
+  });
+
+  app.post("/api/ai/use", async (c) => {
+    try {
+      const user = await gatedGetUserFromCookie(c);
+      if (!user) return c.json({ success: false, error: "IDENTITY_REQUIRED" }, 401);
+      const rate = await consumeAiRateLimit(c, user.id);
+      if (!rate.allowed) return c.json({ success: false, error: "AI_RATE_LIMIT_REACHED", message: "Rate limit reached. Try again after the 5-hour window or weekly reset.", retry_after: rate.windowResetIn, ...rate }, 429);
+      return c.json({ success: true, ...rate });
+    } catch (error: any) {
+      return c.json({ success: false, error: error.message || "AI_USAGE_FAILED" }, 503);
+    }
   });
 
   app.post("/api/ai/check-and-use", async (c) => {
@@ -766,11 +1179,10 @@ function createApiApp() {
     if (!user) return c.json({ success: false, error: "IDENTITY_REQUIRED" }, 401);
     const feature = String(body.feature || "teacher");
     if (!Object.prototype.hasOwnProperty.call(aiLimits, feature)) return c.json({ success: false, error: "INVALID_FEATURE" }, 400);
-    const result = feature === "workspace"
-      ? { allowed: true, used: (await usage(c, "ai_usage", user.id, feature)).used, limit: null, isPro: false, month: new Date().toISOString().slice(0, 7) }
-      : await checkUsage(c, "ai_usage", user.id, aiLimits[feature], feature);
-    if (!result.allowed) return c.json({ allowed: false, error: "limit_reached", feature, limit: 2, used: result.used, isPro: false, proPrice: 19, proPriceNGN: 25901.18 }, 429);
-    return c.json({ allowed: true, user_id: user.id, feature, count: result.used, remaining: result.isPro ? "unlimited" : Math.max(0, 2 - result.used - 1), limit: result.limit, isPro: result.isPro });
+    const result = await aiRateLimitStatus(c, user.id);
+    const allowed = result.remainingWindow > 0 && result.remainingWeekly > 0;
+    if (!allowed) return c.json({ allowed: false, error: "AI_TRIAL_LIMIT_REACHED", message: result.plan === "free" ? "You have used your 2 free AI trials. Upgrade to continue." : "Your subscription AI limit has been reached.", feature, ...result, upgradeUrl: "/pricing" }, 429);
+    return c.json({ allowed: true, user_id: user.id, feature, ...result });
   });
   app.post("/api/ai/increment", async (c) => {
     let body: any = {}; try { body = await c.req.json(); } catch {}
@@ -778,21 +1190,9 @@ function createApiApp() {
     if (!user) return c.json({ success: false, error: "IDENTITY_REQUIRED" }, 401);
     const feature = String(body.feature || "teacher");
     if (!Object.prototype.hasOwnProperty.call(aiLimits, feature)) return c.json({ success: false, error: "INVALID_FEATURE" }, 400);
-    const result = feature === "workspace"
-      ? { allowed: true, used: (await usage(c, "ai_usage", user.id, feature)).used, limit: null, isPro: false, month: new Date().toISOString().slice(0, 7) }
-      : await checkUsage(c, "ai_usage", user.id, aiLimits[feature], feature);
-    if (!result.allowed) return c.json({ success: false, error: "limit_reached", used: result.used, limit: result.limit, feature }, 429);
-    const db = await ensurePersistence(c).catch(() => null);
-    let used: number;
-    if (db && !result.isPro) {
-      const update = await db.prepare("UPDATE ai_usage SET count = count + 1, last_used = ? WHERE user_id = ? AND feature = ? AND count < ?")
-        .bind(Date.now(), user.id, feature, aiLimits[feature]).run();
-      if (!update.meta?.changes) return c.json({ success: false, error: "limit_reached", used: result.used, limit: result.limit, feature }, 429);
-      used = result.used + 1;
-    } else {
-      used = await incrementUsage(c, "ai_usage", user.id, feature);
-    }
-    return c.json({ success: true, user_id: user.id, feature, count: used, limit: result.limit, isPro: result.isPro });
+    const result = await consumeAiRateLimit(c, user.id);
+    if (!result.allowed) return c.json({ success: false, error: "AI_RATE_LIMIT_REACHED", feature, ...result }, 429);
+    return c.json({ success: true, user_id: user.id, feature, ...result });
   });
   app.post("/api/market/check-publish", async (c) => {
     let body: any = {}; try { body = await c.req.json(); } catch {}
@@ -1021,13 +1421,7 @@ function createApiApp() {
       const channelVideos = await libFetchChannelVideos(env.YOUTUBE_API_KEY || "", 12).catch(()=>[]);
       const feed = (channelVideos || []).slice(0, 8).map((v: any) => ({ videoId: v.youtubeId || v.id, title: v.title, thumbnail: v.thumbnailUrl || v.thumbnail || `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg`, publishedAt: v.publishedAt || new Date().toISOString(), channelName: v.channelName || v.channel || "YouTube Creator", channelId: v.channelId || "" }));
       if (feed.length > 0) return c.json({ feed, isGuest: false, fallback: true });
-      // Last fallback — static personalized feed
-      const mockFeed = [
-        { videoId: "jvXEkm27XOE", title: `Welcome ${user.channelName || "Creator"} — Your channel is live on Alphatekx!`, thumbnail: "https://img.youtube.com/vi/jvXEkm27XOE/hqdefault.jpg", publishedAt: new Date().toISOString(), channelName: user.channelName },
-        { videoId: "dQw4w9WgXcQ", title: "Your personalized pick: Neural Networks from Scratch", thumbnail: "https://i.ytimg.com/vi/dQw4w9WgXcQ/hqdefault.jpg", publishedAt: new Date().toISOString(), channelName: "CodeCraft" },
-        { videoId: "L_LUpnjgPso", title: "Recommended for you: Real-time AI Voice Agents", thumbnail: "https://i.ytimg.com/vi/L_LUpnjgPso/hqdefault.jpg", publishedAt: new Date().toISOString(), channelName: "Edge AI Lab" },
-      ];
-      return c.json({ feed: mockFeed, isGuest: false, fallback: true });
+      return c.json({ feed: [], isGuest: false, fallback: false, error: "REAL_FEED_EMPTY" });
     } catch (e: any) {
       return c.json({ feed: [], error: e.message, isGuest: false });
     }
@@ -1040,18 +1434,44 @@ function createApiApp() {
     return c.redirect("/");
   });
 
+  // Watch metadata is intentionally uncached: the requested video identity must remain stable.
+  app.post("/api/video/direct", async (c) => {
+    try {
+      const body: any = await c.req.json();
+      const videoId = String(body.videoId || "").match(/^[0-9A-Za-z_-]{11}$/)?.[0];
+      if (!videoId) return c.json({ success: false, error: "VIDEO_ID_REQUIRED" }, 400);
+      const key = (c.env as Env).YOUTUBE_WEB_KEY || (c.env as Env).YOUTUBE_API_KEY;
+      const response = await fetch(`https://www.youtube.com/youtubei/v1/player?key=${encodeURIComponent(key)}`, {
+        method: "POST", headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+        body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: "2.20240301" } }, videoId }),
+      });
+      if (!response.ok) return c.json({ success: false, error: "YOUTUBE_PLAYER_FAILED" }, 502);
+      const data: any = await response.json();
+      const format = data.streamingData?.formats?.find((item: any) => item.url && item.mimeType?.startsWith("video/"))
+        || data.streamingData?.adaptiveFormats?.find((item: any) => item.url && item.mimeType?.startsWith("video/"));
+      return c.json({
+        success: true, videoId, streamUrl: format?.url || "",
+        meta: { title: data.videoDetails?.title || "", author: data.videoDetails?.author || "", lengthSeconds: data.videoDetails?.lengthSeconds || "" },
+      });
+    } catch (error: any) {
+      console.error("[video/direct]", error);
+      return c.json({ success: false, error: "YOUTUBE_PLAYER_FAILED", message: error?.message || "Unable to load video" }, 502);
+    }
+  });
+
   // UNIFIED SEARCH — YouTube + TikTok + Instagram + Twitter (+Facebook) — Real APIs with mock fallback
   // Uses lib modules: backend/src/lib/* and src/lib/* (Prompt #2)
   app.get("/api/search", async (c) => {
     const q = c.req.query("q") || "";
     const env = c.env as Env;
     try {
-      const [yt, tt, ig, tw] = await Promise.all([
-        libSearchYouTube(q, env.YOUTUBE_API_KEY),
+      const [innerTube, tt, ig, tw] = await Promise.all([
+        searchYouTubeInnerTube(c, q),
         libSearchTikTok(q, env.TIKHUB_API_KEY || env.TIKTOK_API_KEY),
         libSearchInstagram(q, env.INSTAGRAM_ACCESS_TOKEN),
         libSearchTwitter(q, env.TWITTER_BEARER_TOKEN),
       ]);
+      const yt = innerTube.length ? { videos: innerTube, isMock: false } : await libSearchYouTube(q, env.YOUTUBE_API_KEY);
       const fbCatalog = getMockFacebookCatalog();
       const qLower = q.toLowerCase();
       const fbFiltered = fbCatalog.filter((v: any) => !q || v.title.toLowerCase().includes(qLower) || v.channelName.toLowerCase().includes(qLower));
@@ -1229,35 +1649,67 @@ function createApiApp() {
     const apiKey = (c.env as Env)?.YOUTUBE_API_KEY || "";
     const pageToken = c.req.query("pageToken") || "";
     const limit = Math.min(Math.max(Number(c.req.query("limit") || "12"), 1), 25);
-    if (!apiKey) return c.json({ videos: [], nextPageToken: "", real: false, error: "YOUTUBE_API_KEY_NOT_CONFIGURED" }, 503);
+    const rotatingSearchPage = pageToken.match(/^shorts-search:(\d+)$/);
+    if (!apiKey) {
+      try {
+        const searchPage = rotatingSearchPage ? Number(rotatingSearchPage[1]) : 0;
+        const queries = ["#shorts", "AI shorts", "tech shorts", "funny shorts", "music shorts", "football shorts", "gaming shorts", "science shorts", "food shorts", "travel shorts"];
+        const discovered = await searchYouTubeInnerTube(c, queries[searchPage % queries.length]);
+        const videos = discovered.slice(0, limit).map((video: any) => ({
+          ...video,
+          isShort: true,
+          category: "Shorts",
+        }));
+        return c.json({
+          videos,
+          nextPageToken: `shorts-search:${searchPage + 1}`,
+          real: true,
+          source: "youtube_innertube",
+        });
+      } catch (error: any) {
+        const fallbackVideos = await fetchYoutubeRssVideos(OFFICIAL_CHANNEL_ID, 50).catch(() => []);
+        return c.json({
+          videos: fallbackVideos.filter((video) => video.isShort).slice(0, limit),
+          nextPageToken: `shorts-search:${searchPage + 1}`,
+          real: true,
+          source: "youtube_rss",
+          sourceUnavailable: true,
+        });
+      }
+    }
     try {
-      let response = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&chart=mostPopular&maxResults=50&regionCode=${encodeURIComponent(c.req.query("region") || "US")}${pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : ""}&key=${encodeURIComponent(apiKey)}`);
-      let data: any = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(`YouTube trending ${response.status}`);
-      let items = (data.items || []).filter((item: any) => {
-        const seconds = isoDurationSeconds(item.contentDetails?.duration);
-        return seconds > 0 && seconds <= 180;
-      });
-      // Trending can contain too few Shorts; supplement with Shorts discovery.
-      if (items.length < limit) {
-        const queries = ["shorts", "#shorts", "viral shorts"];
-        const searchResults = await Promise.all(queries.map(async (query) => {
+      const queries = ["#shorts"];
+      const searchResults = await Promise.all(queries.map(async (query) => {
           const searchParams = new URLSearchParams({ part: "snippet", type: "video", videoDuration: "short", order: "date", maxResults: "50", q: query, key: apiKey });
           if (pageToken) searchParams.set("pageToken", pageToken);
           const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${searchParams}`);
           const searchData: any = await searchRes.json().catch(() => ({}));
           return { searchRes, searchData };
-        }));
-        const ids = [...new Set(searchResults.flatMap(({ searchData }) => (searchData.items || []).map((item: any) => item.id?.videoId).filter(Boolean)))];
-        if (ids.length) {
-          const detailRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${ids.join(",")}&key=${encodeURIComponent(apiKey)}`);
-          const detailData: any = await detailRes.json().catch(() => ({}));
-          items = [...items, ...(detailData.items || []).filter((item: any) => {
-            const seconds = isoDurationSeconds(item.contentDetails?.duration);
-            return seconds > 0 && seconds <= 180;
-          })];
-          data.nextPageToken = data.nextPageToken || searchResults.find(({ searchData }) => searchData.nextPageToken)?.searchData.nextPageToken || "";
+      }));
+      if (searchResults.some(({ searchRes }) => !searchRes.ok)) {
+        throw new Error(`YouTube Shorts search ${searchResults.find(({ searchRes }) => !searchRes.ok)?.searchRes.status || 502}`);
+      }
+      const searchSignals = new Map<string, boolean>();
+      for (let index = 0; index < searchResults.length; index += 1) {
+        const { searchData } = searchResults[index];
+        for (const item of searchData.items || []) {
+          const id = item.id?.videoId;
+          if (!id) continue;
+          const text = `${item.snippet?.title || ""} ${item.snippet?.description || ""}`.toLowerCase();
+          searchSignals.set(id, (searchSignals.get(id) || false) || index === 0 || text.includes("short"));
         }
+      }
+      const ids = [...searchSignals.keys()];
+      let items: any[] = [];
+      const nextPageToken = searchResults.find(({ searchData }) => searchData.nextPageToken)?.searchData.nextPageToken || "";
+      if (ids.length) {
+        const detailRes = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics&id=${ids.join(",")}&key=${encodeURIComponent(apiKey)}`);
+        const detailData: any = await detailRes.json().catch(() => ({}));
+        items = (detailData.items || []).filter((item: any) => {
+          const seconds = isoDurationSeconds(item.contentDetails?.duration);
+          const text = `${item.snippet?.title || ""} ${item.snippet?.description || ""} ${(item.snippet?.tags || []).join(" ")}`.toLowerCase();
+          return seconds > 0 && seconds <= 180 && (searchSignals.get(item.id) === true || text.includes("short"));
+        });
       }
       const seen = new Set<string>();
       const channelIds = [...new Set(items.map((item: any) => item.snippet?.channelId).filter(Boolean))].slice(0, 50);
@@ -1285,11 +1737,21 @@ function createApiApp() {
         comments: formatCount(item.statistics?.commentCount, "comments"), commentCount: Number(item.statistics?.commentCount || 0),
         description: item.snippet?.description || "",
         duration: parseIsoDuration(item.contentDetails?.duration), publishedAt: item.snippet?.publishedAt || "",
-        category: "Shorts"
+        category: "Shorts", isShort: true
       }));
-      return c.json({ videos, nextPageToken: data.nextPageToken || "", real: true });
+      return c.json({ videos, nextPageToken, real: true });
     } catch (error: any) {
-      return c.json({ videos: [], nextPageToken: "", real: false, error: error.message || "SHORTS_FETCH_FAILED" }, 502);
+      try {
+        let videos = (await fetchYoutubeRssVideos(OFFICIAL_CHANNEL_ID, 50)).filter((video) => video.isShort).slice(0, limit);
+        if (videos.length < limit) {
+          const sectionVideos = await fetchYoutubeSectionVideos(OFFICIAL_CHANNEL_ID, "shorts", limit).catch(() => []);
+          if (sectionVideos.length > videos.length) videos = sectionVideos;
+        }
+        if (!videos.length) videos = (await fetchYoutubeRssVideos(OFFICIAL_CHANNEL_ID, 50)).slice(0, limit).map((video) => ({ ...video, isShort: true }));
+        return c.json({ videos, nextPageToken: `shorts-search:${(rotatingSearchPage ? Number(rotatingSearchPage[1]) : 0) + 1}`, real: true, source: "youtube_rss" });
+      } catch (fallbackError: any) {
+        return c.json({ videos: [], nextPageToken: "", real: false, sourceUnavailable: true, error: error.message || "SHORTS_FETCH_FAILED" });
+      }
     }
   });
 
@@ -1302,14 +1764,14 @@ function createApiApp() {
     if (env.DB) {
       try {
         const stored = await env.DB.prepare("SELECT id, video_id AS videoId, title, thumbnail, original_url AS originalUrl, created_at AS createdAt, source FROM videos ORDER BY created_at DESC LIMIT 100").all();
-        streamVideos = stored.results || [];
+        streamVideos = [...(stored.results || []), ...inMemoryUploads];
       } catch {}
     }
     const stream = streamVideos.map((video: any) => ({
       ...video,
-      id: video.videoId || video.id,
-      youtubeId: video.videoId || video.id,
-      thumbnailUrl: video.thumbnail,
+      id: video.youtubeId || video.videoId || video.id,
+      youtubeId: video.youtubeId || video.videoId || video.id,
+      thumbnailUrl: video.thumbnailUrl || video.thumbnail,
       platform: "youtube",
       source: "youtube_link",
       views: "0 views"
@@ -1352,14 +1814,104 @@ function createApiApp() {
       }));
       return c.json({ videos: [...stream, ...videos], real: true, topic, refreshedAt: new Date().toISOString() });
     } catch (error: any) {
-      const fallback = ((makePlatformCatalogs() as any).youtube || []).map((video: any) => ({
-        ...video,
-        source: "youtube",
-        platform: "youtube",
-        id: video.youtubeId || video.id,
-        youtubeId: video.youtubeId || video.id,
-      }));
-      return c.json({ videos: [...stream, ...fallback], real: false, error: error.message || "FEED_FETCH_FAILED" });
+      try {
+        const rssVideos = await fetchYoutubeSectionVideos(OFFICIAL_CHANNEL_ID, "videos", 50).catch(() => fetchYoutubeRssVideos(OFFICIAL_CHANNEL_ID, 50));
+        return c.json({ videos: [...stream, ...rssVideos], real: true, source: "youtube_rss", sourceUnavailable: true });
+      } catch {
+        return c.json({ videos: stream, real: false, sourceUnavailable: true, error: error.message || "FEED_FETCH_FAILED" });
+      }
+    }
+  });
+
+  app.post("/api/home/feed", async (c) => {
+    try {
+      const env = c.env as Env;
+      const body: any = await c.req.json().catch(() => ({}));
+      const continuationToken = String(body.continuationToken || c.req.query("continuationToken") || "").trim();
+      const cacheKey = `yt:home:feed:v4:${continuationToken || "first"}`;
+      if (!continuationToken && env.KV) {
+        const cached = await env.KV.get(cacheKey, "json").catch(() => null);
+        if (cached) return c.json(cached);
+      }
+      const key = env.YOUTUBE_WEB_KEY || env.YOUTUBE_API_KEY || "";
+      const fallbackSearchToken = continuationToken.startsWith("home-search:")
+        ? Number(continuationToken.split(":")[1] || 0) + 1
+        : 0;
+      if (fallbackSearchToken) {
+        const queries = ["technology videos", "science videos", "programming videos", "music videos", "education videos"];
+        let videos = await searchYouTubeInnerTube(c, queries[fallbackSearchToken % queries.length]);
+        if (!videos.length) {
+          videos = await searchYouTubeInnerTube(c, "trending videos");
+        }
+        if (!videos.length) videos = await fetchYoutubeRssVideos(OFFICIAL_CHANNEL_ID, 15).catch(() => []);
+        const mixedVideos = videos.slice(0, 20);
+        return c.json({
+          success: true,
+          items: mixedVideos.map((video) => ({ type: "video_long", data: video })),
+          videos: mixedVideos,
+          products: inMemoryProducts.slice(0, 3),
+          nextToken: `home-search:${fallbackSearchToken + 1}`,
+          hasMore: true,
+        });
+      }
+      const payload = continuationToken
+        ? { context: { client: { clientName: "WEB", clientVersion: "2.20240301" } }, continuation: continuationToken }
+        : { context: { client: { clientName: "WEB", clientVersion: "2.20240301" } }, browseId: "FEwhat_to_watch" };
+      const requestBrowse = (browseKey: string) => fetch(youtubeBrowseUrl(browseKey), {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+        body: JSON.stringify(payload),
+      });
+      let response = await requestBrowse(key);
+      if (!response.ok && !continuationToken) response = await requestBrowse("");
+      let videos: any[] = [];
+      let nextToken = "";
+      if (response.ok) {
+        const parsed = parseInnerTubeChannelVideos(await response.json(), "");
+        videos = parsed.videos;
+        nextToken = parsed.nextToken || "";
+      }
+      if (!videos.length) {
+        videos = await searchYouTubeInnerTube(c, "trending videos");
+        if (!videos.length) videos = await fetchYoutubeRssVideos(OFFICIAL_CHANNEL_ID, 15).catch(() => []);
+        nextToken = videos.length ? "home-search:1" : "";
+      }
+      if (!videos.length && env.YOUTUBE_DATA_API_KEY) {
+        console.log("FALLBACK_API_USED");
+        const search = new URL("https://www.googleapis.com/youtube/v3/search");
+        search.searchParams.set("part", "snippet");
+        search.searchParams.set("type", "video");
+        search.searchParams.set("order", "date");
+        search.searchParams.set("maxResults", "50");
+        search.searchParams.set("key", env.YOUTUBE_DATA_API_KEY);
+        const apiResponse = await fetch(search);
+        if (apiResponse.ok) {
+          const data: any = await apiResponse.json();
+          videos = (data.items || []).map((item: any) => ({
+            id: item.id?.videoId, youtubeId: item.id?.videoId, source: "youtube", platform: "youtube",
+            title: item.snippet?.title || "YouTube video", channelName: item.snippet?.channelTitle || "YouTube Creator",
+            channelId: item.snippet?.channelId || "", thumbnailUrl: item.snippet?.thumbnails?.high?.url || "",
+            description: item.snippet?.description || "", publishedAt: item.snippet?.publishedAt || "",
+          })).filter((video: any) => video.youtubeId);
+        }
+      }
+      const sponsored = {
+        id: "native-tunacredit", youtubeId: "", isSponsored: true, sponsored: true, platform: "sponsored",
+        source: "native_ad", title: "Get up to ₦100,000 instantly", channelName: "Sponsored · TunaCredit",
+        thumbnailUrl: "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=1200&q=80",
+        cta: "Install",
+      };
+      const products = inMemoryProducts.slice(0, 3);
+      const mixedVideos = videos.slice(0, 20).flatMap((video, index) => index === 2 ? [sponsored, video] : [video]);
+      const result = {
+        success: true, items: mixedVideos.map((video) => ({ type: video.isSponsored ? "sponsored" : "video_long", data: video })),
+        videos: mixedVideos, products, nextToken, hasMore: Boolean(nextToken),
+      };
+      if (!continuationToken && env.KV) await env.KV.put(cacheKey, JSON.stringify(result), { expirationTtl: 3600 }).catch(() => {});
+      return c.json(result);
+    } catch (error: any) {
+      console.error("[home/feed]", error);
+      return c.json({ success: false, items: [], videos: [], products: [], nextToken: "", hasMore: false, error: error.message || "HOME_FEED_FAILED" }, 502);
     }
   });
 
@@ -1370,7 +1922,7 @@ function createApiApp() {
       + (Number(video.avg_watch_percent || 0) * 0.5)
       + (ageHours < 24 ? 50 : ageHours < 72 ? 20 : 0)
       - (ageHours * 1.5);
-    return Math.max(Number(video.is_pro_creator) ? base * 1.5 : base, 0);
+    return Math.max(Number(video.is_pro_creator) ? base * 1.5 : base, 5);
   };
   let lastBoostRecalculate = 0;
   const recalculateBoostScores = async (c: any, db: any) => {
@@ -1411,10 +1963,16 @@ function createApiApp() {
       return c.json({ updated });
     } catch (error: any) { return c.json({ updated: 0, error: error.message || "CALCULATE_SCORE_FAILED" }, 500); }
   });
+  app.get("/api/feed/home", async (c) => {
+    const url = new URL(c.req.url);
+    url.pathname = "/api/feed/foryou";
+    return app.fetch(new Request(url, c.req.raw), c.env);
+  });
   app.get("/api/feed/foryou", async (c) => {
     try {
       const db = await ensurePersistence(c);
       if (!db) return c.json({ videos: [], nextCursor: 0, isBoosted: false }, 503);
+      await ensureVideoStats(c, db);
       await recalculateBoostScores(c, db);
       await updateAdStatuses(db);
       const user = await gatedGetUserFromCookie(c);
@@ -1425,14 +1983,15 @@ function createApiApp() {
       if ((c.env as any).KV) shown = (await (c.env as any).KV.get(cursorKey, "json").catch(() => null)) || [];
       const placeholders = shown.map(() => "?").join(",");
       const where = placeholders ? `WHERE v.id NOT IN (${placeholders})` : "";
-      let query = `SELECT v.*, vs.score, vs.alphatekx_likes, vs.alphatekx_comments, vs.alphatekx_views, vs.is_pro_creator FROM videos v JOIN video_stats vs ON v.id = vs.video_id ${where} ORDER BY vs.score DESC, v.created_at DESC LIMIT ?`;
+      let query = `SELECT v.*, vs.score, vs.alphatekx_likes, vs.alphatekx_comments, vs.alphatekx_views, vs.is_pro_creator FROM videos v JOIN video_stats vs ON v.id = vs.video_id ${where} ${where ? "AND" : "WHERE"} vs.score >= 5 ORDER BY vs.score DESC, v.created_at DESC LIMIT ?`;
       let result: any = await db.prepare(query).bind(...shown, limit).all();
-      if (!(result.results || []).length && shown.length) {
+      if ((result.results || []).length < limit && shown.length) {
         shown = [];
-        result = await db.prepare("SELECT v.*, vs.score, vs.alphatekx_likes, vs.alphatekx_comments, vs.alphatekx_views, vs.is_pro_creator FROM videos v JOIN video_stats vs ON v.id = vs.video_id ORDER BY vs.score DESC, v.created_at DESC LIMIT ?").bind(limit).all();
+        result = await db.prepare("SELECT v.*, vs.score, vs.alphatekx_likes, vs.alphatekx_comments, vs.alphatekx_views, vs.is_pro_creator FROM videos v JOIN video_stats vs ON v.id = vs.video_id WHERE vs.score >= 5 ORDER BY vs.score DESC, v.created_at DESC LIMIT ?").bind(limit).all();
       }
       const videos = result.results || [];
-      const sponsored: any = await db.prepare("SELECT c.*, q.status AS queue_status FROM ads_campaigns c JOIN ads_queue q ON q.campaign_id = c.id WHERE c.status = 'active' AND q.status = 'active' AND c.start_at <= ? AND c.end_at > ? ORDER BY c.start_at ASC LIMIT 1").bind(Date.now(), Date.now()).first();
+      const activeAds = await getCurrentAds(db, c.env as Env);
+      const sponsored: any = activeAds.length ? activeAds[Math.floor(Math.random() * activeAds.length)] : null;
       const sponsoredVideo = sponsored ? [{
         id: `ad_${sponsored.id}`,
         videoId: sponsored.id,
@@ -1454,7 +2013,15 @@ function createApiApp() {
       const nextShown = [...ids, ...shown].slice(0, 50);
       if ((c.env as any).KV) await (c.env as any).KV.put(cursorKey, JSON.stringify(nextShown), { expirationTtl: 86400 }).catch(() => {});
       await Promise.all(ids.map((id: string) => db.prepare("INSERT INTO video_impressions (id, user_id, video_id, shown_at) VALUES (?, ?, ?, ?)").bind(`${userId}_${id}_${Date.now()}_${Math.random()}`, userId, id, Date.now()).run()));
-      return c.json({ videos: [...sponsoredVideo, ...videos], nextCursor: Number(c.req.query("cursor") || 0) + videos.length, type: "foryou", isBoosted: true });
+      const sponsoredAd = sponsored ? sponsoredVideo[0] : null;
+      return c.json({
+        sponsored_ad: sponsoredAd,
+        marketplace_small: inMemoryProducts.slice(0, 6),
+        videos: [...sponsoredVideo, ...videos],
+        nextCursor: Number(c.req.query("cursor") || 0) + videos.length,
+        type: "foryou",
+        isBoosted: true,
+      });
     } catch (error: any) {
       return c.json({ videos: [], nextCursor: 0, isBoosted: false, error: error.message || "FEED_FAILED" }, 500);
     }
@@ -1465,8 +2032,11 @@ function createApiApp() {
       if (!db) return c.json({ videos: [] }, 503);
       const user = await gatedGetUserFromCookie(c);
       if (!user) return c.json({ videos: [], error: "AUTHENTICATION_REQUIRED" }, 401);
-      const rows = await db.prepare("SELECT v.*, vs.score, vs.alphatekx_likes, vs.alphatekx_comments, vs.alphatekx_views, vs.is_pro_creator FROM videos v JOIN video_stats vs ON v.id = vs.video_id WHERE COALESCE(v.channel_id, v.added_by) IN (SELECT channel_id FROM channel_subscriptions WHERE user_id = ?) ORDER BY v.created_at DESC LIMIT 20").bind(user.id).all();
-      return c.json({ videos: rows.results || [] });
+      const limit = Math.min(Math.max(Number(c.req.query("limit") || 20), 1), 50);
+      const cursor = Math.max(Number(c.req.query("cursor") || 0), 0);
+      const rows = await db.prepare("SELECT v.*, vs.score, vs.alphatekx_likes, vs.alphatekx_comments, vs.alphatekx_views, vs.is_pro_creator FROM videos v JOIN video_stats vs ON v.id = vs.video_id WHERE COALESCE(v.channel_id, v.added_by) IN (SELECT channel_id FROM channel_subscriptions WHERE user_id = ?) ORDER BY v.created_at DESC LIMIT ? OFFSET ?").bind(user.id, limit, cursor).all();
+      const videos = rows.results || [];
+      return c.json({ videos, nextCursor: cursor + videos.length, hasMore: videos.length === limit });
     } catch (error: any) { return c.json({ videos: [], error: error.message || "FOLLOWING_FAILED" }, 500); }
   });
   app.get("/api/feed/trending", async (c) => {
@@ -1474,16 +2044,22 @@ function createApiApp() {
       const db = await ensurePersistence(c);
       if (!db) return c.json({ videos: [], title: "Trending Last 24h" }, 503);
       await ensureVideoStats(c, db);
-      const rows = await db.prepare("SELECT v.*, vs.score, vs.alphatekx_likes, vs.alphatekx_comments, vs.alphatekx_views, vs.is_pro_creator FROM videos v JOIN video_stats vs ON v.id = vs.video_id WHERE vs.created_at > ? ORDER BY vs.score DESC LIMIT 20").bind(Date.now() - 86400000).all();
-      return c.json({ videos: rows.results || [], title: "Trending Last 24h" });
+      const limit = Math.min(Math.max(Number(c.req.query("limit") || 20), 1), 50);
+      const cursor = Math.max(Number(c.req.query("cursor") || 0), 0);
+      const rows = await db.prepare("SELECT v.*, vs.score, vs.alphatekx_likes, vs.alphatekx_comments, vs.alphatekx_views, vs.is_pro_creator FROM videos v JOIN video_stats vs ON v.id = vs.video_id WHERE vs.created_at > ? ORDER BY vs.score DESC LIMIT ? OFFSET ?").bind(Date.now() - 86400000, limit, cursor).all();
+      const videos = rows.results || [];
+      return c.json({ videos, title: "Trending Last 24h", nextCursor: cursor + videos.length, hasMore: videos.length === limit });
     } catch (error: any) { return c.json({ videos: [], title: "Trending Last 24h", error: error.message }, 500); }
   });
   app.get("/api/feed/new", async (c) => {
     try {
       const db = await ensurePersistence(c);
       if (!db) return c.json({ videos: [], title: "Fresh - Last 6h" }, 503);
-      const rows = await db.prepare("SELECT * FROM videos WHERE created_at > ? ORDER BY created_at DESC LIMIT 20").bind(Date.now() - 21600000).all();
-      return c.json({ videos: rows.results || [], title: "Fresh - Last 6h" });
+      const limit = Math.min(Math.max(Number(c.req.query("limit") || 20), 1), 50);
+      const cursor = Math.max(Number(c.req.query("cursor") || 0), 0);
+      const rows = await db.prepare("SELECT * FROM videos WHERE created_at > ? ORDER BY created_at DESC LIMIT ? OFFSET ?").bind(Date.now() - 21600000, limit, cursor).all();
+      const videos = rows.results || [];
+      return c.json({ videos, title: "Fresh - Last 6h", nextCursor: cursor + videos.length, hasMore: videos.length === limit });
     } catch (error: any) { return c.json({ videos: [], title: "Fresh - Last 6h", error: error.message }, 500); }
   });
   app.post("/api/video/view", async (c) => {
@@ -1570,7 +2146,7 @@ function createApiApp() {
     const rows = await db.prepare("SELECT data FROM watch_later WHERE user_id = ? ORDER BY created_at DESC LIMIT 200").bind(user.id).all();
     return c.json({ videos: (rows.results || []).map((row: any) => JSON.parse(row.data)), count: rows.results?.length || 0 });
     }
-    return c.json({ videos: inMemoryWatchLater, count: inMemoryWatchLater.length });
+    return c.json({ videos: [], count: 0, error: "PERSISTENCE_NOT_CONFIGURED" }, 503);
   });
   app.post("/api/watch-later", async (c) => {
     const user = await gatedGetUserFromCookie(c);
@@ -1666,12 +2242,10 @@ function createApiApp() {
       createdAt: Date.now()
     };
     const db = await ensurePersistence(c).catch(() => null);
-    if (db) {
-      await db.prepare("INSERT INTO community_messages (id, video_id, channel, user_id, user_name, avatar_initials, message, timestamp_in_video, likes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-        .bind(newMsg.id, newMsg.videoId, newMsg.channel, user.id, newMsg.userName, newMsg.avatarInitials, newMsg.message, newMsg.timestampInVideo, 0, newMsg.createdAt).run();
-      await db.prepare("UPDATE video_stats SET alphatekx_comments = alphatekx_comments + 1, updated_at = ? WHERE video_id = ?").bind(Date.now(), newMsg.videoId).run();
-    }
-    inMemoryMessages.push(newMsg);
+    if (!db) return c.json({ success: false, error: "PERSISTENCE_NOT_CONFIGURED" }, 503);
+    await db.prepare("INSERT INTO community_messages (id, video_id, channel, user_id, user_name, avatar_initials, message, timestamp_in_video, likes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
+      .bind(newMsg.id, newMsg.videoId, newMsg.channel, user.id, newMsg.userName, newMsg.avatarInitials, newMsg.message, newMsg.timestampInVideo, 0, newMsg.createdAt).run();
+    await db.prepare("UPDATE video_stats SET alphatekx_comments = alphatekx_comments + 1, updated_at = ? WHERE video_id = ?").bind(Date.now(), newMsg.videoId).run();
     return c.json({ success: true, message: newMsg });
   });
 
@@ -1982,6 +2556,54 @@ function createApiApp() {
   // when persistent billing storage is available.
   const aiUsage = (globalThis as any).__aiUsage || ((globalThis as any).__aiUsage = new Map<string, number>());
   const aiLimits: Record<string, number> = { jot: 2, teacher: 2, thumbnail: 2, voice: 2, translator: 2, video_gen: 2, vibe_code: 2, capture: 2, memory: 2, workspace: Number.POSITIVE_INFINITY };
+  const planLimits = {
+    free: { window: 2, weekly: 2, priceUsd: 0, priceNgn: 0 },
+    lite: { window: 30, weekly: 150, priceUsd: 5, priceNgn: 5000 },
+    pro: { window: 100, weekly: 500, priceUsd: 19, priceNgn: 28500 },
+  } as const;
+  function getPlanLimits(plan: string) {
+    return planLimits[plan as keyof typeof planLimits] || planLimits.free;
+  }
+  async function aiRateLimitStatus(c: any, userId: string) {
+    const db = await ensurePersistence(c);
+    if (!db) throw new Error("PERSISTENCE_NOT_CONFIGURED");
+    const now = Date.now();
+    const fiveHours = 5 * 60 * 60 * 1000;
+    const week = 7 * 24 * 60 * 60 * 1000;
+    const subscription: any = await subscriptionFor(c, userId);
+    const requestedPlan = String(subscription?.plan || "free").toLowerCase();
+    const plan = getPlanLimits(requestedPlan) === planLimits.free && requestedPlan !== "free"
+      ? "free"
+      : ((subscription?.active || requestedPlan !== "free") && (!subscription?.expiresAt || Number(subscription.expiresAt) > now) ? requestedPlan : "free");
+    let row: any = await db.prepare("SELECT window_start, used_in_window, weekly_used, week_start FROM ai_usage WHERE user_id = ? AND feature = '__all__'").bind(userId).first();
+    const windowStart = row?.window_start && now - Number(row.window_start) <= fiveHours ? Number(row.window_start) : now;
+    const weekStart = row?.week_start && now - Number(row.week_start) <= week ? Number(row.week_start) : now;
+    const usedInWindow = windowStart === Number(row?.window_start) ? Number(row?.used_in_window || 0) : 0;
+    const weeklyUsed = weekStart === Number(row?.week_start) ? Number(row?.weekly_used || 0) : 0;
+    await db.prepare("INSERT INTO ai_usage (user_id, feature, window_start, used_in_window, weekly_used, week_start, plan, last_used) VALUES (?, '__all__', ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id, feature) DO UPDATE SET window_start = excluded.window_start, used_in_window = excluded.used_in_window, weekly_used = excluded.weekly_used, week_start = excluded.week_start, plan = excluded.plan")
+      .bind(userId, windowStart, usedInWindow, weeklyUsed, weekStart, plan, now).run();
+    const limits = getPlanLimits(plan);
+    return {
+      plan,
+      usedInWindow,
+      weeklyUsed,
+      windowLimit: limits.window,
+      weeklyLimit: limits.weekly,
+      remainingWindow: Math.max(0, limits.window - usedInWindow),
+      remainingWeekly: Math.max(0, limits.weekly - weeklyUsed),
+      windowResetIn: Math.max(0, fiveHours - (now - windowStart)),
+      weekResetIn: Math.max(0, week - (now - weekStart)),
+    };
+  }
+  async function consumeAiRateLimit(c: any, userId: string) {
+    const status = await aiRateLimitStatus(c, userId);
+    if (!status.remainingWindow || !status.remainingWeekly) return { ...status, allowed: false };
+    const db = await ensurePersistence(c);
+    const updated: any = await db.prepare("UPDATE ai_usage SET used_in_window = used_in_window + 1, weekly_used = weekly_used + 1, last_used = ? WHERE user_id = ? AND feature = '__all__' AND used_in_window < ? AND weekly_used < ?")
+      .bind(Date.now(), userId, status.windowLimit, status.weeklyLimit).run();
+    if (!updated.meta?.changes) return { ...status, allowed: false };
+    return { ...status, allowed: true, usedInWindow: status.usedInWindow + 1, weeklyUsed: status.weeklyUsed + 1, remainingWindow: status.remainingWindow - 1, remainingWeekly: status.remainingWeekly - 1 };
+  }
   async function historyForUser(c: any, userId: string, kind: "watched" | "searched") {
     const env: any = c.env || {};
     if (env.DB) {
@@ -2044,35 +2666,132 @@ function createApiApp() {
     }
     return { videoId, title, transcript: description || "No public transcript was provided. Be transparent about uncertainty and use the available title/context." };
   }
+  function decodeTranscriptText(value: string) {
+    return value.replace(/&#39;|&#x27;/gi, "'").replace(/&quot;|&#x22;/gi, '"').replace(/&amp;/gi, "&").replace(/&lt;/gi, "<").replace(/&gt;/gi, ">").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  }
+  async function getYouTubeCaptionSegments(videoId: string) {
+    const page = await fetch(`https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`, { headers: { "User-Agent": "Mozilla/5.0" } });
+    if (!page.ok) return [];
+    const html = await page.text();
+    const match = html.match(/"captionTracks":\s*(\[[\s\S]*?\])/) || html.match(/\\"captionTracks\\":\s*(\[[\s\S]*?\])/);
+    let tracks: any[] = [];
+    if (match) {
+      try { tracks = JSON.parse(match[1].replace(/\\"/g, '"').replace(/\\u0026/g, "&")); } catch {}
+    }
+    const urls = tracks.sort((a: any, b: any) => Number(b.languageCode === "en") - Number(a.languageCode === "en")).map((item: any) => item.baseUrl).filter(Boolean);
+    urls.push(`https://www.youtube.com/api/timedtext?v=${encodeURIComponent(videoId)}&lang=en&fmt=json3`);
+    urls.push(`https://video.google.com/timedtext?lang=en&v=${encodeURIComponent(videoId)}`);
+    for (const url of urls) {
+      const response = await fetch(url);
+      if (!response.ok) continue;
+      const text = await response.text();
+      try {
+        const json = JSON.parse(text);
+        if (Array.isArray(json.events)) {
+          const segments = json.events.filter((event: any) => event.segs).map((event: any) => ({
+            text: decodeTranscriptText(event.segs.map((segment: any) => segment.utf8 || "").join("")),
+            start: Number(event.tStartMs || 0) / 1000,
+            duration: Number(event.dDurationMs || 0) / 1000,
+          })).filter((item: any) => item.text);
+          if (segments.length) return segments;
+        }
+      } catch {}
+      const segments = [...text.matchAll(/<text[^>]*start="([\d.]+)"[^>]*dur="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/g)]
+        .map(match => ({ text: decodeTranscriptText(match[3]), start: Number(match[1]), duration: Number(match[2]) })).filter(item => item.text);
+      if (segments.length) return segments;
+    }
+    return [];
+  }
+  async function getYouTubeTranscript(videoId: string) {
+    try {
+      return (await getYouTubeCaptionSegments(videoId)).map(segment => segment.text).join(" ").trim();
+    } catch (error) {
+      console.error("[ai-jot] YouTube transcript failed", error);
+      return "";
+    }
+  }
+  async function groqWhisperTranscribe(c: any, fileUrl: string) {
+    const apiKey = (c.env as Env)?.GROQ_API_KEY;
+    if (!apiKey || !fileUrl) return "";
+    try {
+      const source = await fetch(fileUrl);
+      if (!source.ok) return "";
+      const bytes = await source.arrayBuffer();
+      if (!bytes.byteLength || bytes.byteLength > 25 * 1024 * 1024) return "";
+      const form = new FormData();
+      form.append("file", new Blob([bytes], { type: source.headers.get("content-type") || "audio/mp4" }), "video-audio");
+      form.append("model", "whisper-large-v3");
+      form.append("response_format", "json");
+      const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${apiKey}` },
+        body: form,
+      });
+      const data: any = await response.json().catch(() => ({}));
+      return response.ok && typeof data.text === "string" ? data.text.trim() : "";
+    } catch (error) {
+      console.error("[ai-jot] Groq transcription failed", error);
+      return "";
+    }
+  }
+  async function runAiJot(c: any, body: any) {
+    const user = await gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to use AI Jot." }, 401);
+    const rate = await aiRateLimitStatus(c, user.id);
+    if (rate.remainingWindow <= 0 || rate.remainingWeekly <= 0) {
+      return c.json({ success: false, error: "AI_RATE_LIMIT_REACHED", message: "Rate limit reached. Try again after the reset window.", retry_after: rate.windowResetIn, ...rate }, 429);
+    }
+    let videoId = String(body.youtube_id || body.videoId || "").trim();
+    if (!videoId && body.video_url) videoId = String(body.video_url).match(/(?:v=|youtu\.be\/|shorts\/)([A-Za-z0-9_-]{11})/)?.[1] || "";
+    let transcript = videoId ? await getYouTubeTranscript(videoId) : "";
+    let source = transcript ? "youtube_transcript" : "";
+    const suppliedVideoUrl = String(body.video_url || "");
+    const isYouTubeUrl = /(?:youtube\.com|youtu\.be)\//i.test(suppliedVideoUrl);
+    if (!transcript && (body.file_url || body.video_url) && !isYouTubeUrl) {
+      transcript = await groqWhisperTranscribe(c, String(body.file_url || body.video_url));
+      if (transcript) source = "groq_whisperflow";
+    }
+    if (transcript.length < 10) return c.json({ success: false, error: "TRANSCRIPT_UNAVAILABLE", message: "Could not capture transcript. No captions were found and Groq Whisperflow could not transcribe the audio." }, 400);
+    const prompt = `Create faithful AI Jot notes from this complete transcript. Preserve every spoken idea in order; clean filler and repetition without omitting meaning. Return JSON with summary (string), key_points (array), cleaned_transcript (string), action_items (array), and jots (array of {time, seconds, text, summary}). Do not invent timestamps; use 0:00 when unavailable.\n\nCOMPLETE TRANSCRIPT:\n${transcript.slice(0, 30000)}`;
+    const apiKey = (c.env as Env)?.GROQ_API_KEY;
+    if (!apiKey) return c.json({ success: false, error: "GROQ_NOT_CONFIGURED" }, 503);
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: (c.env as Env)?.GROQ_MODEL || "llama-3.1-8b-instant", temperature: 0.2, response_format: { type: "json_object" }, messages: [{ role: "system", content: "You are AI Jot. Never add facts that are not in the transcript." }, { role: "user", content: prompt }] }),
+    });
+    const data: any = await response.json().catch(() => ({}));
+    if (!response.ok) return c.json({ success: false, error: "GROQ_REQUEST_FAILED", detail: String(data.error?.message || "").slice(0, 500) }, 502);
+    const content = data.choices?.[0]?.message?.content;
+    if (!content) return c.json({ success: false, error: "GROQ_EMPTY_RESPONSE" }, 502);
+    let result: any;
+    try { result = JSON.parse(content); } catch { result = { summary: content, cleaned_transcript: transcript, jots: [{ time: "0:00", seconds: 0, text: content, summary: "AI Jot" }] }; }
+    if (!Array.isArray(result.jots) || result.jots.length === 0) {
+      const points = Array.isArray(result.key_points) ? result.key_points : [];
+      result.jots = points.length
+        ? points.map((point: any) => ({ time: "0:00", seconds: 0, text: String(point), summary: "Key point" }))
+        : [{ time: "0:00", seconds: 0, text: String(result.cleaned_transcript || result.summary || transcript).slice(0, 1000), summary: "Captured transcript" }];
+    }
+    const consumed = await consumeAiRateLimit(c, user.id);
+    if (!consumed.allowed) return c.json({ success: false, error: "AI_RATE_LIMIT_REACHED", ...consumed }, 429);
+    await incrementUsage(c, "ai_usage", user.id, "jot");
+    return c.json({ success: true, source, transcript, transcript_length: transcript.length, result, usage: consumed });
+  }
   async function runGroq(c: any, feature: "teacher" | "jot" | "capture" | "workspace" | "memory", body: any) {
     const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to use AI features." }, 401);
 
     const subscription = await subscriptionFor(c, user.id);
     const isPro = Boolean(subscription && (subscription.active || subscription.plan === "pro") && (!subscription.expiresAt || Number(subscription.expiresAt) > Date.now()));
-    if (feature === "workspace" && !isPro) {
-      const keys = await c.env?.DB?.prepare("SELECT openai_key, gemini_key FROM user_api_keys WHERE user_id = ?").bind(user.id).first().catch(() => null);
-      if (!(keys?.openai_key || keys?.gemini_key)) {
-        return c.json({ success: false, error: "BYOK_OR_PRO_REQUIRED", message: "Bring your own key or upgrade to Pro to use Workspace AI.", upgradeUrl: "/pricing" }, 403);
-      }
+    const keys: any = feature === "workspace"
+      ? await c.env?.DB?.prepare("SELECT openai_key, gemini_key FROM user_api_keys WHERE user_id = ?").bind(user.id).first().catch(() => null)
+      : null;
+    if (feature === "workspace" && !isPro && !keys?.openai_key) {
+      return c.json({ success: false, error: "BYOK_OR_PRO_REQUIRED", message: "Bring your own key or upgrade to Pro to use Workspace AI.", upgradeUrl: "/pricing" }, 403);
     }
-    const month = new Date().toISOString().slice(0, 7);
-    const usageKey = `${user.id}:${feature}:${month}`;
-    let used = aiUsage.get(usageKey) || 0;
-    if (!used && (c.env as Env)?.KV) {
-      used = Number(await (c.env as Env).KV!.get(`ai-usage:${usageKey}`) || 0);
-      aiUsage.set(usageKey, used);
-    }
-    const limit = aiLimits[feature];
-    const persistentUsage = feature === "workspace" ? { used, allowed: true } : await checkUsage(c, "ai_usage", user.id, limit, feature);
-    used = persistentUsage.used;
-    if (!isPro && feature !== "workspace" && used >= limit) {
-      return c.json({
-        success: false,
-        error: "USAGE_LIMIT_EXCEEDED",
-        message: `${feature} limit reached (${limit} per month). Upgrade to Pro for unlimited use.`,
-        feature, used, limit, isPro: false, upgradeUrl: "/pricing",
-      }, 403);
+    const rate = await aiRateLimitStatus(c, user.id);
+    if (rate.remainingWindow <= 0 || rate.remainingWeekly <= 0) {
+      return c.json({ success: false, error: "AI_RATE_LIMIT_REACHED", message: "Rate limit reached. Try again after the 5-hour window or weekly reset.", feature, retry_after: rate.windowResetIn, ...rate, upgradeUrl: "/pricing" }, 429);
     }
 
     const messageInput = Array.isArray(body.messages)
@@ -2080,7 +2799,7 @@ function createApiApp() {
       : "";
     const input = String(body.question || body.prompt || body.message || body.goal || body.text || body.content || messageInput || "").trim();
     if (!input) return c.json({ success: false, error: "PROMPT_REQUIRED" }, 400);
-    const apiKey = (c.env as Env)?.GROQ_API_KEY;
+    const apiKey = feature === "workspace" && !isPro ? String(keys?.openai_key || "") : (c.env as Env)?.GROQ_API_KEY;
     if (!apiKey) return c.json({ success: false, error: "GROQ_NOT_CONFIGURED" }, 503);
 
     const context = await getVideoContext(c, body);
@@ -2101,31 +2820,33 @@ function createApiApp() {
       context.videoId ? `Video ID: ${context.videoId}` : "",
       body.videoId || body.title || body.description || body.transcript ? `Optional video context - title: ${context.title}\n${context.transcript.slice(0, 12000)}` : "",
       feature === "memory" ? `Persisted watch/search history: ${JSON.stringify(body.history || []).slice(0, 20000)}` : "",
+      feature === "workspace" && body.workspaceCode ? `Current workspace code:\n${String(body.workspaceCode).slice(0, 30000)}` : "",
+      feature === "workspace" && body.workspaceFiles ? `Current workspace files:\n${JSON.stringify(body.workspaceFiles).slice(0, 30000)}` : "",
     ].filter(Boolean).join("\n\n");
-    const groqUrl = "https://api.groq.com/openai/v1/chat/completions";
+    const providerUrl = feature === "workspace" && !isPro ? "https://api.openai.com/v1/chat/completions" : "https://api.groq.com/openai/v1/chat/completions";
     const groqHeaders = {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     };
-    const groqRequest = (jsonMode: boolean) => ({
-      model: (c.env as Env)?.GROQ_MODEL || "llama-3.1-8b-instant",
+    const providerRequest = (jsonMode: boolean) => ({
+      model: feature === "workspace" && !isPro ? "gpt-4o-mini" : ((c.env as Env)?.GROQ_MODEL || "llama-3.1-8b-instant"),
       temperature: 0.2,
       ...(jsonMode ? { response_format: { type: "json_object" } } : {}),
       messages: [{ role: "system", content: instructions }, { role: "user", content: enrichedInput }],
     });
     const useJsonMode = feature !== "workspace";
-    let response = await fetch(groqUrl, {
+    let response = await fetch(providerUrl, {
       method: "POST",
       headers: groqHeaders,
-      body: JSON.stringify(groqRequest(useJsonMode)),
+      body: JSON.stringify(providerRequest(useJsonMode)),
     });
     // Some configured Groq models reject JSON mode even though chat works.
     // Retry once without that optional constraint before reporting a failure.
     if (!response.ok && response.status === 400) {
-      response = await fetch(groqUrl, {
+      response = await fetch(providerUrl, {
         method: "POST",
         headers: groqHeaders,
-        body: JSON.stringify(groqRequest(false)),
+        body: JSON.stringify(providerRequest(false)),
       });
     }
     if (!response.ok) {
@@ -2138,10 +2859,10 @@ function createApiApp() {
     let result: any;
     try { result = JSON.parse(content); } catch { result = { answer: content, text: content }; }
     if (feature === "teacher" && question && !result.answer) result.answer = result.text || content;
-    aiUsage.set(usageKey, used + 1);
-    if (feature !== "workspace") await incrementUsage(c, "ai_usage", user.id, feature);
-    if ((c.env as Env)?.KV) await (c.env as Env).KV!.put(`ai-usage:${usageKey}`, String(used + 1), { expirationTtl: 60 * 60 * 24 * 370 });
-    return c.json({ success: true, feature, result, message: content, usage: { used: used + 1, limit: isPro ? null : limit, isPro } });
+    const consumed = await consumeAiRateLimit(c, user.id);
+    if (!consumed.allowed) return c.json({ success: false, error: "AI_RATE_LIMIT_REACHED", message: "Rate limit reached while completing the request. Try again after the reset window.", feature, retry_after: consumed.windowResetIn, ...consumed }, 429);
+    await incrementUsage(c, "ai_usage", user.id, feature);
+    return c.json({ success: true, feature, result, message: content, usage: consumed });
   }
 
   // AI Teacher Course Builder
@@ -2159,19 +2880,97 @@ function createApiApp() {
   app.post("/api/jot", async (c) => {
     let body: any = {};
     try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
-    return runGroq(c, "jot", body);
+    return runAiJot(c, body);
+  });
+  app.post("/api/ai/jot", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    return runAiJot(c, body);
+  });
+  app.post("/api/ai/jot/captions", async (c) => {
+    const user = await gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to use AI Jot." }, 401);
+    const body: any = await c.req.json().catch(() => ({}));
+    const videoId = String(body.youtube_id || body.videoId || "").trim();
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) return c.json({ success: false, error: "VIDEO_ID_REQUIRED" }, 400);
+    const segments = await getYouTubeCaptionSegments(videoId);
+    const transcript = segments.map(segment => segment.text).join(" ").trim();
+    if (!transcript) return c.json({ success: false, error: "CAPTIONS_UNAVAILABLE", message: "This video has no readable captions." }, 404);
+    const rate = await consumeAiRateLimit(c, user.id);
+    if (!rate.allowed) return c.json({ success: false, error: "AI_TRIAL_LIMIT_REACHED", message: rate.plan === "free" ? "You have used your 2 free AI trials. Upgrade to continue." : "Your subscription AI limit has been reached.", ...rate, upgradeUrl: "/pricing" }, 429);
+    await incrementUsage(c, "ai_usage", user.id, "jot");
+    return c.json({ success: true, source: "youtube-captions", transcript: segments, fullText: transcript, transcript_length: transcript.length, usage: rate });
+  });
+  app.post("/api/ai-jot-cleanup", async (c) => {
+    const user = await gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED" }, 401);
+    const body: any = await c.req.json().catch(() => ({}));
+    const fullTranscript = String(body.fullTranscript || "").trim();
+    if (!fullTranscript) return c.json({ success: false, error: "TRANSCRIPT_REQUIRED" }, 400);
+    let usageResult: any = null;
+    if (body.chargeUsage === true) {
+      usageResult = await aiRateLimitStatus(c, user.id);
+      if (!usageResult.remainingWindow || !usageResult.remainingWeekly) return c.json({ success: false, error: "AI_TRIAL_LIMIT_REACHED", message: usageResult.plan === "free" ? "You have used your 2 free AI trials. Upgrade to continue." : "Your subscription AI limit has been reached.", ...usageResult, upgradeUrl: "/pricing" }, 429);
+    }
+    const key = (c.env as Env).GROQ_API_KEY;
+    if (!key) return c.json({ success: false, error: "GROQ_NOT_CONFIGURED" }, 503);
+    const prompt = `Clean this transcript from "${String(body.videoTitle || "video")}". Remove filler, stutters, repeated words and stage directions while preserving every meaningful idea. Return JSON with cleanedTranscript, summary, keyPoints, quotes, actionItems, and neatNotesMarkdown. Do not invent facts.\n\n${fullTranscript.slice(0, 30000)}`;
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST", headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ model: (c.env as Env).GROQ_MODEL || "openai/gpt-oss-120b", temperature: 0.2, response_format: { type: "json_object" }, messages: [{ role: "system", content: "You are Alphatekx Smart Cleanup AI. Preserve meaning exactly." }, { role: "user", content: prompt }] }),
+    });
+    const data: any = await response.json().catch(() => ({}));
+    if (!response.ok) return c.json({ success: false, error: "GROQ_REQUEST_FAILED", detail: data.error?.message || "" }, 502);
+    const content = data.choices?.[0]?.message?.content || "";
+    let result: any;
+    try { result = JSON.parse(content); } catch { result = { cleanedTranscript: fullTranscript, summary: content, keyPoints: [], quotes: [], actionItems: [], neatNotesMarkdown: content }; }
+    if (body.chargeUsage === true) {
+      usageResult = await consumeAiRateLimit(c, user.id);
+      if (!usageResult.allowed) return c.json({ success: false, error: "AI_TRIAL_LIMIT_REACHED", ...usageResult }, 429);
+      await incrementUsage(c, "ai_usage", user.id, "jot");
+    }
+    return c.json({ success: true, ...result, modelUsed: (c.env as Env).GROQ_MODEL || "openai/gpt-oss-120b", ...(usageResult ? { usage: usageResult } : {}) });
+  });
+  app.post("/api/ai/jot/groq", async (c) => {
+    const user = await gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED" }, 401);
+    const rate = await aiRateLimitStatus(c, user.id);
+    if (rate.remainingWindow <= 0 || rate.remainingWeekly <= 0) return c.json({ success: false, error: "AI_RATE_LIMIT_REACHED", ...rate }, 429);
+    const form = await c.req.formData();
+    const file = form.get("file");
+    if (!(file instanceof File)) return c.json({ success: false, error: "AUDIO_FILE_REQUIRED" }, 400);
+    const request = new FormData();
+    request.append("file", file, file.name || "capture.webm");
+    request.append("model", "whisper-large-v3");
+    request.append("response_format", "json");
+    const response = await fetch("https://api.groq.com/openai/v1/audio/transcriptions", {
+      method: "POST", headers: { Authorization: `Bearer ${(c.env as Env).GROQ_API_KEY || ""}` }, body: request,
+    });
+    const data: any = await response.json().catch(() => ({}));
+    if (!response.ok || !data.text) return c.json({ success: false, error: "GROQ_REQUEST_FAILED", detail: String(data.error?.message || "").slice(0, 500) }, 502);
+    const consumed = await consumeAiRateLimit(c, user.id);
+    if (!consumed.allowed) return c.json({ success: false, error: "AI_RATE_LIMIT_REACHED", ...consumed }, 429);
+    await incrementUsage(c, "ai_usage", user.id, "jot");
+    return c.json({ success: true, transcript: String(data.text).trim(), source: "groq_whisperflow", usage: consumed });
+  });
+  app.post("/api/ai/jot/summary", async (c) => {
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    const transcript = String(body.transcript || "").trim();
+    if (!transcript) return c.json({ success: false, error: "TRANSCRIPT_REQUIRED" }, 400);
+    return runGroq(c, "jot", { ...body, prompt: `Create faithful notes from this transcript without omitting meaning:\n\n${transcript.slice(0, 30000)}`, transcript });
   });
   app.post("/api/jot/create", async (c) => {
     let body: any = {};
     try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
-    return runGroq(c, "jot", body);
+    return runAiJot(c, body);
   });
   app.get("/api/ai-jot", async (c) => {
     const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ success: false, error: "AUTHENTICATION_REQUIRED", message: "Sign in to use AI Jot." }, 401);
     const videoId = c.req.query("videoId") || "";
     if (!videoId) return c.json({ success: false, error: "VIDEO_ID_REQUIRED" }, 400);
-    return runGroq(c, "jot", { videoId, prompt: "Create timestamped memory jots for this video." });
+    return runAiJot(c, { videoId });
   });
   app.post("/api/capture/clean", async (c) => {
     let body: any = {};
@@ -2227,7 +3026,7 @@ function createApiApp() {
   app.post("/api/ai/jot", async (c) => {
     let body: any = {};
     try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
-    return runGroq(c, "jot", body);
+    return runAiJot(c, body);
   });
   app.post("/api/ai/workspace", async (c) => {
     let body: any = {};
@@ -2304,36 +3103,102 @@ function createApiApp() {
   });
 
   // Paystack subscriptions
-  app.get("/api/subscription/status", async (c) => {
-    const user = await gatedGetUserFromCookie(c);
-    if (!user) return c.json({ authenticated: false, isPro: false });
-    let subscription = proSubscriptions.get(user.id);
-    if (!subscription && (c.env as Env)?.KV) {
-      subscription = await (c.env as Env).KV!.get(`subscription:${user.id}`, "json").catch(() => null);
-      if (subscription) proSubscriptions.set(user.id, subscription);
+  async function verifySubscriptionPayment(c: any, user: any, reference: string, requestedPlan?: string) {
+    const secret = (c.env as Env)?.PAYSTACK_SECRET_KEY;
+    if (!secret) return c.json({ success: false, error: "PAYSTACK_NOT_CONFIGURED" }, 503);
+    if (!reference) return c.json({ success: false, error: "REFERENCE_REQUIRED" }, 400);
+    const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
+      headers: { Authorization: `Bearer ${secret}` },
+    });
+    const data: any = await response.json().catch(() => ({}));
+    const transaction = data.data;
+    if (!response.ok || !data.status || transaction?.status !== "success") {
+      return c.json({ success: false, error: data.message || "PAYSTACK_VERIFICATION_FAILED" }, 502);
     }
-    const isPro = Boolean(subscription?.active);
-    const month = new Date().toISOString().slice(0, 7);
-    const usage = Object.fromEntries(Object.keys(aiLimits).map(feature => [
-      feature,
-      { used: aiUsage.get(`${user.id}:${feature}:${month}`) || 0, limit: isPro ? null : aiLimits[feature] },
-    ]));
-    return c.json({ authenticated: true, isPro, plan: subscription?.plan || null, usage });
+    const transactionUserId = String(transaction?.metadata?.userId || "");
+    const transactionEmail = String(transaction?.customer?.email || "").toLowerCase();
+    const metadataPlan = String(transaction?.metadata?.plan || "").toLowerCase();
+    const paidPlan = metadataPlan === "lite" || requestedPlan === "lite" ? "lite" : metadataPlan === "yearly" ? "yearly" : "monthly";
+    const expectedAmount = paidPlan === "lite"
+      ? Number((c.env as Env)?.PAYSTACK_LITE_AMOUNT || "500000")
+      : paidPlan === "yearly"
+        ? Number((c.env as Env)?.PAYSTACK_YEARLY_AMOUNT || "15000000")
+        : Number((c.env as Env)?.PAYSTACK_MONTHLY_AMOUNT || "2850000");
+    if (
+      (transactionUserId && transactionUserId !== user.id) ||
+      (!transactionUserId && transactionEmail !== String(user.email || "").toLowerCase()) ||
+      Number(transaction.amount) !== expectedAmount ||
+      String(transaction.currency || "").toUpperCase() !== String((c.env as Env)?.PAYSTACK_CURRENCY || "NGN").toUpperCase()
+    ) return c.json({ success: false, error: "PAYSTACK_PAYMENT_MISMATCH" }, 403);
+
+    const plan = paidPlan === "lite" ? "lite" : "pro";
+    const now = Date.now();
+    const expiresAt = now + (paidPlan === "yearly" ? 365 : 30) * 86400000;
+    const db = await ensurePersistence(c).catch(() => null);
+    const existing: any = db ? await db.prepare("SELECT plan, expires_at, paystack_ref FROM subscriptions WHERE user_id = ?").bind(user.id).first() : null;
+    if (existing?.paystack_ref === reference) {
+      return c.json({ success: true, isPro: existing.plan === "pro", plan: existing.plan || plan, expires_at: Number(existing.expires_at || expiresAt), already_verified: true });
+    }
+    const subscription = { active: true, plan, paystackRef: reference, expiresAt, updatedAt: now };
+    proSubscriptions.set(user.id, subscription);
+    if (db) {
+      await db.prepare("INSERT INTO subscriptions (user_id, plan, status, expires_at, current_period_start, current_period_end, paystack_ref, created_at, updated_at) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET plan=excluded.plan, status='active', expires_at=excluded.expires_at, current_period_start=excluded.current_period_start, current_period_end=excluded.current_period_end, paystack_ref=excluded.paystack_ref, updated_at=excluded.updated_at")
+        .bind(user.id, plan, expiresAt, now, expiresAt, reference, now, now).run();
+    }
+    if ((c.env as Env)?.KV) await (c.env as Env).KV!.put(`subscription:${user.id}`, JSON.stringify(subscription));
+    return c.json({ success: true, isPro: plan === "pro", plan, expires_at: expiresAt, message: `Upgraded to ${plan} instantly` });
+  }
+
+  app.post("/api/subscription/create-intent", async (c) => {
+    const user = await gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "SIGNIN_REQUIRED" }, 401);
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    const plan = body.plan === "lite" ? "lite" : body.plan === "pro" ? "monthly" : null;
+    if (!plan) return c.json({ success: false, error: "INVALID_PLAN" }, 400);
+    const limits = getPlanLimits(plan === "lite" ? "lite" : "pro");
+    return c.json({
+      success: true,
+      campaign_id: crypto.randomUUID(),
+      plan: plan === "monthly" ? "pro" : plan,
+      price_usd: limits.priceUsd,
+      price_ngn: limits.priceNgn,
+      amount_kobo: limits.priceNgn * 100,
+      paystack_public_key: (c.env as Env)?.PAYSTACK_PUBLIC_KEY || null,
+      email: user.email || "",
+    });
   });
+
+  app.post("/api/subscription/verify", async (c) => {
+    const user = await gatedGetUserFromCookie(c);
+    if (!user) return c.json({ success: false, error: "SIGNIN_REQUIRED" }, 401);
+    let body: any = {};
+    try { body = await c.req.json(); } catch { return c.json({ success: false, error: "INVALID_JSON" }, 400); }
+    const reference = String(body.paystack_ref || body.reference || "").trim();
+    const requestedPlan = body.plan === "lite" ? "lite" : "pro";
+    return verifySubscriptionPayment(c, user, reference, requestedPlan);
+  });
+
   app.post("/api/paystack/initialize", async (c) => {
     const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ error: "SIGNIN_REQUIRED" }, 401);
     const secret = (c.env as Env)?.PAYSTACK_SECRET_KEY;
     if (!secret) return c.json({ error: "PAYSTACK_NOT_CONFIGURED" }, 503);
-    const body = await c.req.json<{ plan?: "monthly" | "yearly"; email?: string }>();
-    const plan = body.plan === "yearly" ? "yearly" : "monthly";
+    const body = await c.req.json<{ plan?: "lite" | "monthly" | "yearly"; email?: string }>();
+    const plan = body.plan === "lite" ? "lite" : body.plan === "yearly" ? "yearly" : "monthly";
     const email = String(body.email || user.email || "").trim();
     if (!email || !email.includes("@")) return c.json({ error: "ACCOUNT_EMAIL_REQUIRED" }, 400);
-    const planCode = plan === "yearly" ? (c.env as Env)?.PAYSTACK_PLAN_YEARLY : (c.env as Env)?.PAYSTACK_PLAN_MONTHLY;
+    const planCode = plan === "yearly"
+      ? (c.env as Env)?.PAYSTACK_PLAN_YEARLY
+      : plan === "monthly"
+        ? (c.env as Env)?.PAYSTACK_PLAN_MONTHLY
+        : undefined;
     const currency = String((c.env as Env)?.PAYSTACK_CURRENCY || "NGN").toUpperCase();
-    const configuredAmount = plan === "yearly"
+    const configuredAmount = plan === "lite"
+      ? Number((c.env as Env)?.PAYSTACK_LITE_AMOUNT || "500000")
+      : plan === "yearly"
       ? Number((c.env as Env)?.PAYSTACK_YEARLY_AMOUNT || "990000")
-      : Number((c.env as Env)?.PAYSTACK_MONTHLY_AMOUNT || "2590118");
+      : Number((c.env as Env)?.PAYSTACK_MONTHLY_AMOUNT || "2850000");
     if (!Number.isInteger(configuredAmount) || configuredAmount <= 0) {
       return c.json({ error: "PAYSTACK_AMOUNT_NOT_CONFIGURED" }, 503);
     }
@@ -2364,34 +3229,7 @@ function createApiApp() {
     const user = await gatedGetUserFromCookie(c);
     if (!user) return c.json({ error: "SIGNIN_REQUIRED" }, 401);
     const reference = String(c.req.query("reference") || "").trim();
-    const secret = (c.env as Env)?.PAYSTACK_SECRET_KEY;
-    if (!reference) return c.json({ error: "REFERENCE_REQUIRED" }, 400);
-    if (!secret) return c.json({ error: "PAYSTACK_NOT_CONFIGURED" }, 503);
-
-    const response = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
-      headers: { Authorization: `Bearer ${secret}` },
-    });
-    const data: any = await response.json().catch(() => ({}));
-    const transaction = data.data;
-    const transactionUserId = String(transaction?.metadata?.userId || "");
-    const transactionEmail = String(transaction?.customer?.email || "").toLowerCase();
-    if (!response.ok || !data.status || transaction?.status !== "success") {
-      return c.json({ error: data.message || "PAYSTACK_VERIFICATION_FAILED" }, 502);
-    }
-    if ((transactionUserId && transactionUserId !== user.id) || (!transactionUserId && transactionEmail !== String(user.email || "").toLowerCase())) {
-      return c.json({ error: "PAYSTACK_ACCOUNT_MISMATCH" }, 403);
-    }
-
-    const plan = "pro";
-    const expiresAt = Date.now() + 30 * 86400000;
-    const subscription = { active: true, plan, paystackRef: reference, expiresAt, updatedAt: Date.now() };
-    proSubscriptions.set(user.id, subscription);
-    const db = await ensurePersistence(c).catch(() => null);
-    if (db) await db.prepare("INSERT INTO subscriptions (user_id, plan, expires_at, paystack_ref, created_at, updated_at) VALUES (?, 'pro', ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET plan='pro', expires_at=excluded.expires_at, paystack_ref=excluded.paystack_ref, updated_at=excluded.updated_at").bind(user.id, expiresAt, reference, Date.now(), Date.now()).run();
-    if ((c.env as Env)?.KV) {
-      await (c.env as Env).KV!.put(`subscription:${user.id}`, JSON.stringify(subscription));
-    }
-    return c.json({ success: true, isPro: true, plan });
+    return verifySubscriptionPayment(c, user, reference);
   });
   app.post("/api/paystack/webhook", async (c) => {
     const secret = (c.env as Env)?.PAYSTACK_SECRET_KEY;
@@ -2408,12 +3246,41 @@ function createApiApp() {
       return c.json({ error: "INVALID_WEBHOOK_JSON" }, 400);
     }
     if (event.event === "charge.success") {
+      const campaignId = String(event.data?.metadata?.campaignId || "");
+      if (campaignId && event.data?.metadata?.product === "ads_campaign") {
+        const db = await ensurePersistence(c);
+        const campaign: any = db ? await db.prepare("SELECT * FROM ads_campaigns WHERE id = ?").bind(campaignId).first() : null;
+        if (
+          campaign &&
+          campaign.status === "pending_payment" &&
+          Number(event.data?.amount) === Number(campaign.total_amount_kobo) &&
+          String(event.data?.currency || "").toUpperCase() === "NGN"
+        ) {
+          await activateOrQueueAd(db, campaign, String(event.data.reference || ""));
+          await clearCurrentAdsCache(c.env as Env);
+        }
+        return c.json({ received: true });
+      }
       const userId = event.data?.metadata?.userId;
       if (userId) {
-        const subscription = { active: true, plan: "pro", paystackRef: event.data?.reference, expiresAt: Date.now() + 30 * 86400000, updatedAt: Date.now() };
-        proSubscriptions.set(userId, subscription);
+        const webhookPlan = event.data?.metadata?.plan === "lite" ? "lite" : event.data?.metadata?.plan === "yearly" ? "yearly" : "monthly";
+        const expectedAmount = webhookPlan === "lite"
+          ? Number((c.env as Env)?.PAYSTACK_LITE_AMOUNT || "500000")
+          : webhookPlan === "yearly"
+          ? Number((c.env as Env)?.PAYSTACK_YEARLY_AMOUNT || "15000000")
+          : Number((c.env as Env)?.PAYSTACK_MONTHLY_AMOUNT || "2850000");
+        if (
+          Number(event.data?.amount) !== expectedAmount ||
+          String(event.data?.currency || "").toUpperCase() !== String((c.env as Env)?.PAYSTACK_CURRENCY || "NGN").toUpperCase()
+        ) return c.json({ error: "PAYMENT_MISMATCH" }, 400);
         const db = await ensurePersistence(c).catch(() => null);
-        if (db) await db.prepare("INSERT INTO subscriptions (user_id, plan, expires_at, paystack_ref, created_at, updated_at) VALUES (?, 'pro', ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET plan='pro', expires_at=excluded.expires_at, paystack_ref=excluded.paystack_ref, updated_at=excluded.updated_at").bind(userId, subscription.expiresAt, subscription.paystackRef, Date.now(), Date.now()).run();
+        const existing: any = db
+          ? await db.prepare("SELECT paystack_ref FROM subscriptions WHERE user_id = ?").bind(userId).first()
+          : null;
+        if (existing?.paystack_ref === String(event.data?.reference || "")) return c.json({ received: true, already_processed: true });
+        const subscription = { active: true, plan: webhookPlan === "lite" ? "lite" : "pro", paystackRef: event.data?.reference, expiresAt: Date.now() + (webhookPlan === "yearly" ? 365 : 30) * 86400000, updatedAt: Date.now() };
+        proSubscriptions.set(userId, subscription);
+        if (db) await db.prepare("INSERT INTO subscriptions (user_id, plan, status, expires_at, current_period_start, current_period_end, paystack_ref, created_at, updated_at) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET plan=excluded.plan, status='active', expires_at=excluded.expires_at, current_period_start=excluded.current_period_start, current_period_end=excluded.current_period_end, paystack_ref=excluded.paystack_ref, updated_at=excluded.updated_at").bind(userId, subscription.plan, subscription.expiresAt, subscription.updatedAt, subscription.expiresAt, subscription.paystackRef, subscription.updatedAt, subscription.updatedAt).run();
         if ((c.env as Env)?.KV) await (c.env as Env).KV!.put(`subscription:${userId}`, JSON.stringify(subscription));
       }
     }
@@ -2485,19 +3352,63 @@ function createApiApp() {
     const id = c.req.param("id");
     if (!id || id.startsWith("mock")) return c.json({ error: "Mock ID, no real stats" }, 400);
     const apiKey = (c.env as Env)?.YOUTUBE_API_KEY || "";
-    if (!apiKey) return c.json({ error: "No API key" }, 400);
     try {
-      const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${encodeURIComponent(id)}&key=${apiKey}`);
-      if (!res.ok) throw new Error(`YouTube ${res.status}`);
-      const data: any = await res.json();
-      if (!data.items || data.items.length === 0) throw new Error("Video not found");
-      const v = data.items[0];
+      let v: any = null;
+      if (apiKey) {
+        const res = await fetch(`https://www.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails&id=${encodeURIComponent(id)}&key=${apiKey}`);
+        if (res.ok) {
+          const data: any = await res.json();
+          v = data.items?.[0] || null;
+        }
+      }
+      if (!v) {
+        const player = await fetch("https://www.youtube.com/youtubei/v1/player?prettyPrint=false", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+          body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: "2.20240301" } }, videoId: id }),
+        });
+        const playerData: any = await player.json().catch(() => ({}));
+        const details = playerData.videoDetails;
+        if (!player.ok || !details) {
+          return c.json({
+            video: {
+              id, title: "", channel: "", channelId: "",
+              thumbnail: `https://i.ytimg.com/vi/${id}/hqdefault.jpg`,
+              views: "0", viewsFormatted: "0 views", likes: "0", likeCount: 0,
+              comments: "0", description: "", duration: "", publishedAt: "",
+              statistics: {}, snippet: {}, contentDetails: {},
+            },
+            real: false,
+            source: "youtube_embed",
+          });
+        }
+        v = {
+          id,
+          snippet: { title: details.title || "", channelTitle: details.author || "", channelId: details.channelId || "", thumbnails: { high: { url: `https://i.ytimg.com/vi/${id}/hqdefault.jpg` } }, description: details.shortDescription || "", publishedAt: "" },
+          statistics: { viewCount: details.viewCount || "0", likeCount: "0", commentCount: "0" },
+          contentDetails: { duration: "" },
+        };
+        try {
+          const nextResponse = await fetch("https://www.youtube.com/youtubei/v1/next?prettyPrint=false", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+            body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: "2.20240301" } }, videoId: id }),
+          });
+          if (nextResponse.ok) {
+            const engagement = extractInnerTubeEngagement(await nextResponse.json());
+            if (engagement.likes) v.statistics.likeCount = engagement.likes.replace(/[^\d]/g, "");
+            if (engagement.comments) v.statistics.commentCount = engagement.comments.replace(/[^\d]/g, "");
+            if (engagement.channelAvatar) v.channelAvatar = engagement.channelAvatar;
+          }
+        } catch {}
+      }
       return c.json({
         video: {
           id: v.id,
           title: v.snippet.title,
           channel: v.snippet.channelTitle,
           channelId: v.snippet.channelId,
+          channelAvatar: v.channelAvatar || "",
           thumbnail: v.snippet.thumbnails?.high?.url || v.snippet.thumbnails?.medium?.url,
           views: v.statistics.viewCount,
           viewsFormatted: Number(v.statistics.viewCount).toLocaleString() + " views",
@@ -2529,7 +3440,20 @@ function createApiApp() {
           const result = await db.prepare("SELECT id, video_id AS videoId, user_name AS author, avatar_initials AS authorInitials, message AS text, likes AS likeCount, created_at AS publishedAt FROM community_messages WHERE video_id = ? ORDER BY created_at DESC LIMIT ?").bind(id, maxResults).all();
           return result.results || [];
         };
-        if (!apiKey) return c.json({ comments: await loadPlatformComments(), real: false, source: "platform", error: "No YouTube API key configured" });
+        if (!apiKey) {
+          try {
+            const nextResponse = await fetch("https://www.youtube.com/youtubei/v1/next?prettyPrint=false", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+              body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: "2.20240301" } }, videoId: id }),
+            });
+            if (nextResponse.ok) {
+              const extracted = extractInnerTubeEngagement(await nextResponse.json());
+              if (extracted.commentItems.length) return c.json({ comments: extracted.commentItems.slice(0, maxResults), real: true, source: "youtube" });
+            }
+          } catch {}
+          return c.json({ comments: await loadPlatformComments(), real: false, source: "platform", error: "YouTube comments unavailable without an API key" });
+        }
         try {
           const url = new URL("https://www.googleapis.com/youtube/v3/commentThreads");
           url.searchParams.set("part", "snippet");
@@ -2573,6 +3497,65 @@ function createApiApp() {
   });
 
   // === NEW: Channel — real YouTube for any UC id (no mock), falls back to inMemory
+  app.post("/api/channel/videos", async (c) => {
+    try {
+      const body: any = await c.req.json().catch(() => ({}));
+      const channelId = String(body.channelId || "").trim();
+      const continuationToken = String(body.continuationToken || "").trim();
+      if (!channelId) return c.json({ success: false, error: "CHANNEL_ID_REQUIRED" }, 400);
+      const env = c.env as Env;
+      const key = env.YOUTUBE_WEB_KEY || env.YOUTUBE_API_KEY;
+      if (!key) return c.json({ success: false, error: "YOUTUBE_WEB_KEY_NOT_CONFIGURED" }, 503);
+      const cacheKey = `yt:channel:v7:${channelId}`;
+      if (!continuationToken && env.KV) {
+        const cached: any = await env.KV.get(cacheKey, "json").catch(() => null);
+        if (Array.isArray(cached?.videos) && cached.videos.length) return c.json(cached);
+      }
+      const payload = continuationToken
+        ? { context: { client: { clientName: "WEB", clientVersion: "2.20240301" } }, continuation: continuationToken }
+        : { context: { client: { clientName: "WEB", clientVersion: "2.20240301" } }, browseId: channelId, params: "EgZ2aWRlb3M=" };
+      let response = await fetch(youtubeBrowseUrl(key), {
+        method: "POST", headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" }, body: JSON.stringify(payload),
+      });
+      if (!response.ok && !continuationToken) {
+        response = await fetch(youtubeBrowseUrl(""), {
+          method: "POST", headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" }, body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          const fallbackVideos = await fetchYoutubeRssVideos(channelId, 30).catch(() => []);
+          return c.json({ success: true, channelId, videos: fallbackVideos, nextToken: "", cached: false, fallback: "rss" });
+        }
+      }
+      if (!response.ok) return c.json({ success: false, error: "YOUTUBE_CHANNEL_FAILED" }, 502);
+      const parsed = parseInnerTubeChannelVideos(await response.json(), channelId);
+      if (!continuationToken && parsed.videos.length && parsed.continuationTokens.length > 1) {
+        for (const candidate of [...parsed.continuationTokens].reverse()) {
+          const probe = await fetch(youtubeBrowseUrl(""), {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "User-Agent": "Mozilla/5.0" },
+            body: JSON.stringify({ context: { client: { clientName: "WEB", clientVersion: "2.20240301" } }, continuation: candidate }),
+          });
+          if (!probe.ok) continue;
+          const probeParsed = parseInnerTubeChannelVideos(await probe.json(), channelId);
+          if (probeParsed.videos.length) {
+            parsed.nextToken = candidate;
+            break;
+          }
+        }
+      }
+      const fallbackVideos = !continuationToken && !parsed.videos.length ? await fetchYoutubeRssVideos(channelId, 30).catch(() => []) : [];
+      const result = { success: true, channelId, videos: parsed.videos.length ? parsed.videos : fallbackVideos, nextToken: parsed.videos.length ? parsed.nextToken : "", cached: !continuationToken && Boolean(env.KV) };
+      if (!continuationToken && env.KV && parsed.videos.length) await env.KV.put(cacheKey, JSON.stringify(result), { expirationTtl: 3600 }).catch(() => {});
+      return c.json(result);
+    } catch (error: any) {
+      console.error("[channel/videos]", error);
+      return c.json({ success: false, error: "YOUTUBE_CHANNEL_FAILED", message: error?.message || "Unable to load channel videos" }, 502);
+    }
+  });
+  app.post("/api/channel/shorts", (c) => browseChannelTab(c, "EgZzaG9ydHM=", "shorts"));
+  app.post("/api/channel/live", (c) => browseChannelTab(c, "EgZzdHJlYW1z", "live"));
+  app.post("/api/channel/playlists", (c) => browseChannelTab(c, "EglwbGF5bGlzdHM=", "playlists"));
+  app.post("/api/channel/community", (c) => browseChannelTab(c, "Eghjb21tdW5pdHk%3D", "community"));
   app.get("/api/channel/:id", async (c) => {
     const id = c.req.param("id");
     const apiKey = (c.env as Env)?.YOUTUBE_API_KEY || "";
@@ -2647,13 +3630,31 @@ function createApiApp() {
         }
       } catch {}
     }
-    // Fallback to inMemory for mock handles like codecraft, or if real fetch failed
+    // Include persisted Alphatekx uploads for custom channels when YouTube is unavailable.
     const channel = resolveChannelById(id);
-    const uploads = inMemoryUploads.filter(u => 
+    let uploads: any[] = [];
+    const db = await ensurePersistence(c).catch(() => null);
+    if (db) {
+      const rows = await db.prepare(
+        "SELECT id, video_id AS videoId, title, thumbnail, original_url AS originalUrl, channel_id AS channelId, created_at AS createdAt, source FROM videos WHERE channel_id = ? OR added_by = ? ORDER BY created_at DESC LIMIT 500"
+      ).bind(id, id).all();
+      uploads = (rows.results || []).map((video: any) => ({
+        ...video,
+        id: video.videoId || video.id,
+        youtubeId: video.videoId || video.id,
+        thumbnailUrl: video.thumbnail,
+        channelName: channel.name,
+        platform: "youtube",
+      }));
+    }
+    uploads = [...uploads, ...inMemoryUploads.filter(u =>
       u.channelId === channel.id || 
       slugifyChannel(u.channelName) === channel.id ||
       u.channelName.toLowerCase() === channel.name.toLowerCase()
-    );
+    )];
+    if (!uploads.length && channel.id === OFFICIAL_CHANNEL_ID) {
+      try { uploads = await fetchYoutubeSectionVideos(OFFICIAL_CHANNEL_ID, "videos", 50).catch(() => fetchYoutubeRssVideos(OFFICIAL_CHANNEL_ID, 50)); } catch {}
+    }
     return c.json({ 
       channel,
       uploads,
@@ -2768,8 +3769,8 @@ function createApiApp() {
   async function checkExternalAi(c: any, body: any, feature: string): Promise<any> {
     const user = await gatedGetUserFromCookie(c);
     if (!user) return { response: c.json({ success: false, error: "IDENTITY_REQUIRED" }, 401) };
-    const result = await checkUsage(c, "ai_usage", user.id, 2, feature);
-    if (!result.allowed) return { response: c.json({ allowed: false, error: "limit_reached", feature, limit: 2, used: result.used, isPro: false, proPrice: 19, proPriceNGN: 25901.18 }, 429) };
+    const result = await aiRateLimitStatus(c, user.id);
+    if (!result.remainingWindow || !result.remainingWeekly) return { response: c.json({ allowed: false, error: "AI_RATE_LIMIT_REACHED", feature, ...result }, 429) };
     return { user, result };
   }
 
@@ -2782,7 +3783,7 @@ function createApiApp() {
     if (!videoUrl && !videoId) return c.json({ success: false, error: "videoUrl or videoId required" }, 400);
     try {
       const result = await libCreateClip({ videoUrl, videoId, prompt, pro: true });
-      await incrementUsage(c, "ai_usage", allowance.user.id, "video_gen");
+      await consumeAiRateLimit(c, allowance.user.id);
       return c.json(result);
     } catch (e: any) {
       return c.json({ success: false, error: e.message }, 400);
@@ -2798,7 +3799,7 @@ function createApiApp() {
     if (!thumbnailUrl && !imageBase64) return c.json({ success: false, error: "thumbnailUrl or imageBase64 required" }, 400);
     try {
       const result = await libEnhanceThumbnail({ thumbnailUrl, imageBase64, style, pro: true });
-      await incrementUsage(c, "ai_usage", allowance.user.id, "thumbnail");
+      await consumeAiRateLimit(c, allowance.user.id);
       return c.json(result);
     } catch (e: any) {
       return c.json({ success: false, error: e.message }, 400);
@@ -2814,7 +3815,7 @@ function createApiApp() {
     if (!videoUrl && !videoId) return c.json({ success: false, error: "videoUrl or videoId required" }, 400);
     try {
       const result = await libTranslateVoice({ videoUrl, videoId, targetLang, sourceLang, pro: true });
-      await incrementUsage(c, "ai_usage", allowance.user.id, "translator");
+      await consumeAiRateLimit(c, allowance.user.id);
       return c.json(result);
     } catch (e: any) {
       return c.json({ success: false, error: e.message }, 400);
@@ -2844,6 +3845,10 @@ export default {
     return apiApp.fetch(request, env, ctx);
   },
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
-    if (env.DB) await refreshAdStatuses(env.DB);
+    if (env.DB) {
+      await refreshAdStatuses(env.DB);
+      await expireSubscriptions(env.DB);
+      await clearCurrentAdsCache(env);
+    }
   }
 };

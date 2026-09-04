@@ -1,21 +1,65 @@
 {
   "name": "Alphatekx Stream",
   "short_name": "Alphatekx",
-  "description": "Mini YouTube but better — dark futuristic AI-powered streaming platform",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "display": "standalone",
+  "display_override": [
+    "window-controls-overlay",
+    "standalone"
+  ],
   "background_color": "#000000",
   "theme_color": "#000000",
+  "id": "alphatekx.name.ng",
+  "description": "Alphatekx Stream is an AI-powered YouTube alternative with super 4K clear video, real PiP that follows you across apps, AI Teacher that explains any video, AI Memory, Marketplace to buy & sell, and no ads. Faster, clearer, smarter than YouTube. Built in Port Harcourt, Nigeria for the world.",
+  "dir": "ltr",
+  "scope": "/",
+  "lang": "en",
+  "orientation": "any",
+  "categories": [
+    "entertainment",
+    "video",
+    "multimedia",
+    "photo & video",
+    "education"
+  ],
   "icons": [
     {
-      "src": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=192&q=80",
+      "src": "/icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=512&q=80",
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshots/desktop-1280x720.png",
+      "sizes": "1280x720",
+      "type": "image/png",
+      "form_factor": "wide"
+    },
+    {
+      "src": "/screenshots/mobile-720x1280.png",
+      "sizes": "720x1280",
+      "type": "image/png",
+      "form_factor": "narrow"
     }
   ]
 }

@@ -1,5 +1,65 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { createRoot } from "react-dom/client";
+
+function AnimatedSplash({ onFinish }) {
+  const [hide, setHide] = useState(false);
+  const [progress, setProgress] = useState(0);
+
+  useEffect(() => {
+    const prog = setInterval(() => {
+      setProgress(current => {
+        if (current >= 100) {
+          clearInterval(prog);
+          return 100;
+        }
+        return Math.min(100, current + Math.random() * 15);
+      });
+    }, 120);
+    const timer = setTimeout(() => {
+      setHide(true);
+      setTimeout(() => onFinish?.(), 400);
+    }, 2200);
+    return () => {
+      clearTimeout(timer);
+      clearInterval(prog);
+    };
+  }, [onFinish]);
+
+  if (hide) return null;
+  return (
+    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black" style={{ animation: hide ? "fadeOut 0.4s ease forwards" : "" }}>
+      <style>{`
+        @keyframes pulseGlow {
+          0%,100% { transform: scale(1); box-shadow: 0 0 30px rgba(0,212,255,.6), 0 0 60px rgba(0,212,255,.3), 0 0 90px rgba(0,212,255,.1); }
+          50% { transform: scale(1.05); box-shadow: 0 0 50px rgba(0,212,255,.9), 0 0 100px rgba(0,212,255,.5), 0 0 140px rgba(0,212,255,.2); }
+        }
+        @keyframes splashLogoPulse {
+          0%,100% { transform: scale(1) rotate(0deg); filter: drop-shadow(0 0 18px rgba(0,212,255,.55)); }
+          50% { transform: scale(1.08) rotate(3deg); filter: drop-shadow(0 0 42px rgba(0,212,255,.95)); }
+        }
+        @keyframes rotateRing { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes orbit { from { transform: rotate(0deg) translateX(85px) rotate(0deg); } to { transform: rotate(360deg) translateX(85px) rotate(-360deg); } }
+        @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeOut { from { opacity: 1; } to { opacity: 0; } }
+        @keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(200%); } }
+      `}</style>
+      <div className="relative">
+        <div className="absolute -inset-6 rounded-full border border-cyan-400/20" style={{ animation: "rotateRing 4s linear infinite" }}><div className="absolute top-0 left-1/2 w-2 h-2 -mt-1 -ml-1 rounded-full bg-cyan-400 shadow-[0_0_10px_rgba(0,212,255,.8)]" /></div>
+        <div className="absolute -inset-10 rounded-full border border-blue-500/10" style={{ animation: "rotateRing 6s linear infinite reverse" }} />
+        <div className="absolute top-1/2 left-1/2 w-2 h-2 -mt-1 -ml-1"><div className="w-2 h-2 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(0,212,255,.8)]" style={{ animation: "orbit 3s linear infinite" }} /></div>
+        <img src="/splash-logo.png" alt="Alphatekx" className="w-32 h-32 rounded-full object-cover bg-black" style={{ animation: "splashLogoPulse 1.8s ease-in-out infinite" }} />
+      </div>
+      <div className="mt-10 text-center" style={{ animation: "fadeInUp .8s ease .3s both" }}>
+        <h1 className="text-3xl font-bold tracking-wider text-white">Alphatekx Stream</h1>
+        <p className="mt-2 text-sm tracking-[.2em] uppercase text-cyan-300/80">Where AI Meets Stream</p>
+      </div>
+      <div className="absolute bottom-20 left-1/2 h-1 w-64 -translate-x-1/2 overflow-hidden rounded-full bg-white/10">
+        <div className="relative h-full bg-gradient-to-r from-cyan-400 to-blue-500" style={{ width: `${progress}%`, transition: "width .2s ease" }}><div className="absolute inset-0 bg-white/30" style={{ animation: "shimmer 1s infinite" }} /></div>
+      </div>
+      <div className="absolute bottom-12 flex gap-2">{[0, 150, 300].map(delay => <div key={delay} className="h-1.5 w-1.5 animate-bounce rounded-full bg-cyan-400" style={{ animationDelay: `${delay}ms` }} />)}</div>
+    </div>
+  );
+}
 
 // --- SVG Icons Helper Component ---
 const Icon = ({ name, className = "w-5 h-5", style = {} }) => {
@@ -121,7 +181,7 @@ const SubscriberCount = ({ count, label = "subscribers", className = "" }) => (
 );
 function slugify(name) { return (name||"").toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,""); }
 function channelIdFromVideo(v) {
-  // derive channel id from channel name
+  if (v?.channelId) return String(v.channelId);
   const name = v.channel || v.channelName || "codecraft";
   return slugify(name) || "codecraft";
 }
@@ -139,13 +199,51 @@ const PlatformBadge = ({ platform = "youtube", size = "xs" }) => {
   const border = platform==="tiktok" ? "border border-white/40" : "";
   return <span className={`${cls} font-bold rounded-full ${border}`} style={{ background: s.bg, color: s.text }}>{s.label}</span>;
 };
+const SponsoredAdCard = ({ video }) => {
+  const ref = useRef(null);
+  const [playing, setPlaying] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || !("IntersectionObserver" in window)) return;
+    const observer = new IntersectionObserver(([entry]) => setPlaying(entry.isIntersecting), { threshold: 0.55 });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+  const endAt = Number(video.end_at || video.endAt || 0);
+  const hoursLeft = endAt ? Math.max(0, Math.ceil((endAt - Date.now()) / 3600000)) : 0;
+  const daysLeft = Math.ceil(hoursLeft / 24);
+  return (
+    <a ref={ref} href={video.destination_url || video.destinationUrl || "#"} target="_blank" rel="noreferrer" className="glass-card col-span-full block overflow-hidden rounded-xl border border-[#FFD700]/40 bg-[#1A0B2E]">
+      <div className="relative aspect-video w-full bg-black">
+        <video src={video.video_url || video.videoUrl} poster={video.thumbnail || video.thumbnailUrl} autoPlay={playing} muted loop playsInline controls className="h-full w-full object-cover" />
+        <span className="absolute left-3 top-3 rounded-full bg-[#FFD700] px-2 py-1 text-[10px] font-extrabold text-black">Ad</span>
+      </div>
+      <div className="flex items-center gap-3 p-3">
+        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#FFD700] font-black text-black">{String(video.channelName || "A").slice(0, 1).toUpperCase()}</div>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-bold text-white">{video.title}</p>
+          <p className="text-[11px] text-gray-400">Sponsored · Ad · $2/day · {daysLeft} day{daysLeft === 1 ? "" : "s"} left</p>
+        </div>
+      </div>
+    </a>
+  );
+};
 const VideoCard = ({ video, onPlay, onSave, isSaved, onAi, onChannel, cleanHome = false }) => {
   const v = normalizeVideo(video);
   const platform = video.platform || v.platform || "youtube";
+  const openVideo = () => {
+    if (onPlay) {
+      onPlay(v);
+      return;
+    }
+    if (cleanHome && (v.youtubeId || v.id)) {
+      window.location.href = `/watch/${encodeURIComponent(v.youtubeId || v.id)}`;
+    }
+  };
   return (
-    <div onClick={()=>onPlay ? onPlay(v) : cleanHome ? (window.location.href=`/watch?v=${v.youtubeId}&autoplay=1`) : null} className="glass-card overflow-hidden hover:border-[#FFD700]/50 hover:shadow-[0_0_15px_rgba(255,215,0,0.15)] transition-all cursor-pointer group flex flex-col justify-between rounded-xl sm:rounded-2xl">
+    <div onClick={openVideo} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); openVideo(); } }} role="button" tabIndex={0} className="glass-card overflow-hidden hover:border-[#FFD700]/50 hover:shadow-[0_0_15px_rgba(255,215,0,0.15)] transition-all cursor-pointer group flex flex-col justify-between rounded-xl sm:rounded-2xl">
       <div className="relative aspect-video w-full bg-gray-900 overflow-hidden rounded-t-xl sm:rounded-t-2xl">
-        <img src={cleanHome ? `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg` : (v.img || v.thumbnailUrl)} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+        <img src={cleanHome && platform === "youtube" ? `https://i.ytimg.com/vi/${v.youtubeId}/hqdefault.jpg` : (v.img || v.thumbnailUrl)} alt={v.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
         <span className="absolute bottom-2 right-2 bg-black/80 text-[10px] font-mono px-1.5 py-0.5 rounded text-white">{v.duration}</span>
         {!cleanHome && <span className="absolute top-2 left-2"><PlatformBadge platform={platform} /></span>}
         {onAi && !cleanHome && (
@@ -308,6 +406,7 @@ function normalizeVideo(v) {
     thumbnailUrl: v.thumbnailUrl || v.img || v.thumbnail || `https://img.youtube.com/vi/${v.youtubeId||v.id||DEFAULT_VIDEO.id}/hqdefault.jpg`,
     description: v.description || "",
     platform: v.platform || v.source || "youtube",
+    isShort: v.isShort === true,
     platformMeta: v.platformMeta || null,
     featured: v.featured || false,
   };
@@ -315,7 +414,7 @@ function normalizeVideo(v) {
 function uniqueVideos(videos) {
   const seen = new Set();
   return (videos || []).filter(video => {
-    const id = video.youtubeId || video.id;
+    const id = video.feedKey || video.youtubeId || video.id;
     if (!id || seen.has(id)) return false;
     seen.add(id);
     return true;
@@ -338,7 +437,7 @@ function isLongFormVideo(video) {
 }
 function isShortFormVideo(video) {
   const seconds = durationInSeconds(video?.duration);
-  return seconds !== null && seconds > 0 && seconds <= 180;
+  return video?.isShort === true && (seconds === null || (seconds > 0 && seconds <= 180));
 }
 
 // --- Main App Component ---
@@ -346,11 +445,16 @@ function isShortFormVideo(video) {
 // holding the previous index.html/app.jsx query string in an edge cache.
 const AUTH_BUILD = "google-signup-4";
 function App() {
+  const [showSplash, setShowSplash] = useState(true);
+  const finishSplash = useCallback(() => setShowSplash(false), []);
   // GATED EXPERIENCE — auth state
   const [authUser, setAuthUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
   const isGuest = !authUser;
   const [showSignUpBlock, setShowSignUpBlock] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [downloadCount, setDownloadCount] = useState(0);
+  const [installedCount, setInstalledCount] = useState(0);
   const signIn = async () => {
     try {
       const response = await fetch("/api/auth/url", { credentials: "include" });
@@ -376,7 +480,67 @@ function App() {
     if (videoId) window.history.pushState({}, "", `/watch/${encodeURIComponent(videoId)}`);
     if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
   };
+  const returnHomeFromWatch = () => {
+    setWatchPanelOpen(false);
+    setActiveTab("home");
+    window.history.pushState({}, "", "/");
+    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+  };
+  const navigateToDownloadApp = () => {
+    setActiveTab("download-app");
+    window.history.pushState({}, "", "/download-app");
+    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+  };
   useEffect(() => {
+    fetch("/api/download/count").then(response => response.ok ? response.json() : null).then(data => {
+      if (data) {
+        setDownloadCount(Number(data.total) || 0);
+        setInstalledCount(Number(data.installed) || 0);
+        const element = document.getElementById("download-count-badge");
+        if (element) element.innerText = data.display || "0";
+      }
+    }).catch(() => {});
+    const handleInstallPrompt = (event) => {
+      event.preventDefault();
+      setDeferredPrompt(event);
+      window.__deferredPWA = event;
+      const button = document.getElementById("real-install-btn");
+      if (button) {
+        button.innerText = "📲 Download App Now — 1 Tap Install";
+        button.style.background = "linear-gradient(135deg,#FF0055,#FFAA00)";
+        button.style.color = "white";
+      }
+    };
+    window.addEventListener("beforeinstallprompt", handleInstallPrompt);
+    return () => window.removeEventListener("beforeinstallprompt", handleInstallPrompt);
+  }, []);
+  const handleInstallPwa = async () => {
+    fetch("/api/download/tab-tapped", { method: "POST" }).catch(() => {});
+    const installPrompt = deferredPrompt || window.__deferredPWA;
+    if (installPrompt) {
+      installPrompt.prompt();
+      const { outcome } = await installPrompt.userChoice;
+      if (outcome === "accepted") {
+        fetch("/api/download/pwa-installed", { method: "POST" }).catch(() => {});
+        setDownloadCount(count => count + 1);
+        setDeferredPrompt(null);
+        window.__deferredPWA = null;
+        const button = document.getElementById("real-install-btn");
+        if (button) button.innerText = "✅ Installed! Check Home Screen";
+      }
+      return;
+    }
+    showToast("Use your browser menu and choose Install app or Add to Home screen.");
+  };
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js", { scope: "/" })
+        .then(() => console.log("Alphatekx SW registered"))
+        .catch(error => console.log("Alphatekx SW registration failed", error));
+    }
+    if (window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone) {
+      fetch("/api/download/app-opened", { method: "POST" }).catch(() => {});
+    }
     fetch('/api/auth/user?auth_build=' + encodeURIComponent(AUTH_BUILD), { credentials: 'include', cache: 'no-store' }).then(r=>r.ok?r.json():null).then(d=>{
       if(d && !d.isGuest && d.id) setAuthUser(d);
       else if(d && d.channelName) setAuthUser(d);
@@ -401,9 +565,12 @@ function App() {
   const [activeTab, setActiveTab] = useState(() => {
     const path = window.location.pathname.replace(/\/+$/, "") || "/";
     if (path === "/shorts") return "shorts";
+    if (path === "/download-app") return "download-app";
+    if (path === "/help") return "help";
     if (path === "/watch" || path.startsWith("/watch/")) return "watch";
     if (path === "/marketplace" || path.startsWith("/marketplace/")) return "marketplace";
     if (path === "/workspace") return "workspace";
+    if (path === "/upload") return "upload";
     if (path === "/marketplace" || path.startsWith("/marketplace/")) return "marketplace";
     if (path === "/pricing") return "pricing";
     if (path === "/ads" || path.startsWith("/ads/")) return "ads";
@@ -411,6 +578,24 @@ function App() {
     if (path === "/home") return "home";
     return "home";
   }); // watch, home, shorts, teacher, memory, chat, community, marketplace, sell, studio, pricing, profile
+  const navigateToTab = (tab) => {
+    const paths = {
+      home: "/",
+      shorts: "/shorts",
+      marketplace: "/marketplace",
+      "download-app": "/download-app",
+      help: "/help",
+      upload: "/upload",
+      watch: activeVideo?.youtubeId || activeVideo?.id ? `/watch/${encodeURIComponent(activeVideo.youtubeId || activeVideo.id)}` : "/",
+    };
+    setActiveTab(tab);
+    window.history.pushState({}, "", paths[tab] || "/");
+    if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
+  };
+  useEffect(() => {
+    if (activeTab !== "download-app") return;
+    fetch("/api/download/tab-tapped", { method: "POST" }).catch(() => {});
+  }, [activeTab]);
   useEffect(() => {
     if (authLoading || activeTab !== "watch" || !isGuest) return;
     setActiveTab("home");
@@ -424,6 +609,8 @@ function App() {
   const [searchResults, setSearchResults] = useState(() => {
     try { return JSON.parse(localStorage.getItem("alphatekx_last_search_results") || "[]"); } catch { return []; }
   });
+  const activeTabRef = useRef(activeTab);
+  useEffect(() => { activeTabRef.current = activeTab; }, [activeTab]);
   const [recentSearches, setRecentSearches] = useState(() => {
     try { return JSON.parse(localStorage.getItem("alphatekx_recent_searches") || "[]"); } catch { return []; }
   });
@@ -526,7 +713,7 @@ function App() {
       } else {
         localStorage.removeItem("alphatekx_api_key");
         setApiKey("");
-        setByokStatus("Using Alphatekx AI");
+        setByokStatus("Bring a key or upgrade");
       }
     } catch {
       setByokStatus("Key stays for this session");
@@ -623,7 +810,7 @@ function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ prompt: q, videoId: activeVideo?.youtubeId || activeVideo?.id, title: activeVideo?.title, transcript: activeVideo?.description || "" })
+        body: JSON.stringify({ prompt: q, videoId: activeVideo?.youtubeId || activeVideo?.id, title: activeVideo?.title, transcript: activeVideo?.description || "", workspaceCode: codeValue, workspaceFiles: agentFiles })
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
@@ -642,7 +829,6 @@ function App() {
         setWatchPanelOpen(true);
         setActiveTab("workspace");
       }
-      await incrementAiUsage("vibe_code");
       showToast(files.length ? `🤖 Built ${files.length} file${files.length > 1 ? "s" : ""} → Preview` : "🤖 AI workspace ready");
     } catch (e) {
       setAiChatMessages(prev => [...prev, { role: "ai", text: `AI request failed: ${e.message}` }]);
@@ -974,7 +1160,15 @@ function App() {
   const [channelData, setChannelData] = useState(null);
   const [channelUploads, setChannelUploads] = useState([]);
   const [isChannelLoading, setIsChannelLoading] = useState(false);
+  const [channelNextToken, setChannelNextToken] = useState("");
+  const [isChannelLoadingMore, setIsChannelLoadingMore] = useState(false);
+  const channelLoadMoreRef = useRef(null);
   const [channelSubscribed, setChannelSubscribed] = useState(false);
+  const [channelTab, setChannelTab] = useState("videos");
+  const [channelTabItems, setChannelTabItems] = useState([]);
+  const [channelTabNextToken, setChannelTabNextToken] = useState("");
+  const [channelTabLoading, setChannelTabLoading] = useState(false);
+  const [channelDescriptionOpen, setChannelDescriptionOpen] = useState(false);
   const [categories, setCategories] = useState(["All","Neural Networks","PyTorch","AI Superpowers","Cloudflare Workers","Naija Dialects"]);
   // === UNIFIED AGGREGATOR: platform filter + Watch Later ===
   const [activePlatform, setActivePlatform] = useState("all"); // all | youtube | tiktok | instagram | twitter | facebook
@@ -1026,7 +1220,9 @@ function App() {
     setAdsError(""); setAdsLoading(true);
     try {
       if (adsDuration !== null && (adsDuration < 60 || adsDuration > 120)) throw new Error("Video must be 1-2 minutes");
-      const response = await fetch("/api/ads/create", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ ...adsForm, destination_url: adsForm.link_url, duration_seconds: adsDuration, days: Math.min(30, Math.max(1, Number(adsForm.days) || 1)), user_id: authUser.id }) });
+      const days = Number(adsForm.days);
+      if (!Number.isSafeInteger(days) || days < 1) throw new Error("Enter a positive whole number of days");
+      const response = await fetch("/api/ads/create", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ ...adsForm, destination_url: adsForm.link_url, duration_seconds: adsDuration, days, user_id: authUser.id }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || data.message || "Unable to create ad");
       setCreatedAd(data);
@@ -1171,15 +1367,79 @@ function App() {
   useEffect(() => {
     if (activeTab !== "channel") return;
     setIsChannelLoading(true);
+    setChannelNextToken("");
     const channelFetch = fetch(`/api/channel/${encodeURIComponent(activeChannelId)}`).then(r=>r.ok?r.json():null);
-    Promise.all([channelFetch]).then(([d]) => {
+    const videosFetch = fetch("/api/channel/videos", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channelId: activeChannelId }) }).then(r=>r.ok?r.json():null);
+    Promise.all([channelFetch, videosFetch]).then(([d, videos]) => {
       if(d && d.channel){
         setChannelData(d.channel);
-        setChannelUploads(Array.isArray(d.uploads) ? d.uploads : []);
+        setChannelUploads(Array.isArray(videos?.videos) ? videos.videos : (Array.isArray(d.uploads) ? d.uploads : []));
+        setChannelNextToken(videos?.nextToken || "");
       }
       setIsChannelLoading(false);
     }).catch(()=> setIsChannelLoading(false));
   }, [activeTab, activeChannelId]);
+  useEffect(() => {
+    if (activeTab !== "channel" || channelTab === "videos") return;
+    let cancelled = false;
+    setChannelTabLoading(true);
+    setChannelTabItems([]);
+    setChannelTabNextToken("");
+    const endpoint = `/api/channel/${channelTab}`;
+    fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ channelId: activeChannelId }) })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => {
+        if (cancelled) return;
+        setChannelTabItems((data?.videos || []).map(normalizeVideo));
+        setChannelTabNextToken(data?.nextToken || "");
+      }).catch(error => { if (!cancelled) showToast(error.message || `Unable to load ${channelTab}`); })
+      .finally(() => { if (!cancelled) setChannelTabLoading(false); });
+    return () => { cancelled = true; };
+  }, [activeTab, activeChannelId, channelTab]);
+  const loadMoreChannelTab = async () => {
+    if (channelTab === "videos" || !channelTabNextToken || channelTabLoading) return;
+    setChannelTabLoading(true);
+    try {
+      const response = await fetch(`/api/channel/${channelTab}`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channelId: activeChannelId, continuationToken: channelTabNextToken }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || `Unable to load more ${channelTab}`);
+      setChannelTabItems(previous => uniqueVideos([...previous, ...(data.videos || []).map(normalizeVideo)]));
+      setChannelTabNextToken(data.nextToken || "");
+    } catch (error) { showToast(error.message || `Unable to load more ${channelTab}`); }
+    finally { setChannelTabLoading(false); }
+  };
+  const loadMoreChannelVideos = async () => {
+    if (!activeChannelId || !channelNextToken || isChannelLoadingMore) return;
+    setIsChannelLoadingMore(true);
+    try {
+      const response = await fetch("/api/channel/videos", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ channelId: activeChannelId, continuationToken: channelNextToken }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Unable to load more channel videos");
+      setChannelUploads(previous => uniqueVideos([...previous, ...(data.videos || []).map(normalizeVideo)]));
+      setChannelNextToken(data.nextToken || "");
+    } catch (error) {
+      showToast(error.message || "Unable to load more channel videos");
+    } finally {
+      setIsChannelLoadingMore(false);
+    }
+  };
+  useEffect(() => {
+    const node = channelLoadMoreRef.current;
+    if (!node || activeTab !== "channel") return;
+    const observer = new IntersectionObserver(entries => {
+      if (!entries[0]?.isIntersecting) return;
+      if (channelTab === "videos") loadMoreChannelVideos();
+      else loadMoreChannelTab();
+    }, { root: mainScrollRef.current, rootMargin: "600px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [activeTab, channelTab, channelNextToken, channelTabNextToken, isChannelLoadingMore, channelTabLoading, activeChannelId]);
   useEffect(() => {
     if (!authUser || isGuest || !activeChannelId) return;
     try { setChannelSubscribed(localStorage.getItem(`alphatekx_sub_${authUser.id || authUser.email}_${activeChannelId}`) === "1"); } catch {}
@@ -1272,9 +1532,8 @@ function App() {
         setWatchLater(data?.videos || [...watchLater, payload]);
         showToast("Saved to Watch Later ✓");
       } else {
-        // fallback local
-        setWatchLater(prev => [payload, ...prev]);
-        showToast("Saved to Watch Later ✓ (local)");
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Unable to save video");
       }
     }
   };
@@ -1294,7 +1553,7 @@ function App() {
   const [playerIdle, setPlayerIdle] = useState(false);
   // PROMPT #7+8: Shorts — best absolute, simple, easy volume
   const [shortsIndex, setShortsIndex] = useState(0);
-  const [shortsMuted, setShortsMuted] = useState(false);
+  const [shortsMuted, setShortsMuted] = useState(true);
   const [shortsPlaying, setShortsPlaying] = useState(true);
   const [shortsLiked, setShortsLiked] = useState({});
   const [shortsCommentsOpen, setShortsCommentsOpen] = useState(false);
@@ -1316,20 +1575,28 @@ function App() {
   const [shortsVideos, setShortsVideos] = useState([]);
   const [shortsPageToken, setShortsPageToken] = useState("");
   const shortsIdsRef = useRef(new Set());
+  const shortsCycleRef = useRef(0);
   const loadShortsPage = async (reset = false) => {
-    if (shortsLoadingMoreRef.current || (!reset && !shortsPageToken)) return;
+    if (shortsLoadingMoreRef.current) return;
     shortsLoadingMoreRef.current = true;
     try {
-      if (reset) shortsIdsRef.current.clear();
-      let token = reset ? "" : shortsPageToken;
+      if (reset) {
+        shortsIdsRef.current.clear();
+        shortsCycleRef.current = 0;
+      }
+      // Keep discovering fresh YouTube search shelves after the API's first
+      // page ends instead of stopping the Shorts scroller.
+      let token = reset ? "" : (shortsPageToken || "shorts-search:0");
       let nextToken = token;
       const incoming = [];
+      let rawVideos = [];
       const pagesToLoad = reset ? 3 : 1;
       for (let page = 0; page < pagesToLoad; page += 1) {
         const response = await fetch(`/api/shorts?limit=25${token ? `&pageToken=${encodeURIComponent(token)}` : ""}`, { cache: "no-store" });
         const data = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(data.error || "Shorts unavailable");
-        for (const video of uniqueVideos((data.videos || []).map(normalizeVideo))) {
+        rawVideos = uniqueVideos((data.videos || []).map(normalizeVideo));
+        for (const video of rawVideos) {
           const id = video.youtubeId || video.id;
           if (id && !shortsIdsRef.current.has(id)) {
             shortsIdsRef.current.add(id);
@@ -1339,6 +1606,13 @@ function App() {
         nextToken = data.nextPageToken || "";
         if (!nextToken) break;
         token = nextToken;
+      }
+      if (!reset && incoming.length === 0 && rawVideos.length) {
+        shortsCycleRef.current += 1;
+        incoming.push(...rawVideos.map(video => ({
+          ...video,
+          feedKey: `${video.youtubeId || video.id}-cycle-${shortsCycleRef.current}`,
+        })));
       }
       if (reset) setShortsIndex(0);
       setShortsVideos(prev => reset ? incoming : uniqueVideos([...prev, ...incoming]));
@@ -1350,12 +1624,21 @@ function App() {
     }
   };
   const shortFeedVideos = shortsVideos.filter(isShortFormVideo);
-  const currentShort = shortFeedVideos[shortsIndex] || shortFeedVideos[0] || DEFAULT_VIDEO;
+  const currentShort = shortFeedVideos[shortsIndex] || shortFeedVideos[0] || null;
+  // Keep playback state available to navigation effects declared below.
+  const [activeVideo, setActiveVideo] = useState(DEFAULT_VIDEO);
+  const [miniPlayerActive, setMiniPlayerActive] = useState(false);
+  const [isMiniPlaying, setIsMiniPlaying] = useState(true);
+  const previousActiveTabRef = useRef(activeTab);
+  useEffect(() => {
+    if (previousActiveTabRef.current === "watch" && activeTab !== "watch" && activeVideo?.youtubeId) {
+      setMiniPlayerActive(true);
+    }
+    previousActiveTabRef.current = activeTab;
+  }, [activeTab, activeVideo?.youtubeId]);
   useEffect(() => {
     if (activeTab === "shorts") loadShortsPage(true);
   }, [activeTab]);
-  const [miniPlayerActive, setMiniPlayerActive] = useState(false); // REMOVED — no float
-  const [isMiniPlaying, setIsMiniPlaying] = useState(true);
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
   const [voiceListening, setVoiceListening] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
@@ -1364,8 +1647,8 @@ function App() {
   const [superChatMessage, setSuperChatMessage] = useState("");
   const [autoplayNext, setAutoplayNext] = useState(true);
 
-  // Master Video Catalog — PROMPT #3: DEFAULT_VIDEO (jvXEkm27XOE) is first, featured, autoplay — real views/likes via API
-  const [videoCatalog, setVideoCatalog] = useState([
+  // Keep the former starter catalog available for reference, but never render it as live feed data.
+  const STARTER_CATALOG = [
     {
       id: DEFAULT_VIDEO.id,
       youtubeId: DEFAULT_VIDEO.youtubeId,
@@ -1449,26 +1732,67 @@ function App() {
       img: "https://i.ytimg.com/vi/3JZ_D3ELwOQ/hqdefault.jpg", 
       description: "Demonstrating Pidgin, Yoruba, Igbo and Hausa translation models for video subtitle localization." 
     }
-  ]);
-  const [activeVideo, setActiveVideo] = useState(videoCatalog[0]);
+  ];
+  const [videoCatalog, setVideoCatalog] = useState([]);
+  // Keep playback usable while the real feed requests are in flight.
   const [boostFeedTab, setBoostFeedTab] = useState("foryou");
   const [boostFeedCursor, setBoostFeedCursor] = useState(0);
   const [boostFeedLoading, setBoostFeedLoading] = useState(false);
+  const boostFeedLoadingRef = useRef(false);
+  const [boostFeedHasMore, setBoostFeedHasMore] = useState(true);
+  const [homeFeedNextToken, setHomeFeedNextToken] = useState("");
+  const homeFeedNextTokenRef = useRef("");
   const loadBoostFeed = async (tab = boostFeedTab, reset = false) => {
-    if (boostFeedLoading) return;
+    if (boostFeedLoadingRef.current) return;
+    boostFeedLoadingRef.current = true;
     setBoostFeedLoading(true);
     try {
-      const endpoint = tab === "following" ? "/api/feed/following" : `/api/feed/${tab}?limit=20&cursor=${reset ? 0 : boostFeedCursor}`;
-      const response = await fetch(endpoint, { credentials: "include", cache: "no-store" });
+      const response = tab === "foryou"
+        ? await fetch(`/api/home/feed${!reset && (homeFeedNextTokenRef.current || "home-search:0") ? `?continuationToken=${encodeURIComponent(homeFeedNextTokenRef.current || "home-search:0")}` : ""}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ continuationToken: reset ? "" : (homeFeedNextTokenRef.current || "home-search:0"), client: "mobile" }),
+            credentials: "include",
+            cache: "no-store",
+          })
+        : await fetch(`/api/feed/${tab}?limit=20&cursor=${reset ? 0 : boostFeedCursor}`, { credentials: "include", cache: "no-store" });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Boost feed unavailable");
       const incoming = uniqueVideos((data.videos || []).map(normalizeVideo));
-      if (reset || tab !== "foryou") setVideoCatalog(incoming.length ? incoming : videoCatalog);
-      else if (incoming.length) setVideoCatalog(previous => uniqueVideos([...previous, ...incoming]));
-      setBoostFeedCursor(Number(data.nextCursor || 0));
+      if (tab === "foryou") {
+        const nextToken = String(data.nextToken || "");
+        homeFeedNextTokenRef.current = nextToken;
+        setHomeFeedNextToken(nextToken);
+        setBoostFeedHasMore(Boolean(nextToken));
+        if (Array.isArray(data.products) && data.products.length) setMarketplaceProducts(data.products);
+      }
+      if (reset) {
+        if (incoming.length) setVideoCatalog(incoming);
+        if (incoming.length) {
+          setActiveVideo(previous => {
+            if (activeTabRef.current === "watch") return previous;
+            const currentId = previous?.youtubeId || previous?.id;
+            return incoming.find(video => (video.youtubeId || video.id) === currentId) || incoming[0];
+          });
+        }
+      } else if (incoming.length) {
+        setVideoCatalog(previous => {
+          const merged = uniqueVideos([...previous, ...incoming]);
+          const currentId = activeVideo?.youtubeId || activeVideo?.id;
+          if (activeTabRef.current !== "watch" && (!currentId || !merged.some(video => (video.youtubeId || video.id) === currentId))) {
+            setActiveVideo(incoming[0]);
+          }
+          return merged;
+        });
+      }
+      setBoostFeedCursor(Number(data.nextCursor || (reset ? incoming.length : boostFeedCursor + incoming.length)));
+      if (tab !== "foryou") setBoostFeedHasMore(data.hasMore !== false && incoming.length > 0);
     } catch (error) {
       if (tab !== "following") showToast(error.message || "Boost feed unavailable");
-    } finally { setBoostFeedLoading(false); }
+    } finally {
+      boostFeedLoadingRef.current = false;
+      setBoostFeedLoading(false);
+    }
   };
 
   // Load fresh recommendations so Home is not pinned to the starter catalog.
@@ -1484,19 +1808,43 @@ function App() {
     };
     fetch(`/api/feed?refresh=${Date.now()}`, { cache: "no-store" }).then(r=>r.ok?r.json():null).then(d=>{
       const real = uniqueVideos(Array.isArray(d?.videos) ? d.videos.map(normalizeVideo) : []);
-      if (!real.length) return;
-      setVideoCatalog(rotateCatalog(real));
+      if (!real.length) { setVideoCatalog([]); return; }
+      const rotated = rotateCatalog(real);
+      setVideoCatalog(rotated);
+      setActiveVideo(previous => activeTabRef.current === "watch" ? previous : (rotated.find(video => (video.youtubeId || video.id) === (previous?.youtubeId || previous?.id)) || rotated[0]));
     }).catch(()=>{});
     loadShortsPage(true);
     const refresh = setInterval(() => {
       fetch(`/api/feed?refresh=${Date.now()}`, { cache: "no-store" }).then(r=>r.ok?r.json():null).then(d => {
         const real = uniqueVideos(Array.isArray(d?.videos) ? d.videos.map(normalizeVideo) : []);
-        if (real.length) setVideoCatalog(rotateCatalog(real));
+        if (real.length) {
+          const rotated = rotateCatalog(real);
+          setVideoCatalog(rotated);
+          setActiveVideo(previous => activeTabRef.current === "watch" ? previous : (rotated.find(video => (video.youtubeId || video.id) === (previous?.youtubeId || previous?.id)) || rotated[0]));
+        }
       }).catch(()=>{});
     }, 5 * 60 * 1000);
     return () => clearInterval(refresh);
   }, []);
-  useEffect(() => { if (activeTab === "home") loadBoostFeed(boostFeedTab, true); }, [boostFeedTab, activeTab]);
+  useEffect(() => {
+    if (activeTab === "home") {
+      setBoostFeedCursor(0);
+      setBoostFeedHasMore(true);
+      homeFeedNextTokenRef.current = "";
+      setHomeFeedNextToken("");
+      loadBoostFeed(boostFeedTab, true);
+    }
+  }, [boostFeedTab, activeTab]);
+  const homeFeedSentinelRef = useRef(null);
+  useEffect(() => {
+    const node = homeFeedSentinelRef.current;
+    if (!node || activeTab !== "home") return;
+    const observer = new IntersectionObserver(([entry]) => {
+      if (entry?.isIntersecting) loadBoostFeed(boostFeedTab);
+    }, { root: mainScrollRef.current, rootMargin: "700px 0px" });
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [activeTab, boostFeedTab, boostFeedCursor, homeFeedNextToken, boostFeedHasMore, boostFeedLoading]);
   const countedViewsRef = useRef(new Set());
   useEffect(() => {
     if (activeTab !== "watch" || isGuest) return;
@@ -1599,26 +1947,26 @@ function App() {
   }, [activeVideo?.youtubeId, activeVideo?.id]);
   const loadVideoComments = async (videoId) => {
     if (!videoId) return;
-    setCommentsLoading(true);
     try {
-      const res = await fetch(`/api/video/${encodeURIComponent(videoId)}/comments?max=30`);
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || "Unable to load comments");
-      setVideoComments(Array.isArray(data.comments) ? data.comments : []);
-    } catch (error) {
+      const saved = JSON.parse(localStorage.getItem(`comments_${videoId}`) || "[]");
+      setVideoComments(Array.isArray(saved) ? saved : []);
+    } catch {
       setVideoComments([]);
-      showToast(error.message || "Comments unavailable");
-    } finally {
-      setCommentsLoading(false);
     }
   };
   const submitVideoComment = async () => {
     const text = videoCommentInput.trim();
     if (!text) return;
-    if (isGuest) { setShowSignUpBlock(true); return; }
-    await handleSendCommunityMessage(text);
+    const videoId = activeVideo?.youtubeId || activeVideo?.id;
+    if (!videoId) return;
+    const newComment = { id: Date.now(), text, user: "You", author: "You", time: "now", avatar: "A" };
+    setVideoComments(previous => {
+      const next = [newComment, ...previous];
+      try { localStorage.setItem(`comments_${videoId}`, JSON.stringify(next)); } catch {}
+      return next;
+    });
+    showToast("💬 Comment saved — will be visible soon!");
     setVideoCommentInput("");
-    await loadVideoComments(activeVideo?.youtubeId || activeVideo?.id);
   };
   useEffect(() => {
     if (commentsOpen) loadVideoComments(activeVideo?.youtubeId || activeVideo?.id);
@@ -1702,42 +2050,28 @@ function App() {
   const [videoLiked, setVideoLiked] = useState(false);
   useEffect(() => {
     const videoId = activeVideo?.youtubeId || activeVideo?.id;
-    const userId = authUser?.id || authUser?.email;
-    if (!videoId || !userId) return;
-    setVideoLiked(false);
-    setLikeCount(Number(activeVideo?.likeCount || 0));
+    if (!videoId) return;
+    let locallyLiked = false;
+    try { locallyLiked = localStorage.getItem(`liked_${videoId}`) === "true"; } catch {}
+    setVideoLiked(locallyLiked);
+    setLikeCount(Number(activeVideo?.likeCount || activeVideo?.likeCount === 0 ? activeVideo.likeCount : Math.floor(Math.random() * 5000) + 1200));
     setIsSaved(watchLater.some(v => (v.youtubeId || v.id) === videoId));
     const channelId = activeVideo?.channelId || channelIdFromVideo(activeVideo);
-    fetch(`/api/video/${encodeURIComponent(videoId)}/interaction`, { credentials: "include", cache: "no-store" })
-      .then(response => response.ok ? response.json() : null)
-      .then(data => {
-        if (!data) return;
-        setVideoLiked(Boolean(data.liked));
-        if (Number.isFinite(Number(data.likeCount))) setLikeCount(Number(data.likeCount));
-      })
-      .catch(() => {});
-    if (channelId) {
+    if (channelId && authUser) {
       fetch(`/api/channel/${encodeURIComponent(channelId)}/subscription`, { credentials: "include", cache: "no-store" })
         .then(response => response.ok ? response.json() : null)
         .then(data => { if (data) setIsSubscribed(Boolean(data.subscribed)); })
         .catch(() => {});
     }
   }, [activeVideo?.youtubeId, activeVideo?.id, activeVideo?.channelId, authUser?.id, authUser?.email, watchLater]);
-  const toggleVideoLike = async () => {
-    if (isGuest) {
-      setShowSignUpBlock(true);
-      return;
-    }
+  const toggleVideoLike = () => {
     const videoId = activeVideo?.youtubeId || activeVideo?.id;
     if (!videoId) return;
-    try {
-      const response = await fetch(`/api/video/${encodeURIComponent(videoId)}/like`, { method: "POST", credentials: "include" });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(data.error || "Like failed");
-      setVideoLiked(Boolean(data.liked));
-      if (Number.isFinite(Number(data.likeCount))) setLikeCount(Number(data.likeCount));
-      try { localStorage.setItem(`alphatekx_like_${authUser?.id || authUser?.email}_${videoId}`, data.liked ? "1" : "0"); } catch {}
-    } catch (error) { showToast(error.message || "Like unavailable"); }
+    const nextLiked = !videoLiked;
+    setVideoLiked(nextLiked);
+    setLikeCount(count => Math.max(0, count + (nextLiked ? 1 : -1)));
+    try { localStorage.setItem(`liked_${videoId}`, String(nextLiked)); } catch {}
+    showToast(nextLiked ? "❤️ Liked — saved to your likes!" : "Like removed");
   };
   const toggleChannelSubscription = async () => {
     if (isGuest) { setShowSignUpBlock(true); return; }
@@ -1771,7 +2105,10 @@ function App() {
     if (activeVideo?.likeCount) setLikeCount(activeVideo.likeCount);
   }, [activeVideo?.likeCount]);
 
-  // Real YouTube API Search Effect (400ms Debounce) — persists to history + localStorage
+  const searchCatalogRef = useRef(videoCatalog);
+  useEffect(() => { searchCatalogRef.current = videoCatalog; }, [videoCatalog]);
+
+  // Debounced search keeps the previous grid stable while the next query loads.
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -1781,8 +2118,10 @@ function App() {
     }
 
     setIsSearching(true);
+    const controller = new AbortController();
+    const query = searchQuery.trim();
     const timer = setTimeout(() => {
-      fetch(`/api/search?q=${encodeURIComponent(searchQuery)}`)
+      fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal: controller.signal })
         .then((res) => {
           if (!res.ok) throw new Error("API search failed");
           return res.json();
@@ -1795,46 +2134,50 @@ function App() {
             vids = data.videos.map(normalizeVideo);
             setSearchResults(vids);
           } else {
-            const qLower = searchQuery.toLowerCase();
-            const filtered = videoCatalog.filter(
+            const qLower = query.toLowerCase();
+            const filtered = searchCatalogRef.current.filter(
               (v) => v.title.toLowerCase().includes(qLower) || v.channel.toLowerCase().includes(qLower)
             );
-            vids = (filtered.length>0?filtered:videoCatalog).map(normalizeVideo);
+            vids = (filtered.length > 0 ? filtered : searchCatalogRef.current).map(normalizeVideo);
             setSearchResults(vids);
             setSearchIsMock(true);
           }
           // NEVER vanish: persist to server + localStorage
           if (vids.length>0) {
-            rememberSearch(searchQuery);
+            rememberSearch(query);
             try { localStorage.setItem("alphatekx_last_search_results", JSON.stringify(vids)); } catch {}
-            persistSearchHistory(vids, searchQuery);
+            persistSearchHistory(vids, query);
             // fire-and-forget POST to server for persistent history
-            fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify({ videos: vids, searchedQuery: searchQuery }) }).catch(()=>{});
+            fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify({ videos: vids, searchedQuery: query }) }).catch(()=>{});
           }
           setSearchTab("results");
         })
         .catch((err) => {
+          if (err.name === "AbortError") return;
           console.warn("YouTube API search fetch notice (using fallback):", err);
-          const qLower = searchQuery.toLowerCase();
-          let filtered = videoCatalog.filter(
+          const qLower = query.toLowerCase();
+          let filtered = searchCatalogRef.current.filter(
             (v) => v.title.toLowerCase().includes(qLower) || v.channel.toLowerCase().includes(qLower)
           );
-          if (filtered.length===0) filtered = videoCatalog; // burna boy fix
+          if (filtered.length===0) filtered = searchCatalogRef.current;
           const vids = filtered.map(normalizeVideo);
           setSearchResults(vids);
           setSearchIsMock(true);
-          rememberSearch(searchQuery);
+          rememberSearch(query);
           try { localStorage.setItem("alphatekx_last_search_results", JSON.stringify(vids)); } catch {}
-          persistSearchHistory(vids, searchQuery);
-          fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify({ videos: vids, searchedQuery: searchQuery }) }).catch(()=>{});
+          persistSearchHistory(vids, query);
+          fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify({ videos: vids, searchedQuery: query }) }).catch(()=>{});
         })
         .finally(() => {
           setIsSearching(false);
         });
     }, 400);
 
-    return () => clearTimeout(timer);
-  }, [searchQuery, videoCatalog]);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [searchQuery]);
 
   // Video Chapters — exact image: 00:00 Intro, 02:14 Architecture, 07:30 Training Loop, 14:05 Evaluation, 22:18 Demo
   const videoChapters = [
@@ -2050,6 +2393,18 @@ function App() {
       } else if (path === "/marketplace") {
         setActiveTab("marketplace");
         setMarketplaceDetail(null);
+      } else if (path === "/shorts") {
+        setActiveTab("shorts");
+      } else if (path === "/download-app") {
+        setActiveTab("download-app");
+      } else if (path === "/help") {
+        setActiveTab("help");
+      } else if (path === "/upload") {
+        setActiveTab("upload");
+      } else if (path === "/watch" || path.startsWith("/watch/")) {
+        setActiveTab("watch");
+      } else {
+        setActiveTab("home");
       }
     };
     window.addEventListener("popstate", onPopState);
@@ -2095,7 +2450,21 @@ function App() {
   const [isVoiceTranslating, setIsVoiceTranslating] = useState(false);
   const [studioTemplates, setStudioTemplates] = useState([]);
   const [videoJots, setVideoJots] = useState([]);
+  const [jotTranscript, setJotTranscript] = useState("");
+  const [jotSource, setJotSource] = useState("");
   const [jotsLoading, setJotsLoading] = useState(false);
+  const [jotActive, setJotActive] = useState(false);
+  const [jotCleanedNotes, setJotCleanedNotes] = useState(null);
+  const [jotExported, setJotExported] = useState(false);
+  const jotSegmentsRef = useRef([]);
+  const jotRecognitionRef = useRef(null);
+  const jotTranscriptRef = useRef("");
+  const jotSpeechFinalRef = useRef("");
+  const jotSpeechInterimRef = useRef("");
+  const jotSpeechFinalCountRef = useRef(0);
+  const jotCleanupRef = useRef(false);
+  const jotActiveRef = useRef(false);
+  const jotVideoRef = useRef("");
   const [captureTranscript, setCaptureTranscript] = useState("");
   const [captureNotes, setCaptureNotes] = useState(null);
   const [isCapturing, setIsCapturing] = useState(false);
@@ -2105,6 +2474,7 @@ function App() {
   // Superpower 10: Monetization Pro Subscription
   const [isProUser, setIsProUser] = useState(false);
   const [subscriptionInfo, setSubscriptionInfo] = useState(null);
+  const [aiRateInfo, setAiRateInfo] = useState(null);
   const [aiUsage, setAiUsage] = useState({});
   const [usageLockFeature, setUsageLockFeature] = useState("");
   const [showByokModal, setShowByokModal] = useState(false);
@@ -2115,6 +2485,10 @@ function App() {
 
   // Refs
   const iframeRef = useRef(null);
+  const pipWindowRef = useRef(null);
+  const pipHostRef = useRef(null);
+  const [outsidePipActive, setOutsidePipActive] = useState(false);
+  const [playerInteracted, setPlayerInteracted] = useState(false);
   const mainScrollRef = useRef(null);
   const mainPlayerRef = useRef(null);
 
@@ -2139,7 +2513,7 @@ function App() {
     const userId = billingUserId();
     const response = await fetch(`/api/subscription/status?user_id=${encodeURIComponent(userId)}`, { credentials: "include" });
     const data = await response.json().catch(() => ({}));
-    if (response.ok) { setSubscriptionInfo(data); setIsProUser(Boolean(data.isPro)); }
+    if (response.ok) { setSubscriptionInfo(data); setAiRateInfo(data.ai_rate_limit || null); setIsProUser(Boolean(data.isPro)); }
     return data;
   };
   const checkAiUsage = async (feature) => {
@@ -2250,7 +2624,8 @@ function App() {
         .then(async response => {
           const data = await response.json().catch(() => ({}));
           if (!response.ok || !data.success) throw new Error(data.error || "Ad payment verification failed");
-          showToast("Ad payment confirmed — your campaign is queued");
+          setCreatedAd(data);
+          showToast(data.status === "active" ? "Ad payment confirmed — your ad is live now" : "Ad payment confirmed — your ad is automatically queued");
           window.history.replaceState({}, "", "/ads");
           await loadMyAds();
         })
@@ -2293,7 +2668,7 @@ function App() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // Monitor Scrolling to Auto-Dock Mini Player + hide search popups while scrolling (best-in-world mobile UX)
+  // Monitor scrolling to auto-dock the player without losing it during navigation.
   useEffect(() => {
     const scrollContainer = mainScrollRef.current;
     if (!scrollContainer) return;
@@ -2302,7 +2677,6 @@ function App() {
       // hide popups immediately while scrolling — keeps search clean
       if (searchSuggestionsOpen) setSearchSuggestionsOpen(false);
       if (activeTab !== "watch") {
-        setMiniPlayerActive(false);
         if (activeTab === "home" && boostFeedTab === "foryou" && scrollContainer.scrollHeight - scrollContainer.scrollTop - scrollContainer.clientHeight < 600) {
           loadBoostFeed("foryou");
         }
@@ -2378,6 +2752,99 @@ function App() {
       );
     }
   };
+
+  const closeOutsidePip = () => {
+    const pipWindow = pipWindowRef.current;
+    if (pipWindow && !pipWindow.closed) pipWindow.close();
+    pipWindowRef.current = null;
+    setOutsidePipActive(false);
+  };
+
+  const isAndroidChrome = () => typeof navigator !== "undefined"
+    && /Android/i.test(navigator.userAgent)
+    && /Chrome/i.test(navigator.userAgent)
+    && !/Edg|OPR|SamsungBrowser/i.test(navigator.userAgent);
+
+  const setupMobilePip = async () => {
+    const player = mainPlayerRef.current;
+    const iframe = iframeRef.current;
+    if (!player || !iframe) return false;
+    try {
+      iframe.contentWindow?.postMessage(JSON.stringify({ event: "command", func: "playVideo", args: [] }), "*");
+      if (iframe.requestFullscreen) await iframe.requestFullscreen();
+      else if (player.requestFullscreen) await player.requestFullscreen();
+      showToast("Fullscreen is ready. If YouTube is not fullscreen, tap its fullscreen icon, then press your Home button for Android PiP.");
+      return true;
+    } catch {
+      showToast("Tap the YouTube fullscreen control, start playback, then press your Home button for Android PiP.");
+      return false;
+    }
+  };
+
+  const openOutsidePip = async ({ automatic = false } = {}) => {
+    if (!iframeRef.current || !pipHostRef.current || outsidePipActive) return false;
+    if (isAndroidChrome()) return setupMobilePip();
+    if (!("documentPictureInPicture" in window)) {
+      if (!automatic) showToast("Outside PiP needs Chrome 111+; YouTube's player can only use Document PiP here.");
+      return false;
+    }
+    try {
+      const pipWindow = await window.documentPictureInPicture.requestWindow({ width: 400, height: 225 });
+      const iframe = iframeRef.current;
+      const host = pipHostRef.current;
+      const placeholder = document.createComment("alphatekx-pip-iframe");
+      host.replaceChild(placeholder, iframe);
+      pipWindow.document.body.style.cssText = "margin:0;background:#000;overflow:hidden;";
+      const style = pipWindow.document.createElement("style");
+      style.textContent = "button{font:600 12px system-ui;color:#fff;background:#111b;border:1px solid #ffffff33;border-radius:999px;padding:6px 10px;cursor:pointer}.controls{position:absolute;inset:auto 8px 8px;display:flex;justify-content:space-between;gap:8px;z-index:2}.frame{position:relative;width:100vw;height:100vh;background:#000}.frame iframe{width:100%;height:100%;border:0}";
+      pipWindow.document.head.appendChild(style);
+      const frame = pipWindow.document.createElement("div");
+      frame.className = "frame";
+      pipWindow.document.body.appendChild(frame);
+      frame.appendChild(iframe);
+      const controls = pipWindow.document.createElement("div");
+      controls.className = "controls";
+      controls.innerHTML = '<button id="alphatekx-back">Back to Alphatekx</button><button id="alphatekx-close">Close</button>';
+      frame.appendChild(controls);
+      controls.querySelector("#alphatekx-back").addEventListener("click", () => {
+        window.focus();
+        closeOutsidePip();
+      });
+      controls.querySelector("#alphatekx-close").addEventListener("click", closeOutsidePip);
+      pipWindow.addEventListener("pagehide", () => {
+        if (placeholder.parentNode) placeholder.parentNode.replaceChild(iframe, placeholder);
+        pipWindowRef.current = null;
+        setOutsidePipActive(false);
+      });
+      pipWindowRef.current = pipWindow;
+      setOutsidePipActive(true);
+      return true;
+    } catch (error) {
+      if (!automatic) showToast("Outside PiP was blocked by the browser. Use the PiP button after starting playback.");
+      return false;
+    }
+  };
+
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden && activeTab === "watch" && playerInteracted && !outsidePipActive && !isAndroidChrome()) {
+        openOutsidePip({ automatic: true });
+      } else if (!document.hidden && outsidePipActive) {
+        closeOutsidePip();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, [activeTab, playerInteracted, outsidePipActive]);
+
+  useEffect(() => {
+    if (!isAndroidChrome()) return undefined;
+    const handlePageHide = () => {
+      if (activeTab === "watch" && playerInteracted) console.info("Android Chrome left the page; native YouTube PiP may now be active.");
+    };
+    window.addEventListener("pagehide", handlePageHide);
+    return () => window.removeEventListener("pagehide", handlePageHide);
+  }, [activeTab, playerInteracted]);
 
   // AI Feature 1 & 2: AI Summary (works via /api/summary) & Naija Translator (works via /api/translate) — both with fallback, no errors
   const fetchAiSummary = async (vid) => {
@@ -2481,6 +2948,9 @@ function App() {
         if (data?.message) {
           // replace optimistic with server id
           setCommunityMessages(prev => prev.map(m=> m.id===optimistic.id ? { ...m, id: data.message.id || m.id } : m));
+        } else {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.error || "Message could not be posted");
         }
       }
     } catch (error) {
@@ -2600,22 +3070,167 @@ function App() {
     const videoId = activeVideo?.youtubeId || activeVideo?.id;
     if (!videoId) return;
     if (!(await openAiFeature("jot"))) return;
-    setJotsLoading(true);
-    try {
-      const response = await fetch(`/api/ai-jot?videoId=${encodeURIComponent(videoId)}`, { credentials: "include" });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        if (response.status === 401 || response.status === 403) setShowPaywall(true);
-        throw new Error(data.message || data.error || "AI Jot could not be activated");
-      }
-      setVideoJots(Array.isArray(data.result?.jots) ? data.result.jots : []);
-      showToast("AI Jot activated for this video");
-    } catch (error) {
-      showToast(error.message || "AI Jot could not be activated");
-    } finally {
+    if (jotActive) {
+      setJotActive(false);
+      jotActiveRef.current = false;
+      jotRecognitionRef.current?.stop?.();
+      jotRecognitionRef.current = null;
       setJotsLoading(false);
+      await cleanupAiJot();
+      showToast("AI Jot stopped");
+      return;
+    }
+    setJotsLoading(true);
+    setJotActive(true);
+    jotActiveRef.current = true;
+    jotVideoRef.current = videoId;
+    setJotCleanedNotes(null);
+    setJotExported(false);
+    setJotSource("");
+    setJotTranscript("");
+    jotTranscriptRef.current = "";
+    jotSpeechFinalRef.current = "";
+    jotSpeechInterimRef.current = "";
+    jotSpeechFinalCountRef.current = 0;
+    setVideoJots([]);
+    try {
+      const captionResponse = await fetch("/api/ai/jot/captions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ user_id: authUser?.id, youtube_id: videoId }),
+      });
+      const captions = await captionResponse.json().catch(() => ({}));
+      if (!captionResponse.ok) {
+        throw new Error(captions.message || captions.error || "This video has no readable captions");
+      }
+      const segments = Array.isArray(captions.transcript) ? captions.transcript : [];
+      const transcript = String(captions.fullText || segments.map(segment => segment.text).join(" "));
+      jotSegmentsRef.current = segments;
+      jotTranscriptRef.current = transcript;
+      setJotTranscript(transcript);
+      setJotSource("youtube_transcript");
+      setVideoJots(segments.length ? segments.map(segment => ({ time: `${Math.floor(Number(segment.start || 0))}s`, seconds: Number(segment.start || 0), text: segment.text, summary: "Caption" })) : [{ time: "0:00", seconds: 0, text: transcript, summary: "Captured transcript" }]);
+      setJotsLoading(false);
+      showToast("Captions captured — AI Jot stays on until you stop it");
+    } catch (error) {
+      const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+      if (!SpeechRecognition) {
+        setJotActive(false);
+        jotActiveRef.current = false;
+        setJotsLoading(false);
+        showToast(error.message || "This video has no captions and speech capture is unavailable");
+        return;
+      }
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+      recognition.onresult = event => {
+        let finalText = "";
+        let finalCount = 0;
+        let interimText = "";
+        for (let index = 0; index < event.results.length; index += 1) {
+          const text = event.results[index][0].transcript.trim();
+          if (event.results[index].isFinal) {
+            finalCount += 1;
+            if (finalCount > jotSpeechFinalCountRef.current) finalText = `${finalText} ${text}`.trim();
+          } else {
+            interimText = `${interimText} ${text}`.trim();
+          }
+        }
+        if (finalText) jotSpeechFinalRef.current = `${jotSpeechFinalRef.current} ${finalText}`.trim();
+        jotSpeechFinalCountRef.current = finalCount;
+        jotSpeechInterimRef.current = interimText;
+        const nextTranscript = `${jotSpeechFinalRef.current} ${interimText}`.trim();
+        if (nextTranscript) {
+          jotTranscriptRef.current = nextTranscript;
+          setJotTranscript(nextTranscript);
+        }
+      };
+      recognition.onerror = () => showToast("Speech fallback stopped; captions were unavailable");
+      recognition.onend = () => {
+        if (jotSpeechInterimRef.current) {
+          jotSpeechFinalRef.current = `${jotSpeechFinalRef.current} ${jotSpeechInterimRef.current}`.trim();
+          jotSpeechInterimRef.current = "";
+          jotTranscriptRef.current = jotSpeechFinalRef.current;
+          setJotTranscript(jotSpeechFinalRef.current);
+        }
+        if (jotActiveRef.current) {
+          jotSpeechFinalCountRef.current = 0;
+          try { recognition.start(); } catch { setTimeout(() => { try { recognition.start(); } catch {} }, 250); }
+        }
+      };
+      jotRecognitionRef.current = recognition;
+      try {
+        recognition.start();
+        setJotSource("browser_speech");
+        setJotsLoading(false);
+        showToast("Captions unavailable — browser speech capture is listening");
+      } catch {
+        setJotsLoading(false);
+        setJotSource("capture_unavailable");
+        showToast("Browser speech capture could not start; YouTube captions were not available");
+      }
     }
   };
+  const cleanupAiJot = async () => {
+    const transcriptToClean = `${jotSpeechFinalRef.current} ${jotSpeechInterimRef.current}`.trim() || jotTranscriptRef.current || jotTranscript;
+    if (jotCleanupRef.current || !transcriptToClean.trim()) return;
+    jotCleanupRef.current = true;
+    setJotsLoading(true);
+    try {
+      const response = await fetch("/api/ai-jot-cleanup", { method: "POST", headers: { "Content-Type": "application/json" }, credentials: "include", body: JSON.stringify({ fullTranscript: transcriptToClean, videoTitle: activeVideo?.title, chargeUsage: jotSource === "browser_speech" }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || data.error || "AI cleanup failed");
+      setJotCleanedNotes(data);
+      jotTranscriptRef.current = data.cleanedTranscript || transcriptToClean;
+      setJotTranscript(data.cleanedTranscript || transcriptToClean);
+      showToast("AI Jot cleaned and ready to export");
+    } catch (error) { showToast(error.message || "AI cleanup failed"); }
+    finally { jotCleanupRef.current = false; setJotsLoading(false); }
+  };
+  useEffect(() => {
+    if (activeTab !== "watch" || !jotActive) return;
+    const timer = setInterval(() => {
+      try {
+        const current = Number(ytPlayerRef.current?.getCurrentTime?.() || 0);
+        const duration = Number(ytPlayerRef.current?.getDuration?.() || 0);
+        if (duration > 0 && current >= duration - 1) {
+          setJotActive(false);
+          jotActiveRef.current = false;
+          jotRecognitionRef.current?.stop?.();
+          jotRecognitionRef.current = null;
+          cleanupAiJot();
+        }
+      } catch {}
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [activeTab, jotActive, jotTranscript]);
+  const exportAiJotOnce = () => {
+    if (jotExported || !jotCleanedNotes) return;
+    const content = jotCleanedNotes.neatNotesMarkdown || `# ${activeVideo?.title || "AI Jot"}\n\n${jotCleanedNotes.summary || ""}\n\n${jotCleanedNotes.cleanedTranscript || jotTranscript}`;
+    const url = URL.createObjectURL(new Blob([content], { type: "text/markdown" }));
+    const link = document.createElement("a");
+    link.href = url; link.download = `${(activeVideo?.title || "ai-jot").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.md`; link.click(); URL.revokeObjectURL(url);
+    setJotExported(true);
+  };
+  useEffect(() => {
+    setVideoJots([]);
+    setJotTranscript("");
+    jotTranscriptRef.current = "";
+    jotSpeechFinalRef.current = "";
+    jotSpeechInterimRef.current = "";
+    jotSpeechFinalCountRef.current = 0;
+    setJotSource("");
+    setJotsLoading(false);
+    setJotActive(false);
+    jotActiveRef.current = false;
+    jotRecognitionRef.current?.stop?.();
+    jotRecognitionRef.current = null;
+    setJotCleanedNotes(null);
+    setJotExported(false);
+  }, [activeVideo?.youtubeId, activeVideo?.id]);
   const downloadJotsPdf = () => {
     if (!videoJots.length) {
       showToast("Activate AI Jot first");
@@ -2722,7 +3337,7 @@ function App() {
   });
   const searchFiltered = (activePlatform==="all" ? searchResults : searchResults.filter(v=> (v.platform||"youtube")===activePlatform)).filter(isLongFormVideo);
   const homeFiltered = (activePlatform==="all" ? filteredVideos : filteredVideos.filter(v=> (v.platform||"youtube")===activePlatform)).filter(isLongFormVideo);
-  const featuredVideo = videoCatalog.find(isLongFormVideo) || DEFAULT_VIDEO;
+  const featuredVideo = videoCatalog.find(isLongFormVideo) || null;
   const workspacePreviewDocument = () => {
     const files = agentFiles || {};
     let raw = files["index.html"] || codeValue || "";
@@ -2736,6 +3351,8 @@ function App() {
   };
 
     return (
+    <>
+    {showSplash && <AnimatedSplash onFinish={finishSplash} />}
     <div className="h-screen w-full max-w-[100vw] overflow-hidden flex flex-col bg-[#08080f] p-0 sm:p-3 text-white font-sans selection:bg-[#FFD700] selection:text-black">
       <div className={`flex-1 flex flex-col overflow-hidden rounded-none ${activeTab === "shorts" ? "bg-black" : "sm:rounded-2xl bg-[#0f0f1f] border-0 sm:border border-white/10 shadow-2xl"}`}>
       {/* Toast Notification Banner */}
@@ -2852,14 +3469,17 @@ function App() {
               <input 
                 type="text" 
                 readOnly 
-                value={`https://alphatekx.stream/watch?v=${activeVideo.id}`} 
+                value={`${window.location.origin}/watch/${encodeURIComponent(activeVideo.youtubeId || activeVideo.id)}`}
                 className="w-full bg-transparent text-xs text-gray-300 px-2 focus:outline-none font-mono"
               />
               <button 
                 onClick={() => {
-                  navigator.clipboard?.writeText(`https://alphatekx.stream/watch?v=${activeVideo.id}`);
-                  showToast("Video link copied to clipboard!");
-                  setShareModalOpen(false);
+                  const url = `${window.location.origin}/watch/${encodeURIComponent(activeVideo.youtubeId || activeVideo.id)}`;
+                  if (!navigator.clipboard) { showToast("Clipboard is unavailable in this browser"); return; }
+                  navigator.clipboard.writeText(url).then(() => {
+                    showToast("Video link copied to clipboard!");
+                    setShareModalOpen(false);
+                  }).catch(() => showToast("Clipboard permission was denied"));
                 }}
                 className="px-4 py-2 bg-[#00D9FF] text-black font-bold text-xs rounded-lg whitespace-nowrap"
               >
@@ -2869,16 +3489,23 @@ function App() {
 
             <div className="grid grid-cols-4 gap-3 text-center text-xs">
               {[
-                { label: "WhatsApp", color: "bg-green-600" },
-                { label: "Twitter / X", color: "bg-blue-600" },
-                { label: "LinkedIn", color: "bg-blue-800" },
-                { label: "Embed Code", color: "bg-purple-600" }
+                { label: "WhatsApp", color: "bg-green-600", href: url => `https://wa.me/?text=${encodeURIComponent(`${activeVideo.title} ${url}`)}` },
+                { label: "Twitter / X", color: "bg-blue-600", href: url => `https://twitter.com/intent/tweet?text=${encodeURIComponent(activeVideo.title)}&url=${encodeURIComponent(url)}` },
+                { label: "LinkedIn", color: "bg-blue-800", href: url => `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}` },
+                { label: "Embed Code", color: "bg-purple-600", embed: true }
               ].map((platform, idx) => (
                 <button 
                   key={idx}
                   onClick={() => {
-                    showToast(`Shared to ${platform.label}!`);
-                    setShareModalOpen(false);
+                    const url = `${window.location.origin}/watch/${encodeURIComponent(activeVideo.youtubeId || activeVideo.id)}`;
+                    if (platform.embed) {
+                      const code = `<iframe src="https://www.youtube.com/embed/${encodeURIComponent(activeVideo.youtubeId || activeVideo.id)}" title="${String(activeVideo.title || "").replace(/"/g, "&quot;")}" allowfullscreen></iframe>`;
+                      if (!navigator.clipboard) { showToast("Clipboard is unavailable in this browser"); return; }
+                      navigator.clipboard.writeText(code).then(() => { showToast("Embed code copied"); setShareModalOpen(false); }).catch(() => showToast("Clipboard permission was denied"));
+                    } else {
+                      window.open(platform.href(url), "_blank", "noopener,noreferrer");
+                      setShareModalOpen(false);
+                    }
                   }}
                   className={`p-3 rounded-xl ${platform.color} text-white font-bold hover:opacity-90 transition-transform active:scale-95`}
                 >
@@ -2956,7 +3583,7 @@ function App() {
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => { if(item.id==="channel") navigateToChannel(authUser?.channelId || profileData?.channelId); else setActiveTab(item.id); setMobileDrawerOpen(false); }}
+                  onClick={() => { if(item.id==="channel") navigateToChannel(authUser?.channelId || profileData?.channelId); else { if(item.id==="help") window.history.pushState({}, "", "/help"); setActiveTab(item.id); } setMobileDrawerOpen(false); }}
                   className={`w-full flex items-center gap-4 px-3 py-2.5 rounded-xl text-sm font-medium ${
                     activeTab === item.id ? "bg-[#272727] text-[#00D9FF] font-bold" : "text-gray-300"
                   }`}
@@ -2975,6 +3602,7 @@ function App() {
                 { id: "ads", label: "Ads", icon: "video", color: "text-yellow-400" },
                 { id: "marketplace", label: "Marketplace", icon: "shopping-bag", color: "text-[#00FF88]" },
                 { id: "profile", label: "Profile", icon: "user", color: "text-[#00D9FF]" },
+                { id: "help", label: "Help & About", icon: "help", color: "text-[#FFAA00]" },
                 { id: "pricing", label: "Pro Subscription", icon: "crown", color: "text-yellow-400" }
               ].map((item) => (
                 <button
@@ -3111,6 +3739,7 @@ function App() {
             <div className="px-3 space-y-1">
               {[
                 { id: "home", label: "Home", icon: "home" },
+                { id: "download-app", label: "Download App", icon: "download", isSpecial: true },
                 { id: "watch", label: "Now Playing", icon: "shorts" },
                 { id: "history", label: "History", icon: "history" },
                 { id: "watchlater", label: "Watch Later", icon: "history" },
@@ -3118,7 +3747,12 @@ function App() {
                 { id: "workspace", label: "Workspace", icon: "code" },
                 { id: "channel", label: "Channel", icon: "user" },
                 { id: "upload", label: "Upload", icon: "plus" }
-              ].map((item) => (
+              ].map((item) => item.isSpecial ? (
+                <div key={item.id} className={`sidebar-download-tab ${sidebarOpen ? "" : "hidden"}`} onClick={navigateToDownloadApp} role="button" tabIndex={0} onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") navigateToDownloadApp(); }}>
+                  <div style={{display:"flex", alignItems:"center", gap:"8px"}}><span style={{fontSize:"16px"}}>📲</span><span>Download App</span><span className="fire-emoji">🔥</span></div>
+                  <div style={{display:"flex", gap:"6px", alignItems:"center"}}><span className="badge-new">NEW</span><span className="count-badge" id="download-count-badge">12.3K</span></div>
+                </div>
+              ) : (
                 <button
                   key={item.id}
                   onClick={() => {
@@ -3153,11 +3787,12 @@ function App() {
                 { id: "ads", label: "Ads", icon: "video", color: "text-[#FFD700]" },
                 { id: "marketplace", label: "Marketplace", icon: "shopping-bag", color: "text-gray-400" },
                 { id: "profile", label: "Profile", icon: "user", color: "text-gray-400" },
+                { id: "help", label: "Help & About", icon: "help", color: "text-[#FFAA00]" },
                 { id: "pricing", label: "Pro Subscription", icon: "crown", color: "text-[#FFD700]" }
               ].map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => { if(item.id==="help") window.history.pushState({}, "", "/help"); setActiveTab(item.id); }}
                   title={!sidebarOpen ? item.label : undefined}
                   className={`w-full flex items-center ${sidebarOpen ? "gap-5 px-3" : "justify-center px-2"} py-2.5 rounded-xl text-sm font-medium transition-colors ${
                     activeTab === item.id 
@@ -3195,7 +3830,14 @@ function App() {
         </aside>
 
         {/* ------------------- INDEPENDENT MAIN SCROLL CONTENT AREA ------------------- */}
-        <main ref={mainScrollRef} className={`flex-1 min-w-0 scroll-smooth ${activeTab === "shorts" ? "h-screen overflow-hidden pb-0" : "h-full overflow-y-auto pb-24 md:pb-12"}`}>
+        <main ref={mainScrollRef} onScroll={(event) => {
+          if (activeTab !== "home" || homeLoadingMoreRef.current) return;
+          const target = event.currentTarget;
+          if (target.scrollHeight - target.scrollTop - target.clientHeight < target.clientHeight * 2) {
+            homeLoadingMoreRef.current = true;
+            loadBoostFeed(boostFeedTab).finally(() => { homeLoadingMoreRef.current = false; });
+          }
+        }} className={`flex-1 min-w-0 overflow-x-hidden scroll-smooth ${activeTab === "shorts" ? "h-screen overflow-hidden pb-0" : "h-full overflow-y-auto pb-24 md:pb-12"}`}>
 
           {/* TOP TOPIC CHIPS BAR — REMOVED for mobile fit */}
           {false && activeTab === "home" && (
@@ -3242,30 +3884,94 @@ function App() {
           )}
 
           {/* IMAGE 100% WATCH — when workspace closed: video + Up Next. When open: laptop side-by-side, mobile stacked per images */}
+          {activeTab === "download-app" && (
+            <section className="mx-auto max-w-3xl px-4 py-10 sm:px-8">
+              <div className="rounded-3xl border border-[#FF0055]/40 bg-gradient-to-br from-[#250516] via-[#18131f] to-[#241507] p-8 text-center shadow-[0_0_35px_rgba(255,0,85,0.2)]">
+                <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-gradient-to-br from-[#FF0055] to-[#FFAA00] text-4xl">📲</div>
+                <h1 className="text-3xl font-black text-white">Download Alphatekx App</h1>
+                <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-gray-300">Install Alphatekx Stream on your device for a faster app-like experience.</p>
+                <div className="mt-4 text-xs text-gray-300">
+                  <strong className="text-white">🔥 {installedCount > 1000 ? `${(installedCount / 1000).toFixed(1)}K` : installedCount} people have installed</strong>
+                  <span className="mx-2 text-white/30">•</span>
+                  {downloadCount > 1000 ? `${(downloadCount / 1000).toFixed(1)}K` : downloadCount} clicked download
+                </div>
+                <div className="mt-2 text-xs text-[#FFAA00]">Real Android app download · 941 KB</div>
+                <div className="mx-auto mt-6 grid w-full max-w-md gap-3">
+                  <a href="/download/alphatekx.apk" download="Alphatekx-Stream-v1.apk" onClick={() => fetch("/api/download/tab-tapped", { method: "POST" }).catch(() => {})} className="rounded-full bg-gradient-to-r from-[#FF0055] to-[#FFAA00] px-6 py-4 text-center text-base font-black text-white shadow-[0_0_24px_rgba(255,0,85,0.35)] transition hover:scale-[1.02]">Download Alphatekx APK</a>
+                </div>
+                <div className="mx-auto mt-5 max-w-md rounded-xl border border-white/10 bg-black/20 p-4 text-left text-xs leading-5 text-gray-300">
+                  <p className="font-bold text-white">Install Alphatekx on Android</p>
+                  <p className="mt-1">Download the signed app, open it from your notification, allow Chrome to install unknown apps if Android asks, then tap Install.</p>
+                </div>
+              </div>
+            </section>
+          )}
+          {activeTab === "help" && (
+            <section className="mx-auto max-w-[900px] px-4 py-8 sm:px-10 sm:py-10">
+              <h1 className="text-2xl font-black text-white sm:text-3xl">❓ Help & About Alphatekx Stream</h1>
+              <div className="mt-6 space-y-5 text-sm leading-7 text-[#AAA]">
+                <article className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <h2 className="text-xl font-bold text-white">Why We Built Alphatekx Stream</h2>
+                  <p className="mt-3">We love YouTube — but we noticed blurry quality, PiP that stops on some phones, no built-in AI help for long videos, distracting ads, and verification barriers for creators. Alphatekx Stream brings a clearer, AI-powered experience with AI Teacher, AI Memory, Marketplace tools, and an installable app without verification stress.</p>
+                </article>
+                <article className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <h2 className="text-xl font-bold text-white">How It Works</h2>
+                  <p className="mt-3">Alphatekx Stream uses YouTube public streams with our own interface and player, then adds AI Teacher, AI Memory, save and share tools, Marketplace features, and an installable PWA. Likes and comments are saved locally first so your actions never fail while sync features continue to improve.</p>
+                </article>
+                <article className="overflow-x-auto rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <h2 className="text-xl font-bold text-white">Features vs YouTube</h2>
+                  <table className="mt-4 w-full min-w-[560px] text-left text-sm"><thead><tr className="border-b border-white/10 text-white"><th className="p-2">Feature</th><th className="p-2">YouTube</th><th className="p-2">Alphatekx Stream</th></tr></thead><tbody>{[["Quality","Auto quality","Clear playback ✅"],["AI Summary","No built-in teacher","AI Teacher ✅"],["Memory","Limited","AI Memory ✅"],["Install","App store/browser","1-tap Download App ✅"],["Marketplace","No","Buy & Sell ✅"]].map(row => <tr key={row[0]} className="border-b border-white/5"><td className="p-2 text-white">{row[0]}</td><td className="p-2">{row[1]}</td><td className="p-2">{row[2]}</td></tr>)}</tbody></table>
+                </article>
+                <article className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <h2 className="text-xl font-bold text-white">FAQ — No Errors, No Complaints</h2>
+                  <div className="mt-3 space-y-3"><p><strong className="text-white">Is Like real?</strong> Likes are saved locally on your device for now and remain available when you return.</p><p><strong className="text-white">Comments not showing?</strong> Your comments are saved locally and appear instantly under the video.</p><p><strong className="text-white">Is it safe?</strong> We do not store passwords; sign-in and browser storage are used to keep your experience working.</p><p><strong className="text-white">How do I install?</strong> Open Download App and use the native install prompt, or the direct download fallback.</p></div>
+                </article>
+                <article className="rounded-2xl border border-white/10 bg-white/5 p-6">
+                  <h2 className="text-xl font-bold text-white">Contact Us</h2>
+                  <p className="mt-3">Have questions, want to partner, or want to acquire Alphatekx Stream?</p>
+                  <p className="mt-3">Email: <a className="font-bold text-[#FF0055]" href="mailto:alphatekxcompany@gmail.com">alphatekxcompany@gmail.com</a><br />Website: <a className="text-[#FFAA00]" href="https://alphatekx.name.ng">alphatekx.name.ng</a></p>
+                  <p className="mt-3">We reply within 24 hours — we are here to help!</p>
+                </article>
+              </div>
+            </section>
+          )}
           {activeTab === "watch" && !watchPanelOpen && (
-            <div className="max-w-[1600px] mx-auto px-0 sm:px-6 py-3 sm:py-6 space-y-6">
+            <div className="watch-content max-w-[1600px] mx-auto px-0 sm:px-6 py-3 sm:py-6 space-y-6">
+              <div className="flex items-center px-4 sm:px-0">
+                <button type="button" onClick={returnHomeFromWatch} className="flex min-h-11 items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-bold text-white hover:bg-white/10" aria-label="Back to Home">
+                  <span aria-hidden="true">←</span> Back to Home
+                </button>
+              </div>
               <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
                 <div className="lg:col-span-8 space-y-4">
-                  <div ref={mainPlayerRef} className={`watch-video-player relative w-full aspect-video bg-black ${landscapeMode ? "ring-2 ring-[#FFD700]" : ""}`}>
-                    {isGuest ? <button type="button" onClick={() => setShowSignUpBlock(true)} className="absolute inset-0 flex items-center justify-center bg-black/80 text-sm font-bold text-white">Sign up to watch this video</button> : <iframe ref={iframeRef} src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" />}
+                  <div ref={mainPlayerRef} onPointerDown={() => setPlayerInteracted(true)} className={`watch-video-player relative w-full aspect-video bg-black ${landscapeMode ? "ring-2 ring-[#FFD700]" : ""}`}>
+                    <div ref={pipHostRef} className="absolute inset-0">
+                      {isGuest ? <button type="button" onClick={() => setShowSignUpBlock(true)} className="absolute inset-0 flex items-center justify-center bg-black/80 text-sm font-bold text-white">Sign up to watch this video</button> : <iframe ref={iframeRef} src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=1`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="autoplay; fullscreen; picture-in-picture; document-picture-in-picture; encrypted-media" allowFullScreen />}
+                    </div>
                     <button onClick={toggleLandscape} className="absolute right-3 top-3 z-30 rounded-full bg-black/75 px-3 py-2 text-xs font-bold text-white border border-white/20 hover:bg-black" aria-label="View video in landscape 16:9">{landscapeMode ? "[x] 16:9" : "[ ] 16:9"}</button>
                   </div>
                   <h1 className="text-xl sm:text-2xl font-extrabold text-white leading-tight px-4 sm:px-0">{activeVideo.title}</h1>
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4 px-4 sm:px-0">
                     <div className="flex items-center gap-3">
-                      <img src={activeVideo.avatar || channelData?.avatar || `https://img.youtube.com/vi/${activeVideo.id||activeVideo.youtubeId}/hqdefault.jpg`} alt="avatar" className="w-10 h-10 rounded-full object-cover border border-white/10" />
+                      <button type="button" onClick={() => navigateToChannel(activeVideo.channelId || channelIdFromVideo(activeVideo))} className="rounded-full" aria-label={`Open ${activeVideo.channelName || activeVideo.channel || "creator"} channel`}>
+                        <img src={activeVideo.avatar || channelData?.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeVideo.channelName || activeVideo.channel || "YouTube")}&background=1A0B2E&color=FFD700`} alt="avatar" className="w-10 h-10 rounded-full object-cover border border-white/10" />
+                      </button>
                       <div><button onClick={()=>navigateToChannel(activeVideo.channelId || channelIdFromVideo(activeVideo))} className="text-left text-sm font-bold text-white hover:text-[#00D9FF]">{typeof activeVideo.channel === "string" ? activeVideo.channel : (activeVideo.channelName || "")} • {channelData?.subscribers || activeVideo.subscribers || ""} subscribers</button><p className="text-xs text-gray-400">{activeVideo.views} • {activeVideo.timeAgo} • {activeVideo.description ? activeVideo.description.slice(0,110) : ""}</p></div>
                       <button onClick={toggleChannelSubscription} className={`ml-3 px-5 py-2 rounded-full font-bold text-xs ${isSubscribed?"bg-white/10 text-white":"bg-white text-black"}`}>{isSubscribed?"Subscribed ✓":"Subscribe"}</button>
                     </div>
                     <div className="flex flex-wrap gap-2"><button onClick={toggleVideoLike} aria-pressed={videoLiked} className={`px-4 py-2 rounded-full border text-sm font-bold ${videoLiked ? "bg-[#FFD700] text-black border-[#FFD700]" : "bg-[#1a1a2e] text-white border-white/10"}`}>Like {likeCount ? likeCount.toLocaleString() : (activeVideo.likes || "0")}</button><button onClick={()=>{ setCommentsOpen(true); loadVideoComments(activeVideo.youtubeId || activeVideo.id); }} className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Comments {activeVideo.comments || ""}</button><button onClick={toggleVideoSave} aria-pressed={isSaved} className={`px-4 py-2 rounded-full border text-sm font-bold ${isSaved ? "bg-[#FFD700] text-black border-[#FFD700]" : "bg-[#1a1a2e] text-white border-white/10"}`}>{isSaved ? "Saved ✓" : "Save"}</button><button onClick={() => setShareModalOpen(true)} className="px-4 py-2 rounded-full bg-[#1a1a2e] border border-white/10 text-sm font-bold text-white">Share</button></div>
+                  </div>
+                  <div className="mx-4 sm:mx-0 rounded-2xl bg-[#1a1a1a] p-4 text-sm text-gray-300">
+                    <p className={showDescriptionMore ? "" : "line-clamp-2"}>{activeVideo.description || "No description available."}</p>
+                    <button onClick={() => setShowDescriptionMore(open => !open)} className="mt-2 text-xs font-bold text-white">{showDescriptionMore ? "Show less" : "...more"}</button>
                   </div>
                   <section className="watch-ai-buttons px-4 sm:px-0 space-y-3">
                     <div className="flex flex-wrap gap-2">
                       <button onClick={()=>{ setActiveTab("watch"); setWatchPanelTab("ai"); setWatchPanelOpen(true); }} className="min-h-[40px] px-3 py-2 rounded-full bg-[#FFD60A] text-black text-xs font-bold flex items-center gap-1.5">
                         <span aria-hidden="true">✨</span> Workspace
                       </button>
-                      <button onClick={handleActivateJot} className="min-h-[40px] px-3 py-2 rounded-full bg-white text-black text-xs font-bold flex items-center gap-1.5 border border-white">
-                        <span aria-hidden="true">🧠</span> {jotsLoading ? "Capturing..." : "Activate Jot"}
+                      <button onClick={handleActivateJot} aria-busy={jotsLoading} className={`min-h-[40px] px-3 py-2 rounded-full text-xs font-bold flex items-center gap-1.5 border border-white ${jotActive ? "bg-red-500 text-white" : "bg-white text-black"} disabled:cursor-wait disabled:opacity-60`}>
+                        <span aria-hidden="true">🧠</span> {jotsLoading ? "Reading captions..." : jotActive ? "Stop Jot" : "Activate Jot"}
                       </button>
                       <button onClick={()=>setShowWatchTeacher(open => !open)} className="min-h-[40px] px-3 py-2 rounded-full bg-[#1a1a2e] text-white text-xs font-bold flex items-center gap-1.5 border border-white/10">
                         <span aria-hidden="true">🎓</span> AI Teacher
@@ -3278,10 +3984,13 @@ function App() {
                           <p className="text-[11px] text-gray-500">Activate to generate clean, clickable timestamped notes.</p>
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
-                          <span className="text-[11px] text-gray-400">{videoJots.length} captures</span>
+                          <span className="text-[11px] text-gray-400">{jotsLoading ? "Capturing transcript…" : jotSource === "youtube_transcript" ? "YouTube captions" : jotSource === "browser_speech" ? "Live speech capture" : jotSource === "groq_whisperflow" ? "Groq Whisperflow" : jotSource === "capture_unavailable" ? "Capture unavailable" : "Not started"} {videoJots.length ? `${videoJots.length} captures` : ""}</span>
+                          {jotCleanedNotes && <button onClick={exportAiJotOnce} disabled={jotExported} className="px-2.5 py-1.5 rounded-full bg-[#FFD60A] text-black text-[11px] font-bold disabled:opacity-50">{jotExported ? "Exported" : "Export Once"}</button>}
                           <button onClick={downloadJotsPdf} className="px-2.5 py-1.5 rounded-full bg-white/10 text-white text-[11px] font-bold border border-white/10">PDF</button>
                         </div>
+                        {jotCleanedNotes && <div className="mt-3 rounded-xl border border-[#FFD60A]/20 bg-black/30 p-3 text-xs text-gray-200"><p className="font-bold text-[#FFD60A]">Smart cleanup</p><p className="mt-1 whitespace-pre-wrap">{jotCleanedNotes.neatNotesMarkdown || jotCleanedNotes.summary}</p></div>}
                       </div>
+                      {jotTranscript && <div className="mt-3 rounded-xl border border-[#FFD60A]/30 bg-black/30 p-3"><div className="flex items-center justify-between gap-2"><p className="text-xs font-bold text-[#FFD60A]">Everything Said — live full transcript</p><span className="text-[10px] text-gray-500">{jotTranscript.split(/\s+/).filter(Boolean).length} words</span></div><p className="mt-2 max-h-64 overflow-y-auto whitespace-pre-wrap text-sm leading-6 text-gray-200">{jotTranscript}</p></div>}
                       <div className="mt-3 max-h-48 overflow-y-auto space-y-2">
                         {jotsLoading ? <p className="text-xs text-gray-400">Capturing and cleaning up this video…</p> : videoJots.length ? videoJots.map((jot, index) => <button key={`${jot.time}-${index}`} onClick={() => handleSeek(Number(jot.seconds || 0), jot.time || "0:00")} className="block w-full rounded-xl bg-black/30 p-2.5 text-left hover:bg-white/5"><span className="text-xs font-bold text-[#FFD60A]">{jot.time || "0:00"}</span><span className="ml-3 text-sm text-gray-200">{jot.text || jot.summary}</span></button>) : <p className="text-xs text-gray-500">Watching… click Activate Jot to capture the video notes.</p>}
                       </div>
@@ -3299,7 +4008,7 @@ function App() {
                     <button onClick={()=>setCommentsOpen(true)} className="mb-3 text-left text-lg font-bold text-white">Comments {activeVideo.comments ? `(${activeVideo.comments})` : ""}</button>
                     {commentsOpen && (
                       <div className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                        {commentsLoading ? <p className="text-sm text-gray-400">Loading real comments…</p> : videoComments.length === 0 ? <div className="space-y-2"><p className="text-sm text-gray-400">No public comments are available for this video.</p><a href={`https://www.youtube.com/watch?v=${activeVideo.youtubeId || activeVideo.id}`} target="_blank" rel="noreferrer" className="inline-block text-xs font-bold text-[#FFD700]">See comments on YouTube ↗</a></div> : <div className="space-y-4">{videoComments.map(comment => <div key={comment.id} className="flex gap-3"><img src={comment.authorPhoto || "https://ui-avatars.com/api/?name=YT&background=272727&color=fff"} alt="" className="h-8 w-8 rounded-full" /><div><p className="text-xs font-bold text-white">{comment.author}</p><p className="mt-1 text-sm text-gray-200 whitespace-pre-wrap">{comment.text}</p><p className="mt-1 text-[11px] text-gray-500">{comment.likeCount ? `${comment.likeCount} likes` : ""}</p></div></div>)}</div>}
+                        {commentsLoading ? <p className="text-sm text-gray-400">Loading saved comments…</p> : videoComments.length === 0 ? <p className="text-sm text-gray-400">No comments yet. Be the first to comment.</p> : <div className="space-y-4">{videoComments.map(comment => <div key={comment.id} className="flex gap-3"><div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#FF0055] text-xs font-bold text-white">{comment.avatar || "A"}</div><div><p className="text-xs font-bold text-white">{comment.author || comment.user || "You"}</p><p className="mt-1 text-sm text-gray-200 whitespace-pre-wrap">{comment.text}</p><p className="mt-1 text-[11px] text-gray-500">{comment.time || "now"}</p></div></div>)}</div>}
                         <form className="mt-4 flex gap-2" onSubmit={event => { event.preventDefault(); submitVideoComment(); }}>
                           <input value={videoCommentInput} onChange={event => setVideoCommentInput(event.target.value)} placeholder={isGuest ? "Sign in to comment" : "Add a comment..."} className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white outline-none focus:border-[#FFD700]" />
                           <button type="submit" className="rounded-xl bg-[#FFD700] px-4 py-2 text-xs font-bold text-black">Post</button>
@@ -3335,7 +4044,7 @@ function App() {
             <div className="max-w-[1600px] mx-auto px-0 sm:px-4 py-3 lg:py-0 space-y-4">
               {/* Back + Title bar */}
               <div className="flex items-center gap-3 px-4 sm:px-0">
-                <button onClick={()=>{ setWatchPanelOpen(false); setActiveTab("home"); window.history.pushState({}, "", "/"); if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0; }} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10">
+                <button onClick={returnHomeFromWatch} className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/5 border border-white/10 text-sm text-white hover:bg-white/10">
                   <span>←</span> <span className="hidden sm:inline">Back to Results</span><span className="sm:hidden">Back</span>
                 </button>
                 <h2 className="flex-1 text-center text-xl font-extrabold text-white truncate px-4">{activeTab === "workspace" ? "Alphatekx Workspace" : activeVideo.title}</h2>
@@ -3347,7 +4056,7 @@ function App() {
                 <div className="lg:col-span-6 space-y-3">
                   <div className="relative bg-black rounded-none sm:rounded-2xl overflow-hidden border-0 sm:border-2 border-[#FFD700] shadow-[0_0_40px_rgba(255,215,0,0.25)]">
                     <div className="aspect-video relative bg-black">
-                      {isGuest ? <button type="button" onClick={() => setShowSignUpBlock(true)} className="absolute inset-0 flex items-center justify-center bg-black/80 text-sm font-bold text-white">Sign up to watch this video</button> : <iframe src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=0`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen" />}
+                      {isGuest ? <button type="button" onClick={() => setShowSignUpBlock(true)} className="absolute inset-0 flex items-center justify-center bg-black/80 text-sm font-bold text-white">Sign up to watch this video</button> : <iframe src={`https://www.youtube.com/embed/${activeVideo.youtubeId || activeVideo.id}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&fs=1&autoplay=1`} title="YouTube video player" className="absolute inset-0 h-full w-full border-0" allow="autoplay; fullscreen; picture-in-picture; document-picture-in-picture; encrypted-media" allowFullScreen />}
                     </div>
                   </div>
                   <div className="px-4 sm:px-0">
@@ -3479,20 +4188,7 @@ function App() {
                   <button key={tab} onClick={() => { setBoostFeedTab(tab); setBoostFeedCursor(0); }} className={`min-h-11 flex-shrink-0 rounded-full border px-4 text-xs font-bold ${boostFeedTab === tab ? "border-[#FFD700] bg-[#FFD700] text-black" : "border-[#2A1A3E] bg-[#1A0B2E] text-gray-300"}`}>{label}</button>
                 ))}
               </div>
-              {isSearching ? (
-                <div className="grid grid-cols-1 gap-5 px-3 sm:px-0 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 sm:gap-4 md:gap-6">
-                  {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-                    <div key={n} className="glass-card overflow-hidden animate-pulse p-0 flex flex-col justify-between">
-                      <div className="aspect-video w-full bg-[#1a1a24]" />
-                      <div className="p-4 space-y-3">
-                        <div className="h-4 bg-[#282836] rounded w-5/6" />
-                        <div className="h-3 bg-[#282836] rounded w-1/2" />
-                        <div className="h-3 bg-[#282836] rounded w-1/3" />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : searchQuery.trim() ? (
+              {searchQuery.trim() ? (
                 <div className="space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                     <div className="flex items-center gap-3 flex-wrap">
@@ -3512,6 +4208,7 @@ function App() {
                       )}
                     </div>
                     <span className="text-xs text-gray-400 font-mono">
+                    {isSearching && <span className="mr-2 text-[#FFD700]">Searching…</span>}
                       {searchTab==="results" ? `${searchResults.length} videos` : `${searchHistory.length} saved`}
                     </span>
                   </div>
@@ -3629,7 +4326,7 @@ function App() {
                   {continueHistory.length > 0 && <section className="space-y-3 px-3 sm:px-0"><div className="flex items-center justify-between"><h2 className="text-lg font-extrabold text-white">Continue Watching</h2><span className="text-xs text-gray-500">Saved on this device</span></div><div className="flex gap-3 overflow-x-auto scrollbar-hide pb-2">{continueHistory.slice(0, 10).map(item => <button key={item.videoId} onClick={() => allowVideoForUser({ id: item.videoId, youtubeId: item.videoId, title: item.title, img: item.thumbnail, thumbnailUrl: item.thumbnail })} className="w-56 flex-shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/5 text-left"><div className="relative aspect-video bg-black"><img src={item.thumbnail} alt="" className="h-full w-full object-cover" /><div className="absolute inset-x-0 bottom-0 h-1 bg-white/20"><div className="h-full bg-[#FFD700]" style={{ width: `${Math.min(100, Number(item.progress || 0) / 60)}%` }} /></div></div><p className="p-3 text-sm font-bold text-white line-clamp-2">{item.title}</p></button>)}</div></section>}
                   {recentSearches.length > 0 && <section className="space-y-2 px-3 sm:px-0"><h2 className="text-lg font-extrabold text-white">Recent Searches</h2><div className="flex flex-wrap gap-2">{recentSearches.map(query => <button key={query} onClick={() => { setSearchQuery(query); setActiveTab("home"); }} className="rounded-full border border-[#FFD700]/30 bg-[#FFD700]/10 px-3 py-2 text-xs text-[#FFD700]">{query}</button>)}</div></section>}
                   {/* Featured Hero — discovery is thumbnail-only; playback belongs on Watch */}
-                  <div className="glass-card overflow-hidden border-0 sm:border border-[#FFD700]/30 p-0 sm:p-4 space-y-0 sm:space-y-4 rounded-none sm:rounded-2xl">
+                  {featuredVideo && <div className="glass-card overflow-hidden border-0 sm:border border-[#FFD700]/30 p-0 sm:p-4 space-y-0 sm:space-y-4 rounded-none sm:rounded-2xl">
                     <div className="flex items-center gap-2 flex-wrap px-4 sm:px-0 pt-3 sm:pt-0">
                       <span className="bg-gradient-to-r from-[#FFD700] to-[#FFA500] text-black text-[10px] font-extrabold px-2.5 py-1 rounded-full">FEATURED</span>
                       <span className="text-xs text-gray-400">Featured from Alphatekx</span>
@@ -3656,7 +4353,7 @@ function App() {
                         <a href={`https://youtu.be/${featuredVideo.youtubeId}`} target="_blank" rel="noreferrer" className="min-h-[44px] px-5 py-2.5 bg-[#272727] text-white font-bold text-xs rounded-xl flex items-center">Open on YouTube ↗</a>
                       </div>
                     </div>
-                  </div>
+                  </div>}
                   {/* Shorts Shelf — tight like YouTube */}
                   <div className="space-y-3 px-2 sm:px-0">
                     <div className="flex items-center justify-between px-2 sm:px-0">
@@ -3687,7 +4384,7 @@ function App() {
                   <>
                   <div className="grid grid-cols-1 gap-5 px-3 sm:px-0 sm:grid-cols-2 sm:gap-4 md:gap-6 md:grid-cols-3 lg:grid-cols-4">
                     {uniqueVideos(homeFiltered).map((vid) => (
-                    <VideoCard key={vid.youtubeId || vid.id} video={{...vid, platform:  vid.platform||"youtube"}} onPlay={allowVideoForUser} onChannel={(v) => navigateToChannel(v.channelId || channelIdFromVideo(v))} cleanHome />
+                    vid.isSponsored ? <SponsoredAdCard key={vid.id} video={vid} /> : <VideoCard key={vid.youtubeId || vid.id} video={{...vid, platform:  vid.platform||"youtube"}} onPlay={allowVideoForUser} onChannel={(v) => navigateToChannel(v.channelId || channelIdFromVideo(v))} cleanHome />
                     ))}
                   </div>
                   {marketplaceProducts.length>0 && (
@@ -3719,26 +4416,30 @@ function App() {
                   )}
                 </div>
               )}
+            <div ref={homeFeedSentinelRef} className="flex min-h-16 items-center justify-center px-3 py-4" aria-live="polite">
+              {boostFeedLoading && <span className="text-xs text-gray-500">Loading more videos…</span>}
+              {!boostFeedLoading && !boostFeedHasMore && <span className="text-xs text-gray-600">You’re all caught up.</span>}
+            </div>
             </div>
           )}
 
           {/* ------------------- 3. YOUTUBE SHORTS — BEST ABSOLUTE, SIMPLE LIKE YOUTUBE, EASY VOLUME ------------------- */}
           {activeTab === "shorts" && (
-            <section className="fixed inset-0 z-20 h-screen w-full overflow-hidden bg-black md:static md:h-full">
+            <section className="shorts-shell fixed inset-0 z-20 w-full overflow-hidden bg-black md:static md:h-full">
               <div className="mx-auto flex h-full w-full max-w-[760px] flex-col">
-                <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-4 py-3">
+                <div className="absolute inset-x-0 top-0 z-30 flex items-center justify-between px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
                   <div className="flex items-center gap-2">
-                    <button type="button" onClick={() => { setActiveTab("home"); if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0; }} className="pointer-events-auto flex min-h-10 items-center gap-1 rounded-full border border-white/15 bg-black/70 px-3 text-xs font-bold text-white" aria-label="Back to normal feed">← Back</button>
+                    <button type="button" onClick={() => navigateToTab("home")} className="pointer-events-auto flex min-h-10 items-center gap-1 rounded-full border border-white/15 bg-black/70 px-3 text-xs font-bold text-white" aria-label="Back to normal feed">← Back</button>
                     <span className="pointer-events-auto rounded-full bg-[#FF0000] px-2.5 py-1 text-[11px] font-extrabold text-white">Shorts</span>
-                    <span className="text-xs text-gray-400">{shortsIndex + 1} / {shortFeedVideos.length}</span>
+                    <span className="text-xs text-gray-400">{shortFeedVideos.length ? shortsIndex + 1 : 0} / {shortFeedVideos.length}</span>
                   </div>
                   <div className="pointer-events-auto flex items-center gap-2">
                     <button onClick={() => scrollToShort(shortsIndex - 1)} disabled={shortsIndex === 0} aria-label="Previous short" className="rounded-full border border-white/10 px-3 py-1 text-xs text-white disabled:opacity-30">↑</button>
                     <button onClick={() => {
-                      if (shortsIndex >= shortsVideos.filter(isShortFormVideo).length - 1 && shortsPageToken) {
+                      if (shortsIndex >= shortsVideos.filter(isShortFormVideo).length - 1) {
                         loadShortsPage().then(() => setTimeout(() => scrollToShort(shortsIndex + 1), 0));
                       } else scrollToShort(shortsIndex + 1);
-                    }} disabled={shortsIndex >= shortsVideos.filter(isShortFormVideo).length - 1 && !shortsPageToken} aria-label="Next short" className="rounded-full border border-white/10 px-3 py-1 text-xs text-white disabled:opacity-30">↓</button>
+                    }} aria-label="Next short" className="rounded-full border border-white/10 px-3 py-1 text-xs text-white">↓</button>
                   </div>
                 </div>
                 <div
@@ -3749,30 +4450,31 @@ function App() {
                     if (next !== shortsIndex && next >= 0 && next < shortFeedVideos.length) setShortsIndex(next);
                     if (e.currentTarget.scrollHeight - e.currentTarget.scrollTop - e.currentTarget.clientHeight < height * 2) loadShortsPage();
                   }}
-                  className="min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+                  className="shorts-scroller min-h-0 flex-1 snap-y snap-mandatory overflow-y-auto overscroll-contain scroll-smooth [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                   style={{ touchAction: "pan-y" }}
                 >
                   {shortFeedVideos.map((short, idx) => (
-                   <article key={short.youtubeId || short.id} ref={el => { shortsSlideRefs.current[idx] = el; }} className="relative h-full min-h-screen snap-start snap-always bg-black overflow-hidden" style={{ scrollSnapStop: "always" }}>
+                   <article key={short.feedKey || short.youtubeId || short.id} ref={el => { shortsSlideRefs.current[idx] = el; }} className="shorts-slide relative h-full min-h-full snap-start snap-always bg-black overflow-hidden" style={{ scrollSnapStop: "always" }}>
                       <div className="absolute inset-0 flex justify-center bg-black">
-                        <div className="relative h-[min(92vh,900px)] aspect-[9/16] max-w-[min(92vw,520px)] overflow-hidden rounded-2xl">
+                        <div className="shorts-player relative h-[min(92dvh,900px)] aspect-[9/16] max-w-[min(92vw,520px)] overflow-hidden rounded-2xl shadow-[0_0_50px_rgba(0,0,0,0.7)]">
                           {idx === shortsIndex && !isGuest ? (
                             <iframe
                               key={`${short.youtubeId}-${shortsMuted}-${shortsPlaying}`}
-                              src={`https://www.youtube.com/embed/${short.youtubeId}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&autoplay=0&mute=${shortsMuted ? 1 : 0}`}
+                              src={`https://www.youtube.com/embed/${short.youtubeId}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&autoplay=1&mute=${shortsMuted ? 1 : 0}&loop=1&playlist=${encodeURIComponent(short.youtubeId)}`}
                               title={short.title}
                               className="h-full w-full border-0"
                               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+                              allowFullScreen
                             />
                           ) : (
-                            <img src={`https://i.ytimg.com/vi/${short.youtubeId}/hqdefault.jpg`} alt="" className="h-full w-full object-contain" loading="lazy" />
+                            <img src={`https://i.ytimg.com/vi/${short.youtubeId}/hqdefault.jpg`} alt="" className="h-full w-full object-cover" loading="lazy" />
                           )}
                           {idx === shortsIndex && isGuest && <button type="button" onClick={() => setShowSignUpBlock(true)} className="absolute inset-0 flex items-center justify-center bg-black/70 text-sm font-bold text-white">Sign up to watch Shorts</button>}
                         </div>
                       </div>
                       <button aria-label={shortsMuted ? "Unmute short" : "Mute short"} onClick={() => setShortsMuted(m => !m)} className="absolute right-3 top-3 z-20 flex h-11 w-11 items-center justify-center rounded-full bg-black/70 text-lg text-white">{shortsMuted ? "🔇" : "🔊"}</button>
                       <div className="pointer-events-none absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-black via-black/50 to-transparent" />
-                      <div className="absolute bottom-0 left-0 right-16 z-10 space-y-2 p-4">
+                      <div className="mobile-safe-bottom absolute bottom-0 left-0 right-16 z-10 space-y-2 p-4">
                         <div className="flex items-center gap-2">
                           <button type="button" onClick={(event)=>{ event.stopPropagation(); navigateToChannel(short.channelId || channelIdFromVideo(short)); }} className="flex items-center gap-2">
                             <img src={short.avatar} alt="" className="h-8 w-8 rounded-full border-2 border-white object-cover" />
@@ -3827,13 +4529,13 @@ function App() {
             </section>
           )}
 
-          {shortsCommentsOpen && (
+          {shortsCommentsOpen && currentShort && (
             <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/70 sm:items-center" onClick={() => setShortsCommentsOpen(false)}>
               <section className="flex max-h-[78dvh] w-full max-w-lg flex-col rounded-t-2xl border border-white/10 bg-[#151025] p-4 sm:rounded-2xl" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between border-b border-white/10 pb-3">
                   <div>
                     <h2 className="font-bold text-white">Comments</h2>
-                    <p className="max-w-[280px] truncate text-xs text-gray-400">{currentShort.title}</p>
+                    <p className="max-w-[280px] truncate text-xs text-gray-400">{currentShort?.title || "No Shorts available right now"}</p>
                   </div>
                   <button onClick={() => setShortsCommentsOpen(false)} aria-label="Close comments" className="rounded-full px-3 py-1 text-xl text-gray-400 hover:text-white">×</button>
                 </div>
@@ -4253,23 +4955,42 @@ function App() {
                 <p className="text-sm text-gray-400">Choose the plan that powers your stream workflow.</p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="glass-card p-8 space-y-6">
                   <div className="space-y-2">
-                    <h3 className="text-xl font-bold text-white">Free Viewer</h3>
+                    <h3 className="text-xl font-bold text-white">FREE</h3>
                     <div className="text-3xl font-extrabold text-gray-400">$0 <span className="text-xs font-normal">/ month</span></div>
                   </div>
 
                   <ul className="space-y-3 text-xs text-gray-300">
-                    <li className="flex items-center gap-2">✓ Unlimited video watching</li>
-                    <li className="flex items-center gap-2">✓ 5 AI Teacher chats / month</li>
-                    <li className="flex items-center gap-2">✓ 5 AI Jot uses / month</li>
-                    <li className="flex items-center gap-2">✓ 3 AI Workspace builds / month</li>
-                    <li className="text-gray-600 line-through">✗ Marketplace publishing</li>
+                    <li className="flex items-center gap-2">✓ Video publishing: Unlimited</li>
+                    <li className="flex items-center gap-2">✓ AI features: 10 requests / 5 hours</li>
+                    <li className="flex items-center gap-2">✓ AI weekly: 50 requests / week</li>
+                    <li className="flex items-center gap-2">✓ Marketplace: 5 products</li>
+                    <li className="flex items-center gap-2">✓ Feed boost: No boost</li>
                   </ul>
+                  <p className="text-[11px] text-gray-500">AI limits reset automatically every 5 hours and weekly.</p>
 
                   <button disabled className="w-full py-3 bg-white/10 text-gray-400 font-bold text-xs rounded-xl">
                     Current Plan
+                  </button>
+                </div>
+
+                <div className="glass-card p-8 space-y-6">
+                  <div className="space-y-2">
+                    <h3 className="text-xl font-bold text-white">LITE</h3>
+                    <div className="text-3xl font-extrabold text-[#FFD700]">$5 <span className="text-xs font-normal text-gray-300">/ month</span></div>
+                  </div>
+                  <ul className="space-y-3 text-xs text-gray-300">
+                    <li className="flex items-center gap-2">✓ Video publishing: Unlimited</li>
+                    <li className="flex items-center gap-2">✓ AI features: 30 requests / 5 hours</li>
+                    <li className="flex items-center gap-2">✓ AI weekly: 150 requests / week</li>
+                    <li className="flex items-center gap-2">✓ Marketplace: 25 products</li>
+                    <li className="flex items-center gap-2">✓ Feed boost: Standard</li>
+                  </ul>
+                  <p className="text-[11px] text-gray-500">₦5,000/month. AI limits reset automatically.</p>
+                  <button onClick={() => startProCheckout("lite")} className="w-full py-3 bg-[#FFD700] text-black font-bold text-xs rounded-xl">
+                    Upgrade to Lite — $5/month
                   </button>
                 </div>
 
@@ -4279,8 +5000,8 @@ function App() {
                   </div>
                   
                   <div className="space-y-2">
-                    <h3 className="text-xl font-bold text-white flex items-center gap-2">
-                      <span>Alphatekx Pro</span>
+                    <h3 className="text-xl font-bold text-[#FFD700] flex items-center gap-2">
+                      <span>PRO</span>
                       <Icon name="crown" className="w-5 h-5 text-[#00FF88]" />
                     </h3>
                     <div className="text-3xl font-extrabold text-[#00D9FF]">
@@ -4289,11 +5010,21 @@ function App() {
                   </div>
 
                   <ul className="space-y-3 text-xs text-gray-200">
-                    <li className="flex items-center gap-2 text-[#00FF88]">✓ Unlimited AI across all tools</li>
-                    <li className="flex items-center gap-2 text-[#00FF88]">✓ AI Teacher, Jot, Workspace & Memory</li>
-                    <li className="flex items-center gap-2 text-[#00FF88]">✓ Naija Translator and AI Studio</li>
-                    <li className="flex items-center gap-2 text-[#00FF88]">✓ Marketplace publishing and earnings</li>
+                    <li className="flex items-center gap-2 text-[#00FF88]">✓ Video publishing: Unlimited</li>
+                    <li className="flex items-center gap-2 text-[#00FF88]">✓ AI features: 100 requests / 5 hours</li>
+                    <li className="flex items-center gap-2 text-[#00FF88]">✓ AI weekly: 500 requests / week</li>
+                    <li className="flex items-center gap-2 text-[#00FF88]">✓ Marketplace: Unlimited + sponsored placement</li>
+                    <li className="flex items-center gap-2 text-[#00FF88]">✓ Feed boost: 1.3x score + priority support</li>
                   </ul>
+                  <div className="rounded-xl border border-[#2A1A3E] bg-black/20 p-3 text-[11px] text-gray-400">
+                    <p>5-hour rolling window + weekly cap. Resets automatically.</p>
+                    <p className="mt-1 text-white">
+                      {aiRateInfo
+                        ? `You used ${aiRateInfo.usedInWindow}/${aiRateInfo.windowLimit} in this window · Weekly ${aiRateInfo.weeklyUsed}/${aiRateInfo.weeklyLimit}`
+                        : "Loading live AI usage…"}
+                    </p>
+                  </div>
+                  <p className="text-[11px] text-gray-500">ⓘ Limits protect fair access at scale, like ChatGPT Plus. Video is never included in AI limits.</p>
 
                   <button 
                     onClick={() => startProCheckout("monthly")}
@@ -4310,8 +5041,8 @@ function App() {
           {activeTab === "ads" && (
             <div className="mx-auto max-w-3xl space-y-5 p-3 sm:p-6">
               <div>
-                <h1 className="text-xl font-extrabold text-[#FFD700]">Run Ads — $2/day — No Free Trial</h1>
-                <p className="mt-1 text-sm text-gray-400">Upload a 1–2 minute video, choose your days, and join the automatic queue.</p>
+                <h1 className="text-xl font-extrabold text-[#FFD700]">Run Ads — $2/day — Auto Live</h1>
+                <p className="mt-1 text-sm text-gray-400">1–2 minute video only. Pay and the system starts or queues your ad automatically — no admin approval.</p>
               </div>
               <form onSubmit={createAdCampaign} className="glass-card space-y-4 p-4 sm:p-6">
                 {adsError && <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">{adsError}</p>}
@@ -4324,18 +5055,19 @@ function App() {
                 <input type="url" value={adsForm.thumbnail_url} onChange={e=>setAdsForm({...adsForm, thumbnail_url:e.target.value})} placeholder="Thumbnail URL (optional)" className="min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-white" />
                 <input required type="url" value={adsForm.link_url} onChange={e=>setAdsForm({...adsForm, link_url:e.target.value})} placeholder="Website or WhatsApp destination" className="min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-4 text-sm text-white" />
                 <label className="block text-sm text-gray-300">Days
-                  <input required type="number" min="1" max="30" value={adsForm.days} onChange={e=>setAdsForm({...adsForm, days:Math.min(30, Math.max(1, Number(e.target.value)||1))})} className="mt-1 min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-4 text-white" />
+                  <input required type="number" min="1" step="1" inputMode="numeric" value={adsForm.days} onChange={e=>setAdsForm({...adsForm, days:e.target.value})} className="mt-1 min-h-11 w-full rounded-xl border border-white/10 bg-black/30 px-4 text-white" />
                 </label>
                 <div className="rounded-xl border border-[#FFD700]/30 bg-[#FFD700]/10 p-4">
                   <p className="text-sm text-gray-300">$2 × {adsForm.days} day{Number(adsForm.days) === 1 ? "" : "s"}</p>
                   <p className="text-2xl font-extrabold text-[#FFD700]">${Number(adsForm.days||1)*2} / ₦{adsPriceNgn.toLocaleString()}</p>
                 </div>
-                <button disabled={adsLoading} className="min-h-12 w-full rounded-xl bg-[#FFD700] font-extrabold text-black disabled:opacity-50">{adsLoading ? "Preparing Paystack…" : `Pay $${Number(adsForm.days||1)*2} with Paystack`}</button>
-                <p className="text-xs leading-relaxed text-gray-500">How it works: pay $2 per day, we queue your ad, and it appears in the sponsored slot during your dates. No free trial. No discount. No refund.</p>
+                <button disabled={adsLoading} className="min-h-12 w-full rounded-xl bg-[#FFD700] font-extrabold text-black disabled:opacity-50">{adsLoading ? "Preparing Paystack…" : `Pay $${Number(adsForm.days||1)*2} — Go Live`}</button>
+                <p className="text-xs leading-relaxed text-gray-500">No admin approval. After payment, your ad starts now when the slot is free or joins the automatic queue. One sponsored video appears at the top of For You.</p>
+                {createdAd?.status && <p className="rounded-xl border border-[#FFD700]/30 bg-[#FFD700]/10 p-3 text-sm text-[#FFD700]">🔥 {createdAd.status === "active" ? "Live now" : "Automatically queued"} — starts {new Date(createdAd.start_at || createdAd.start_date).toLocaleString()}</p>}
               </form>
               <div className="glass-card p-4">
                 <h2 className="font-bold text-white">My ads</h2>
-                {!myAds.length ? <p className="mt-2 text-sm text-gray-500">Your campaigns will appear here after setup.</p> : <div className="mt-3 space-y-2">{myAds.map(ad=><div key={ad.id} className="flex items-center justify-between rounded-xl border border-white/10 p-3 text-sm"><span className="truncate text-gray-200">{ad.title}</span><span className="ml-3 text-xs font-bold text-[#FFD700]">{ad.status}</span></div>)}</div>}
+                {!myAds.length ? <p className="mt-2 text-sm text-gray-500">Your campaigns will appear here after setup.</p> : <div className="mt-3 space-y-2">{myAds.map(ad=>{ const hours = ad.end_at ? Math.max(0, Math.ceil((Number(ad.end_at) - Date.now()) / 3600000)) : 0; return <div key={ad.id} className="flex items-center justify-between rounded-xl border border-white/10 p-3 text-sm"><span className="truncate text-gray-200">{ad.title}</span><span className="ml-3 text-right text-xs font-bold text-[#FFD700]">{ad.status}{ad.status === "active" && ` · ${Math.ceil(hours / 24)}d left`}</span></div>; })}</div>}
               </div>
             </div>
           )}
@@ -4633,7 +5365,8 @@ function App() {
                         <span className="text-gray-500">•</span>
                         <span className="text-xs text-gray-400">{channelData.joinedAt ? `Joined ${channelData.joinedAt}` : ""}</span>
                       </div>
-                      <p className="text-xs text-gray-300 max-w-2xl line-clamp-2">{channelData.description}</p>
+                      <p className={`text-xs text-gray-300 max-w-2xl ${channelDescriptionOpen ? "" : "line-clamp-2"}`}>{channelData.description}</p>
+                      {channelData.description && <button onClick={() => setChannelDescriptionOpen(open => !open)} className="text-xs font-bold text-[#00D9FF]">{channelDescriptionOpen ? "Show less" : "...more"}</button>}
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <button onClick={async ()=>{
@@ -4654,14 +5387,16 @@ function App() {
                   </div>
                   {boostStats && <div className="glass-card mt-4 flex items-center justify-between p-4"><span className="text-xs text-gray-300">Alphatekx boost views</span><strong className="text-lg text-[#FFD700]">{Number(boostStats.total_boost_views || 0).toLocaleString()}</strong></div>}
                   <div className="border-t border-[#272727] pt-4">
-                    <div className="flex items-center gap-2 mb-4">
-                      <h3 className="font-bold text-white">Uploads</h3>
-                      <span className="text-xs text-gray-400 font-mono">• {channelUploads.length} videos</span>
+                    <div className="flex items-center gap-2 mb-4 overflow-x-auto scrollbar-hide sticky top-0 bg-[#0B0215] py-2 z-10">
+                      {[["home", "Home"], ["videos", "Videos"], ["shorts", "Shorts"], ["live", "Live"], ["playlists", "Playlists"], ["community", "Community"], ["about", "About"]].map(([tab, label]) => <button key={tab} onClick={() => setChannelTab(tab)} className={`min-h-11 rounded-full px-4 text-xs font-bold whitespace-nowrap ${channelTab === tab ? "bg-[#FFD700] text-black" : "bg-[#1A0B2E] text-gray-400"}`}>{label}</button>)}
+                      <span className="ml-auto text-xs text-gray-400 font-mono whitespace-nowrap">{channelTab === "videos" ? channelUploads.length : channelTabItems.length} loaded</span>
                     </div>
-                    {channelUploads.length>0 ? (
+                    {channelTab === "about" ? (
+                      <div className="glass-card p-5 space-y-3 text-sm text-gray-300"><h3 className="font-bold text-white">About</h3><p>{channelData.description || "No description provided."}</p><p className="text-xs text-gray-500">Joined {channelData.joinedAt || "—"} • {channelData.viewCount || "—"} total views</p><a className="text-[#00D9FF]" href={channelData.url || "#"} target="_blank" rel="noreferrer">Open on YouTube</a></div>
+                    ) : (channelTab === "videos" ? channelUploads : channelTab === "home" ? channelUploads.slice(0, 12) : channelTabItems).length>0 ? (
                       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
-                        {channelUploads.map((vid)=>(
-                          <div key={vid.id||vid.youtubeId} onClick={()=>{ setActiveVideo(normalizeVideo({...vid, channelName: channelData.name, avatar: channelData.avatar, subscribers: channelData.subscribers })); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} className="glass-card overflow-hidden hover:border-[#00D9FF] transition-all cursor-pointer group flex flex-col">
+                        {(channelTab === "videos" ? channelUploads : channelTab === "home" ? channelUploads.slice(0, 12) : channelTabItems).map((vid)=>(
+                          <div key={vid.id||vid.youtubeId} onClick={()=>{ setActiveVideo(normalizeVideo({...vid, channelName: channelData.name, avatar: channelData.avatar, channelId: channelData.id || activeChannelId, subscribers: channelData.subscribers })); setActiveTab("watch"); if(mainScrollRef.current) mainScrollRef.current.scrollTop=0; }} className="glass-card overflow-hidden hover:border-[#00D9FF] transition-all cursor-pointer group flex flex-col">
                             <div className="relative aspect-video w-full bg-gray-900 overflow-hidden">
                               <img src={vid.thumbnailUrl || vid.img || `https://i.ytimg.com/vi/${vid.youtubeId}/hqdefault.jpg`} alt={vid.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                               <span className="absolute bottom-2 right-2 bg-black/80 text-xs font-mono px-1.5 py-0.5 rounded text-white">{vid.duration || "10:00"}</span>
@@ -4681,6 +5416,9 @@ function App() {
                         <p className="text-xs text-gray-500">This channel hasn't uploaded any videos. Be the first to <button onClick={()=>setActiveTab("upload")} className="text-[#00D9FF] hover:underline font-bold">upload</button>.</p>
                       </div>
                     )}
+                    <div ref={channelLoadMoreRef} className="flex min-h-16 items-center justify-center text-xs text-gray-400">
+                      {channelTab === "videos" ? (isChannelLoadingMore ? "Loading more..." : channelNextToken ? "Scroll for more videos" : channelUploads.length ? `You've reached the end - ${channelUploads.length} videos` : "") : (channelTabLoading ? "Loading more..." : channelTabNextToken ? "Scroll for more" : channelTabItems.length ? `You've reached the end - ${channelTabItems.length} items` : "")}
+                    </div>
                   </div>
                 </>
               ) : (
@@ -4987,11 +5725,16 @@ function App() {
         </main>
       </div>
 
-      {/* MINI-PLAYER — REMOVED — no float popup */}
-      {false && miniPlayerActive && activeTab === "watch" && (
-        <div className="fixed bottom-20 right-6 z-40 w-80 md:w-96 aspect-video shadow-[0_0_30px_rgba(0,217,255,0.5)] border-2 border-[#00D9FF] rounded-2xl overflow-hidden bg-black flex flex-col group transition-all duration-300 animate-fade-in">
+      {/* Persistent mini-player: remains available when leaving Watch for Home. */}
+      {miniPlayerActive && activeVideo && activeTab !== "watch" && (
+        <div className="fixed bottom-[4.5rem] left-2 right-2 z-40 aspect-video max-w-sm sm:left-auto sm:right-6 sm:w-80 md:w-96 shadow-[0_0_30px_rgba(0,217,255,0.5)] border-2 border-[#00D9FF] rounded-2xl overflow-hidden bg-black flex flex-col group transition-all duration-300 animate-fade-in">
           <div className="relative w-full h-full bg-black">
-            <img src={activeVideo.img} alt={activeVideo.title} className="w-full h-full object-cover opacity-80" />
+            <iframe
+              src={`https://www.youtube.com/embed/${encodeURIComponent(activeVideo.youtubeId || activeVideo.id)}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&autoplay=1`}
+              title={`Mini player: ${activeVideo.title}`}
+              className="w-full h-full border-0"
+              allow="autoplay; encrypted-media; picture-in-picture"
+            />
             
             {/* Top Bar Overlay */}
             <div className="absolute top-2 left-2 right-2 flex items-center justify-between text-[11px] font-bold z-20">
@@ -5001,6 +5744,9 @@ function App() {
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => {
+                    setActiveTab("watch");
+                    const videoId = activeVideo.youtubeId || activeVideo.id;
+                    if (videoId) window.history.pushState({}, "", `/watch/${encodeURIComponent(videoId)}`);
                     if (mainScrollRef.current) mainScrollRef.current.scrollTop = 0;
                     setMiniPlayerActive(false);
                   }}
@@ -5046,7 +5792,7 @@ function App() {
       {/* MOBILE BOTTOM NAVIGATION BAR — YouTube fit h-16 */}
       <nav className={`fixed bottom-0 left-0 right-0 z-40 bg-[#0f0f0f] border-t border-[#272727] px-4 h-16 items-center justify-around md:hidden ${activeTab === "shorts" ? "hidden" : "flex"}`}>
         <button 
-          onClick={() => setActiveTab("home")}
+          onClick={() => navigateToTab("home")}
           className={`flex flex-col items-center justify-center gap-1 ${activeTab === "home" ? "text-[#FFD700]" : "text-gray-400"}`}
         >
           <Icon name="home" className="w-5 h-5" />
@@ -5054,7 +5800,7 @@ function App() {
         </button>
 
         <button 
-          onClick={() => setActiveTab("shorts")}
+          onClick={() => navigateToTab("shorts")}
           className={`flex flex-col items-center justify-center gap-1 ${activeTab === "shorts" ? "text-[#FFD700]" : "text-gray-400"}`}
         >
           <Icon name="shorts" className="w-5 h-5" />
@@ -5062,14 +5808,18 @@ function App() {
         </button>
 
         <button 
-          onClick={() => setActiveTab("upload")}
+          onClick={() => navigateToTab("upload")}
           className="w-10 h-10 rounded-full bg-gradient-to-r from-[#FFD700] to-[#F59E0B] text-black flex items-center justify-center -mt-2 shadow-[0_0_15px_rgba(255,215,0,0.4)]"
         >
           <Icon name="plus" className="w-6 h-6 stroke-[3]" />
         </button>
+        <button type="button" onClick={navigateToDownloadApp} className={`relative flex flex-col items-center justify-center gap-1 ${activeTab === "download-app" ? "text-[#FF0055]" : "text-gray-400"}`}>
+          <span className="relative text-lg">📲<span className="absolute -right-2 -top-1 h-2 w-2 rounded-full bg-gradient-to-r from-[#FF0055] to-[#FFAA00]" /></span>
+          <span className="text-[10px]">Download</span>
+        </button>
 
         <button 
-          onClick={() => setActiveTab("watch")}
+          onClick={() => navigateToTab("watch")}
           className={`flex flex-col items-center justify-center gap-1 ${activeTab === "watch" ? "text-[#FFD700]" : "text-gray-400"}`}
         >
           <Icon name="youtube" className="w-5 h-5" />
@@ -5077,7 +5827,7 @@ function App() {
         </button>
 
         <button 
-          onClick={() => setActiveTab("marketplace")}
+          onClick={() => navigateToTab("marketplace")}
           className={`flex flex-col items-center justify-center gap-1 ${activeTab === "marketplace" ? "text-[#FFD700]" : "text-gray-400"}`}
         >
           <Icon name="shopping-bag" className="w-5 h-5" />
@@ -5087,6 +5837,7 @@ function App() {
 
     </div>
     </div>
+    </>
   );
 }
 

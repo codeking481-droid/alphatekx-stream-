@@ -3,10 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+  <link rel="icon" href="/icons/icon-192.png" />
+  <meta name="theme-color" content="#000000" />
   <title>Alphatekx Stream — Mini YouTube but Better</title>
-  <link rel="manifest" href="./manifest.json">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><polygon points=%2250,5 90,27.5 90,72.5 50,95 10,72.5 10,27.5%22 fill=%22none%22 stroke=%22%2300FF88%22 stroke-width=%228%22/><circle cx=%2250%22 cy=%2250%22 r=%2214%22 fill=%22%2300D9FF%22/></svg>">
-  <meta name="theme-color" content="#0B0215">
   <meta name="description" content="Alphatekx Stream - Clean mobile-first streaming platform — dark #0B0215 + gold #FFD700, glassmorphism, 2-col grid on mobile.">
   
   <!-- Tailwind CSS CDN -->
@@ -94,12 +95,37 @@
       position: sticky;
       top: 0;
       z-index: 20;
+      background: #000;
+    }
+    .shorts-shell {
+      height: 100dvh;
+      min-height: 100dvh;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+    .shorts-scroller {
+      height: 100%;
+      overscroll-behavior-y: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+    .shorts-slide {
+      min-height: 100%;
+      height: 100%;
+    }
+    .shorts-player {
+      max-height: calc(100dvh - 5.5rem - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+    }
+    .mobile-safe-bottom {
+      padding-bottom: max(1rem, env(safe-area-inset-bottom));
     }
     @media (max-width: 640px) {
       .watch-video-player {
         width: 100vw;
         margin-left: calc(50% - 50vw);
         border-radius: 0;
+        top: 0;
+      }
+      .watch-content {
+        padding-bottom: max(6rem, calc(5rem + env(safe-area-inset-bottom)));
       }
     }
     /* Extra safety for mobile: prevent horizontal scroll from absolute elements */
@@ -139,6 +165,42 @@
       border: 1px solid #00FF88;
       box-shadow: 0 0 20px rgba(0, 255, 136, 0.25);
     }
+    .sidebar-download-tab {
+      background: linear-gradient(135deg, #FF0055 0%, #FFAA00 100%) !important;
+      color: white !important;
+      font-weight: 800 !important;
+      font-size: 13px !important;
+      border-radius: 12px !important;
+      margin: 8px 10px !important;
+      padding: 12px !important;
+      display: flex !important;
+      justify-content: space-between !important;
+      align-items: center !important;
+      cursor: pointer !important;
+      animation: pulseGlow 2s infinite !important;
+      box-shadow: 0 0 20px rgba(255,0,85,0.5) !important;
+      border: 1px solid rgba(255,255,255,0.2) !important;
+    }
+    @keyframes pulseGlow {
+      0%,100% { box-shadow: 0 0 20px rgba(255,0,85,0.4); transform: scale(1); }
+      50% { box-shadow: 0 0 35px rgba(255,0,85,0.8); transform: scale(1.02); }
+    }
+    .sidebar-download-tab .badge-new {
+      background: white !important;
+      color: #FF0055 !important;
+      border-radius: 20px !important;
+      padding: 2px 7px !important;
+      font-size: 9px !important;
+      font-weight: 900 !important;
+    }
+    .sidebar-download-tab .count-badge {
+      background: white !important;
+      color: #FF0055 !important;
+      border-radius: 10px !important;
+      padding: 3px 8px !important;
+      font-size: 11px !important;
+      font-weight: 800 !important;
+    }
   </style>
 
   <!-- Import Map for React -->
@@ -158,6 +220,6 @@
 <body class="bg-[#0B0215] text-white min-h-screen selection:bg-[#FFD700] selection:text-black">
   <div id="root"></div>
 
-  <script type="text/babel" data-type="module" data-presets="react" src="/app.jsx?v=marketplace-1"></script>
+  <script type="text/babel" data-type="module" data-presets="react" src="/app.jsx?v=splash-blue-20260904"></script>
 </body>
 </html>

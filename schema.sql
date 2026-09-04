@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS video_stats (
   alphatekx_views INTEGER DEFAULT 0,
   total_watch_seconds INTEGER DEFAULT 0,
   avg_watch_percent INTEGER DEFAULT 0,
-  score REAL DEFAULT 0,
+  score REAL DEFAULT 5,
   is_pro_creator INTEGER DEFAULT 0,
   created_at INTEGER,
   updated_at INTEGER
@@ -134,8 +134,14 @@ CREATE TABLE IF NOT EXISTS ai_usage (
   feature TEXT NOT NULL,
   count INTEGER NOT NULL DEFAULT 0,
   last_used INTEGER,
+  window_start INTEGER,
+  used_in_window INTEGER NOT NULL DEFAULT 0,
+  weekly_used INTEGER NOT NULL DEFAULT 0,
+  week_start INTEGER,
+  plan TEXT DEFAULT 'free',
   PRIMARY KEY (user_id, feature)
 );
+CREATE INDEX IF NOT EXISTS idx_ai_usage_user_window ON ai_usage (user_id, feature, window_start, week_start);
 
 CREATE TABLE IF NOT EXISTS market_usage (
   user_id TEXT PRIMARY KEY,
@@ -146,7 +152,10 @@ CREATE TABLE IF NOT EXISTS market_usage (
 CREATE TABLE IF NOT EXISTS subscriptions (
   user_id TEXT PRIMARY KEY,
   plan TEXT DEFAULT 'free',
+  status TEXT DEFAULT 'active',
   expires_at INTEGER,
+  current_period_start INTEGER,
+  current_period_end INTEGER,
   paystack_ref TEXT,
   created_at INTEGER,
   updated_at INTEGER
