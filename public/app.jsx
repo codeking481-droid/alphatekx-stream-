@@ -1608,13 +1608,6 @@ function App() {
         if (!nextToken) break;
         token = nextToken;
       }
-      if (!reset && incoming.length === 0 && rawVideos.length) {
-        shortsCycleRef.current += 1;
-        incoming.push(...rawVideos.map(video => ({
-          ...video,
-          feedKey: `${video.youtubeId || video.id}-cycle-${shortsCycleRef.current}`,
-        })));
-      }
       if (reset) setShortsIndex(0);
       setShortsVideos(prev => reset ? incoming : uniqueVideos([...prev, ...incoming]));
       setShortsPageToken(nextToken);
@@ -4446,7 +4439,7 @@ function App() {
                           {idx === shortsIndex && !isGuest ? (
                             <iframe
                               key={`${short.youtubeId}-${shortsMuted}-${shortsPlaying}`}
-                              src={`https://www.youtube.com/embed/${short.youtubeId}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=1&rel=0&modestbranding=1&autoplay=1&mute=${shortsMuted ? 1 : 0}&loop=1&playlist=${encodeURIComponent(short.youtubeId)}`}
+                              src={`https://www.youtube-nocookie.com/embed/${short.youtubeId}?enablejsapi=1&origin=${encodeURIComponent(window.location.origin)}&playsinline=1&controls=0&rel=0&modestbranding=1&iv_load_policy=3&fs=0&autoplay=1&mute=${shortsMuted ? 1 : 0}&loop=1&playlist=${encodeURIComponent(short.youtubeId)}`}
                               title={short.title}
                               className="h-full w-full border-0"
                               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"

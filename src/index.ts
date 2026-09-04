@@ -234,7 +234,7 @@ async function fetchYoutubeSectionVideos(channelId: string, section: "shorts" | 
 
 async function searchYouTubeInnerTube(c: any, query: string) {
   const env = c.env as Env;
-  const cacheKey = `yt:search:${query.trim().toLowerCase()}`;
+  const cacheKey = `yt:search:v2:${query.trim().toLowerCase()}`;
   if (env.KV) {
     const cached = await env.KV.get(cacheKey, "json").catch(() => null);
     if (Array.isArray(cached)) return cached;
@@ -1653,13 +1653,26 @@ function createApiApp() {
     if (!apiKey) {
       try {
         const searchPage = rotatingSearchPage ? Number(rotatingSearchPage[1]) : 0;
-        const queries = ["#shorts", "AI shorts", "tech shorts", "funny shorts", "music shorts", "football shorts", "gaming shorts", "science shorts", "food shorts", "travel shorts"];
-        const discovered = await searchYouTubeInnerTube(c, queries[searchPage % queries.length]);
-        const videos = discovered.slice(0, limit).map((video: any) => ({
-          ...video,
-          isShort: true,
-          category: "Shorts",
-        }));
+        const queries = [
+          "AI tools #shorts", "tech tips #shorts", "funny animals #shorts",
+          "music performance #shorts", "football skills #shorts", "gaming highlights #shorts",
+          "science facts #shorts", "food recipes #shorts", "travel discoveries #shorts",
+          "fitness tips #shorts", "car technology #shorts", "comedy sketch #shorts",
+        ];
+        const videos: any[] = [];
+        const seen = new Set<string>();
+        for (let offset = 0; offset < queries.length && videos.length < limit; offset += 1) {
+          const query = queries[(searchPage * 3 + offset) % queries.length];
+          const discovered = await searchYouTubeInnerTube(c, query).catch(() => []);
+          for (const video of discovered.slice(0, 2)) {
+            const id = video.youtubeId || video.id;
+            const channel = String(video.channelName || video.channel || "").toLowerCase();
+            if (!id || seen.has(id) || channel === OFFICIAL_CHANNEL_NAME.toLowerCase() || channel.includes("alphatekx")) continue;
+            seen.add(id);
+            videos.push({ ...video, isShort: true, category: "Shorts" });
+            if (videos.length >= limit) break;
+          }
+        }
         return c.json({
           videos,
           nextPageToken: `shorts-search:${searchPage + 1}`,
@@ -1678,8 +1691,15 @@ function createApiApp() {
       }
     }
     try {
-      const queries = ["#shorts"];
-      const searchResults = await Promise.all(queries.map(async (query) => {
+      const searchPage = rotatingSearchPage ? Number(rotatingSearchPage[1]) : 0;
+      const queries = [
+        "AI tools #shorts", "tech tips #shorts", "funny animals #shorts",
+        "music performance #shorts", "football skills #shorts", "gaming highlights #shorts",
+        "science facts #shorts", "food recipes #shorts", "travel discoveries #shorts",
+        "fitness tips #shorts", "car technology #shorts", "comedy sketch #shorts",
+      ];
+      const query = queries[searchPage % queries.length];
+      const searchResults = await Promise.all([query].map(async (query) => {
           const searchParams = new URLSearchParams({ part: "snippet", type: "video", videoDuration: "short", order: "date", maxResults: "50", q: query, key: apiKey });
           if (pageToken) searchParams.set("pageToken", pageToken);
           const searchRes = await fetch(`https://www.googleapis.com/youtube/v3/search?${searchParams}`);
@@ -1708,7 +1728,8 @@ function createApiApp() {
         items = (detailData.items || []).filter((item: any) => {
           const seconds = isoDurationSeconds(item.contentDetails?.duration);
           const text = `${item.snippet?.title || ""} ${item.snippet?.description || ""} ${(item.snippet?.tags || []).join(" ")}`.toLowerCase();
-          return seconds > 0 && seconds <= 180 && (searchSignals.get(item.id) === true || text.includes("short"));
+          const channelName = String(item.snippet?.channelTitle || "").toLowerCase();
+          return seconds > 0 && seconds <= 180 && channelName !== OFFICIAL_CHANNEL_NAME.toLowerCase() && !channelName.includes("alphatekx") && (searchSignals.get(item.id) === true || text.includes("short"));
         });
       }
       const seen = new Set<string>();
@@ -1742,12 +1763,21 @@ function createApiApp() {
       return c.json({ videos, nextPageToken, real: true });
     } catch (error: any) {
       try {
-        let videos = (await fetchYoutubeRssVideos(OFFICIAL_CHANNEL_ID, 50)).filter((video) => video.isShort).slice(0, limit);
-        if (videos.length < limit) {
-          const sectionVideos = await fetchYoutubeSectionVideos(OFFICIAL_CHANNEL_ID, "shorts", limit).catch(() => []);
-          if (sectionVideos.length > videos.length) videos = sectionVideos;
+        const fallbackQueries = ["AI tools #shorts", "tech tips #shorts", "funny animals #shorts", "music performance #shorts"];
+        const seen = new Set<string>();
+        const videos: any[] = [];
+        for (const query of fallbackQueries) {
+          const discovered = await searchYouTubeInnerTube(c, query).catch(() => []);
+          for (const video of discovered) {
+            const id = video.youtubeId || video.id;
+            const channel = String(video.channelName || video.channel || "").toLowerCase();
+            if (!id || seen.has(id) || channel.includes("alphatekx")) continue;
+            seen.add(id);
+            videos.push({ ...video, isShort: true, category: "Shorts" });
+            if (videos.length >= limit) break;
+          }
+          if (videos.length >= limit) break;
         }
-        if (!videos.length) videos = (await fetchYoutubeRssVideos(OFFICIAL_CHANNEL_ID, 50)).slice(0, limit).map((video) => ({ ...video, isShort: true }));
         return c.json({ videos, nextPageToken: `shorts-search:${(rotatingSearchPage ? Number(rotatingSearchPage[1]) : 0) + 1}`, real: true, source: "youtube_rss" });
       } catch (fallbackError: any) {
         return c.json({ videos: [], nextPageToken: "", real: false, sourceUnavailable: true, error: error.message || "SHORTS_FETCH_FAILED" });
