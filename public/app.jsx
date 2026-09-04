@@ -618,6 +618,7 @@ function App() {
     try { return JSON.parse(localStorage.getItem("alphatekx_history") || "[]"); } catch { return []; }
   });
   const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState("");
   const [searchSuggestionsOpen, setSearchSuggestionsOpen] = useState(false);
   const [activeChip, setActiveChip] = useState("All");
   // Persistent Search History — Never vanishes (localStorage + server)
@@ -2113,11 +2114,13 @@ function App() {
     if (!searchQuery.trim()) {
       setSearchResults([]);
       setIsSearching(false);
+      setSearchError("");
       setSearchIsMock(null);
       return;
     }
 
     setIsSearching(true);
+    setSearchError("");
     const controller = new AbortController();
     const query = searchQuery.trim();
     const timer = setTimeout(() => {
@@ -2130,43 +2133,25 @@ function App() {
           const isMock = data?.isMock === true;
           setSearchIsMock(isMock);
           let vids = [];
-          if (data && Array.isArray(data.videos) && data.videos.length > 0) {
-            vids = data.videos.map(normalizeVideo);
-            setSearchResults(vids);
-          } else {
-            const qLower = query.toLowerCase();
-            const filtered = searchCatalogRef.current.filter(
-              (v) => v.title.toLowerCase().includes(qLower) || v.channel.toLowerCase().includes(qLower)
-            );
-            vids = (filtered.length > 0 ? filtered : searchCatalogRef.current).map(normalizeVideo);
-            setSearchResults(vids);
-            setSearchIsMock(true);
-          }
+          vids = Array.isArray(data?.videos) ? uniqueVideos(data.videos.map(normalizeVideo)) : [];
+          setSearchResults(vids);
           // NEVER vanish: persist to server + localStorage
-          if (vids.length>0) {
+          if (vids.length > 0) {
             rememberSearch(query);
             try { localStorage.setItem("alphatekx_last_search_results", JSON.stringify(vids)); } catch {}
             persistSearchHistory(vids, query);
             // fire-and-forget POST to server for persistent history
             fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify({ videos: vids, searchedQuery: query }) }).catch(()=>{});
           }
+          if (vids.length === 0) setSearchError(`No real results found for "${query}". Try a different search.`);
           setSearchTab("results");
         })
         .catch((err) => {
           if (err.name === "AbortError") return;
           console.warn("YouTube API search fetch notice (using fallback):", err);
-          const qLower = query.toLowerCase();
-          let filtered = searchCatalogRef.current.filter(
-            (v) => v.title.toLowerCase().includes(qLower) || v.channel.toLowerCase().includes(qLower)
-          );
-          if (filtered.length===0) filtered = searchCatalogRef.current;
-          const vids = filtered.map(normalizeVideo);
-          setSearchResults(vids);
-          setSearchIsMock(true);
-          rememberSearch(query);
-          try { localStorage.setItem("alphatekx_last_search_results", JSON.stringify(vids)); } catch {}
-          persistSearchHistory(vids, query);
-          fetch("/api/search/save", { method:"POST", headers:{ "Content-Type":"application/json" }, credentials:"include", body: JSON.stringify({ videos: vids, searchedQuery: query }) }).catch(()=>{});
+          setSearchResults([]);
+          setSearchIsMock(false);
+          setSearchError("Search is temporarily unavailable. Please try again.");
         })
         .finally(() => {
           setIsSearching(false);
@@ -3335,7 +3320,7 @@ function App() {
     const matchesChip = activeChip === "All" || video.tag === activeChip || (activeChip === "PyTorch" && video.title.includes("Neural")) || (activeChip === "Live Chat" && video.tag === "Cloudflare Workers");
     return matchesSearch && matchesChip;
   });
-  const searchFiltered = (activePlatform==="all" ? searchResults : searchResults.filter(v=> (v.platform||"youtube")===activePlatform)).filter(isLongFormVideo);
+  const searchFiltered = activePlatform==="all" ? searchResults : searchResults.filter(v=> (v.platform||"youtube")===activePlatform);
   const homeFiltered = (activePlatform==="all" ? filteredVideos : filteredVideos.filter(v=> (v.platform||"youtube")===activePlatform)).filter(isLongFormVideo);
   const featuredVideo = videoCatalog.find(isLongFormVideo) || null;
   const workspacePreviewDocument = () => {
@@ -3639,7 +3624,7 @@ function App() {
         <div className="hidden sm:flex flex-1 max-w-[560px] mx-6">
           <div className="relative w-full">
             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500"><Icon name="search" className="w-4 h-4" /></span>
-            <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onFocus={()=>setSearchSuggestionsOpen(true)} onBlur={()=>setTimeout(()=>setSearchSuggestionsOpen(false),200)} onKeyDown={e=>{if(e.key==="Enter"){rememberSearch(searchQuery); setActiveTab("home"); setSearchSuggestionsOpen(false);}}} placeholder="Search videos, AI tools, channels..." className="w-full bg-[#1a1a2e]/80 border border-[#2a2a4a] rounded-full pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]/50 focus:bg-[#1a1a2e]" />
+            <input value={searchQuery} onChange={e=>setSearchQuery(e.target.value)} onFocus={()=>setSearchSuggestionsOpen(true)} onBlur={()=>setTimeout(()=>setSearchSuggestionsOpen(false),200)} onKeyDown={e=>{if(e.key==="Enter"){rememberSearch(searchQuery); setActiveTab("home"); setSearchSuggestionsOpen(false); if(mainScrollRef.current) mainScrollRef.current.scrollTop = 0;}}} placeholder="Search videos, AI tools, channels..." aria-label="Search videos, AI tools, channels" className="w-full bg-[#1a1a2e]/80 border border-[#2a2a4a] rounded-full pl-10 pr-4 py-2.5 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-[#FFD700]/50 focus:bg-[#1a1a2e]" />
           </div>
         </div>
         <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
@@ -3668,7 +3653,7 @@ function App() {
                 id="mobile-search-overlay-input"
                 value={searchQuery}
                 onChange={(e)=>setSearchQuery(e.target.value)}
-                onKeyDown={(e)=>{ if(e.key==="Enter"){ setMobileSearchOpen(false); setActiveTab("home"); } }}
+                onKeyDown={(e)=>{ if(e.key==="Enter"){ rememberSearch(searchQuery); setMobileSearchOpen(false); setActiveTab("home"); if(mainScrollRef.current) mainScrollRef.current.scrollTop = 0; } }}
                 placeholder="Search YouTube, TikTok…"
                 className="flex-1 bg-transparent px-3 py-3 text-[16px] font-medium text-white placeholder:text-gray-500 focus:outline-none"
                 autoFocus
@@ -4208,7 +4193,8 @@ function App() {
                       )}
                     </div>
                     <span className="text-xs text-gray-400 font-mono">
-                    {isSearching && <span className="mr-2 text-[#FFD700]">Searching…</span>}
+                    {isSearching && <span className="mr-2 text-[#FFD700]">Searching real YouTube results…</span>}
+                      {searchError && <span className="mr-2 text-red-300">{searchError}</span>}
                       {searchTab==="results" ? `${searchResults.length} videos` : `${searchHistory.length} saved`}
                     </span>
                   </div>
